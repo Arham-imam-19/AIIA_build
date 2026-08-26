@@ -51,6 +51,7 @@ class Permission(str, Enum):
     ETHICS_WRITE = "ethics:write"  # update trial ethics-approval information
     CTRI_WRITE = "ctri:write"  # update trial CTRI registration information
     REGULATORY_WRITE = "regulatory:write"  # update regulatory approval information
+    ACTIVATION_WRITE = "activation:write"  # activate an eligible trial
     AUDIT_READ = "audit:read"  # the who-changed-what trail
     USER_READ = "user:read"  # the list of people on the study
     EXPORT = "export"  # pull data out for a submission
@@ -121,6 +122,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.EXPORT,
             _P.CTRI_WRITE,
             _P.REGULATORY_WRITE,
+            _P.ACTIVATION_WRITE,
         }
     ),
     UserRole.ETHICS_COMMITTEE.value: frozenset(
@@ -178,6 +180,7 @@ PERMISSION_LABELS: dict[str, str] = {
     _P.COMPLIANCE_READ.value: "View ethics and regulatory compliance",
     _P.ETHICS_WRITE.value: "Update trial ethics approval",
     _P.CTRI_WRITE.value: "Update trial CTRI registration",
+    _P.ACTIVATION_WRITE.value: "Activate an eligible trial",
     _P.AUDIT_READ.value: "View the audit trail",
     _P.USER_READ.value: "View study personnel",
     _P.EXPORT.value: "Export data for submission",

@@ -164,6 +164,28 @@ def test_only_sponsor_and_admin_can_write_trial_regulatory_approval():
         assert Permission.REGULATORY_WRITE not in rbac.ROLE_PERMISSIONS[role.value]
 
 
+def test_only_sponsor_and_admin_can_activate_a_trial():
+    expected = {
+        UserRole.SPONSOR.value,
+        UserRole.ADMIN.value,
+    }
+    granted = {
+        role
+        for role in ROLES
+        if Permission.ACTIVATION_WRITE in rbac.ROLE_PERMISSIONS[role]
+    }
+    assert granted == expected
+    assert Permission.ACTIVATION_WRITE in rbac.ROLE_PERMISSIONS[UserRole.SPONSOR.value]
+    assert Permission.ACTIVATION_WRITE in rbac.ROLE_PERMISSIONS[UserRole.ADMIN.value]
+    for role in (
+        UserRole.REGULATOR,
+        UserRole.ETHICS_COMMITTEE,
+        UserRole.PRINCIPAL_INVESTIGATOR,
+        UserRole.COORDINATOR,
+    ):
+        assert Permission.ACTIVATION_WRITE not in rbac.ROLE_PERMISSIONS[role.value]
+
+
 def test_the_ethics_committee_reviews_safety_without_browsing_participants(role_clients):
     """A deliberate design decision, not an oversight.
 

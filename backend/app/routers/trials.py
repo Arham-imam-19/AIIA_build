@@ -19,7 +19,7 @@ from sqlmodel import Session, select
 
 from app import audit
 from app.db import get_session
-from app.enums import AuditAction, EthicsApprovalStatus
+from app.enums import AuditAction, EthicsApprovalStatus, TrialStatus
 from app.models import Site, Subject, Trial
 from app.models.base import utcnow
 from app.services import trial_compliance
@@ -87,6 +87,15 @@ class TrialRegulatoryApprovalResponse(BaseModel):
     protocol_number: str
     regulatory_approval_number: str | None
     regulatory_approval_date: date | None
+    updated_at: datetime
+
+
+class TrialActivationResponse(BaseModel):
+    trial_id: int
+    protocol_number: str
+    current_status: TrialStatus
+    activated_at: datetime
+    activated_by_user_id: int
     updated_at: datetime
 
 
@@ -277,6 +286,20 @@ def _regulatory_response(trial: Trial) -> TrialRegulatoryApprovalResponse:
         protocol_number=trial.protocol_number,
         regulatory_approval_number=trial.regulatory_approval_number,
         regulatory_approval_date=trial.regulatory_approval_date,
+        updated_at=trial.updated_at,
+    )
+
+
+def _activation_response(trial: Trial) -> TrialActivationResponse:
+    assert trial.id is not None
+    assert trial.activated_at is not None
+    assert trial.activated_by_user_id is not None
+    return TrialActivationResponse(
+        trial_id=trial.id,
+        protocol_number=trial.protocol_number,
+        current_status=TrialStatus(trial.status),
+        activated_at=trial.activated_at,
+        activated_by_user_id=trial.activated_by_user_id,
         updated_at=trial.updated_at,
     )
 
@@ -513,6 +536,85 @@ def update_trial_regulatory_approval(
     session.commit()
     session.refresh(trial)
     return _regulatory_response(trial)
+
+
+@router.post(
+    "/trials/{trial_id}/activate",
+    response_model=TrialActivationResponse,
+)
+def activate_trial(
+    trial_id: int,
+    request: Request,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.ACTIVATION_WRITE)),
+) -> TrialActivationResponse:
+    """Activate one eligible trial for recruitment."""
+    trial = session.exec(
+        select(Trial).where(Trial.id == trial_id).with_for_update()
+    ).one_or_none()
+    if trial is None:
+        raise HTTPException(status_code=404, detail=f"no trial with id {trial_id}")
+
+    is_recruiting = trial.status == TrialStatus.RECRUITING.value
+    has_activation_time = trial.activated_at is not None
+    has_activation_actor = trial.activated_by_user_id is not None
+    if is_recruiting and has_activation_time and has_activation_actor:
+        return _activation_response(trial)
+    if is_recruiting or has_activation_time or has_activation_actor:
+        raise HTTPException(
+            status_code=409,
+            detail="trial activation state is inconsistent",
+        )
+
+    result = trial_compliance.check_activation_eligibility(trial)
+    if not result.eligible_for_activation:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "trial is not eligible for activation",
+                "blockers": [asdict(blocker) for blocker in result.blockers],
+            },
+        )
+
+    previous_status = trial.status
+    now = utcnow()
+    old_state = {
+        "status": previous_status,
+        "activated_at": None,
+        "activated_by_user_id": None,
+    }
+    trial.status = TrialStatus.RECRUITING.value
+    trial.activated_at = now
+    trial.activated_by_user_id = user.id
+    trial.updated_at = now
+    session.add(trial)
+    new_state = {
+        "status": trial.status,
+        "activated_at": now.isoformat(),
+        "activated_by_user_id": user.id,
+    }
+
+    try:
+        audit.record(
+            session,
+            user=user,
+            action=AuditAction.UPDATE,
+            entity_type="trials",
+            entity_id=trial.id,
+            entity_label=trial.protocol_number,
+            field_name="activation",
+            old_value=json.dumps(old_state, sort_keys=True, separators=(",", ":")),
+            new_value=json.dumps(new_state, sort_keys=True, separators=(",", ":")),
+            reason=f"Trial activated from {previous_status} to recruiting.",
+            trial_id=trial.id,
+            request=request,
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    session.refresh(trial)
+    return _activation_response(trial)
 
 
 @router.get("/trials/{trial_id}/compliance-status")
