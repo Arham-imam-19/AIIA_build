@@ -351,6 +351,28 @@ def update_trial_ethics_approval(
 
     now = utcnow()
     trimmed_number = _validate_ethics_approval(body, today=now.date())
+    requested_state = (
+        body.ethics_approval_status.value,
+        trimmed_number,
+        body.ethics_approval_date,
+        body.ethics_approval_valid_until,
+    )
+    stored_state = (
+        trial.ethics_approval_status,
+        trial.ethics_approval_number,
+        trial.ethics_approval_date,
+        trial.ethics_approval_valid_until,
+    )
+    if requested_state == stored_state:
+        return TrialEthicsApprovalResponse(
+            trial_id=trial.id,
+            protocol_number=trial.protocol_number,
+            ethics_approval_status=EthicsApprovalStatus(trial.ethics_approval_status),
+            ethics_approval_number=trial.ethics_approval_number,
+            ethics_approval_date=trial.ethics_approval_date,
+            ethics_approval_valid_until=trial.ethics_approval_valid_until,
+            updated_at=trial.updated_at,
+        )
     previous_state = _ethics_state(trial)
 
     trial.ethics_approval_status = body.ethics_approval_status.value

@@ -121,6 +121,55 @@ def test_successful_approved_update_persists_audits_and_preserves_other_fields(
         assert "approved" in entry.new_value
 
 
+def test_identical_normalized_request_is_noop_without_commit(
+    client, seeded_engine, monkeypatch
+):
+    target_id = trial_id(seeded_engine)
+    today = utc_today()
+    approval_date = today - timedelta(days=10)
+    valid_until = today + timedelta(days=365)
+    with Session(seeded_engine) as session:
+        trial = session.get(Trial, target_id)
+        trial.ethics_approval_status = EthicsApprovalStatus.APPROVED.value
+        trial.ethics_approval_number = "SYNTHETIC-IEC-NOOP"
+        trial.ethics_approval_date = approval_date
+        trial.ethics_approval_valid_until = valid_until
+        session.add(trial)
+        session.commit()
+        protocol_number = trial.protocol_number
+        before_updated_at = trial.updated_at
+        before_audits = audit_count(session)
+
+    def unexpected_commit(_session):
+        raise AssertionError("identical ethics request must not commit")
+
+    monkeypatch.setattr(Session, "commit", unexpected_commit)
+    response = client.patch(
+        f"/api/trials/{target_id}/ethics-approval",
+        json=payload(
+            EthicsApprovalStatus.APPROVED,
+            number="  SYNTHETIC-IEC-NOOP  ",
+            approval_date=approval_date,
+            valid_until=valid_until,
+        ),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "trial_id": target_id,
+        "protocol_number": protocol_number,
+        "ethics_approval_status": EthicsApprovalStatus.APPROVED.value,
+        "ethics_approval_number": "SYNTHETIC-IEC-NOOP",
+        "ethics_approval_date": str(approval_date),
+        "ethics_approval_valid_until": str(valid_until),
+        "updated_at": before_updated_at.isoformat(),
+    }
+    with Session(seeded_engine) as session:
+        trial = session.get(Trial, target_id)
+        assert trial.updated_at == before_updated_at
+        assert audit_count(session) == before_audits
+
+
 @pytest.mark.parametrize(
     ("status", "number", "approval_offset", "validity_offset", "action"),
     [
