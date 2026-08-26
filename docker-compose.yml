@@ -1,0 +1,86 @@
+# AIIA Clinical Trials Dashboard - full stack, one command.
+#   docker compose up --build
+#
+# Services:
+#   db       - PostgreSQL, the system of record for all trial data
+#   redis    - in-memory store, used from Phase 2 for live WebSocket updates
+#   backend  - FastAPI (the API)
+#   frontend - React + Vite dev server (the UI)
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: aiia_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aiia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aiia}
+      POSTGRES_DB: ${POSTGRES_DB:-aiia_ctms}
+    ports:
+      # Exposed so you can connect with a GUI (TablePlus/pgAdmin) from the host.
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      # "Is Postgres actually ready to accept queries?" - the backend waits for this.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aiia} -d ${POSTGRES_DB:-aiia_ctms}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: aiia_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: aiia_backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-aiia}:${POSTGRES_PASSWORD:-aiia}@db:5432/${POSTGRES_DB:-aiia_ctms}
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+      APP_ENV: development
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mounted for hot reload: edit a .py file on the host, uvicorn restarts.
+      - ./backend:/app
+      # Kept at the repo root by convention, but visible to the backend so that
+      #   docker compose exec backend python scripts/seed.py
+      # works as documented.
+      - ./scripts:/app/scripts
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    container_name: aiia_frontend
+    restart: unless-stopped
+    environment:
+      # Vite forwards /api and /ws calls to the backend, so the browser only ever
+      # talks to one origin and we never fight CORS in the demo.
+      VITE_PROXY_TARGET: http://backend:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      # Anonymous volume: keeps the container's node_modules from being hidden
+      # by the (empty) host node_modules directory.
+      - /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
