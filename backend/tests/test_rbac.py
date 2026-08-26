@@ -116,6 +116,54 @@ def test_a_403_says_which_permission_is_missing(role_clients):
     )
 
 
+def test_only_ethics_committee_and_admin_can_write_trial_ethics_approval():
+    expected = {
+        UserRole.ETHICS_COMMITTEE.value,
+        UserRole.ADMIN.value,
+    }
+    granted = {
+        role
+        for role in ROLES
+        if Permission.ETHICS_WRITE in rbac.ROLE_PERMISSIONS[role]
+    }
+    assert granted == expected
+
+
+def test_only_sponsor_and_admin_can_write_trial_ctri_registration():
+    expected = {
+        UserRole.SPONSOR.value,
+        UserRole.ADMIN.value,
+    }
+    granted = {
+        role
+        for role in ROLES
+        if Permission.CTRI_WRITE in rbac.ROLE_PERMISSIONS[role]
+    }
+    assert granted == expected
+
+
+def test_only_sponsor_and_admin_can_write_trial_regulatory_approval():
+    expected = {
+        UserRole.SPONSOR.value,
+        UserRole.ADMIN.value,
+    }
+    granted = {
+        role
+        for role in ROLES
+        if Permission.REGULATORY_WRITE in rbac.ROLE_PERMISSIONS[role]
+    }
+    assert granted == expected
+    assert Permission.REGULATORY_WRITE in rbac.ROLE_PERMISSIONS[UserRole.SPONSOR.value]
+    assert Permission.REGULATORY_WRITE in rbac.ROLE_PERMISSIONS[UserRole.ADMIN.value]
+    for role in (
+        UserRole.REGULATOR,
+        UserRole.ETHICS_COMMITTEE,
+        UserRole.PRINCIPAL_INVESTIGATOR,
+        UserRole.COORDINATOR,
+    ):
+        assert Permission.REGULATORY_WRITE not in rbac.ROLE_PERMISSIONS[role.value]
+
+
 def test_the_ethics_committee_reviews_safety_without_browsing_participants(role_clients):
     """A deliberate design decision, not an oversight.
 

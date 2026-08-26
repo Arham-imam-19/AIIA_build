@@ -16,6 +16,7 @@ from app.enums import (
     AEOutcome,
     AESeverity,
     AuditAction,
+    EthicsApprovalStatus,
     Prakriti,
     Sex,
     SiteStatus,
@@ -56,6 +57,7 @@ __all__ = [
     "AECausality",
     "AEOutcome",
     "AuditAction",
+    "EthicsApprovalStatus",
     # Helpers.
     "values",
     "utcnow",

@@ -52,6 +52,16 @@ class TrialStatus(str, Enum):
     TERMINATED = "terminated"  # stopped early for good
 
 
+class EthicsApprovalStatus(str, Enum):
+    """Where a trial's ethics-committee review currently stands."""
+
+    NOT_SUBMITTED = "not_submitted"
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    EXPIRED = "expired"
+
+
 class TrialPhase(str, Enum):
     """How far along the evidence ladder a study is.
 

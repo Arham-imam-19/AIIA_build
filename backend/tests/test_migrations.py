@@ -139,6 +139,32 @@ def test_migrations_create_every_model_column(migrated_engine: sa.Engine) -> Non
     assert not problems, "model/migration column drift:\n  " + "\n  ".join(problems)
 
 
+def test_trial_activation_fields_are_migrated(migrated_engine: sa.Engine) -> None:
+    inspector = sa.inspect(migrated_engine)
+    columns = {column["name"]: column for column in inspector.get_columns("trials")}
+    expected = {
+        "ethics_approval_status",
+        "ethics_approval_valid_until",
+        "activated_at",
+        "activated_by_user_id",
+    }
+
+    assert expected <= columns.keys()
+    assert all(columns[name]["nullable"] for name in expected)
+
+    foreign_keys = {
+        (tuple(fk["constrained_columns"]), fk["referred_table"])
+        for fk in inspector.get_foreign_keys("trials")
+    }
+    assert (("activated_by_user_id",), "users") in foreign_keys
+
+    indexes = {
+        tuple(index["column_names"])
+        for index in inspector.get_indexes("trials")
+    }
+    assert ("activated_by_user_id",) in indexes
+
+
 def test_column_nullability_matches_the_models(migrated_engine: sa.Engine) -> None:
     """A column that is NOT NULL in the model but nullable in the database (or
     the reverse) is the drift that bites hardest: inserts succeed in tests and
@@ -179,6 +205,8 @@ def _type_family(type_: object) -> str:
     ):
         if isinstance(type_, klass):
             return family
+    if type(type_).__name__ == "AutoString":
+        return "string"
     return type(type_).__name__.lower()
 
 

@@ -48,6 +48,9 @@ class Permission(str, Enum):
     AE_READ = "ae:read"  # adverse events - the safety picture
     AE_WRITE = "ae:write"  # report a new adverse event
     COMPLIANCE_READ = "compliance:read"  # ethics/regulatory status, deviations
+    ETHICS_WRITE = "ethics:write"  # update trial ethics-approval information
+    CTRI_WRITE = "ctri:write"  # update trial CTRI registration information
+    REGULATORY_WRITE = "regulatory:write"  # update regulatory approval information
     AUDIT_READ = "audit:read"  # the who-changed-what trail
     USER_READ = "user:read"  # the list of people on the study
     EXPORT = "export"  # pull data out for a submission
@@ -69,8 +72,8 @@ _P = Permission
 #   Coordinator (CRC)       does the day-to-day data entry at one hospital. Same
 #                           site limit, no compliance view: not their call.
 #   Sponsor                 funds and monitors the study. Sees everything across
-#                           all sites, changes nothing - a monitor who could edit
-#                           the data would undermine the data.
+#                           all sites and owns trial-wide CTRI registration and
+#                           regulatory approval, but cannot edit site-level data.
 #   Ethics Committee        an independent safety and ethics reviewer. Deliberately
 #                           NOT given the participant list: their remit is safety
 #                           events, deviations and compliance, not browsing who is
@@ -116,6 +119,8 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.AE_READ,
             _P.USER_READ,
             _P.EXPORT,
+            _P.CTRI_WRITE,
+            _P.REGULATORY_WRITE,
         }
     ),
     UserRole.ETHICS_COMMITTEE.value: frozenset(
@@ -125,6 +130,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.VISIT_READ,  # needed to review protocol deviations
             _P.AE_READ,
             _P.COMPLIANCE_READ,
+            _P.ETHICS_WRITE,
             _P.AUDIT_READ,
         }
     ),
@@ -170,6 +176,8 @@ PERMISSION_LABELS: dict[str, str] = {
     _P.AE_READ.value: "View adverse events",
     _P.AE_WRITE.value: "Report adverse events",
     _P.COMPLIANCE_READ.value: "View ethics and regulatory compliance",
+    _P.ETHICS_WRITE.value: "Update trial ethics approval",
+    _P.CTRI_WRITE.value: "Update trial CTRI registration",
     _P.AUDIT_READ.value: "View the audit trail",
     _P.USER_READ.value: "View study personnel",
     _P.EXPORT.value: "Export data for submission",
