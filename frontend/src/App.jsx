@@ -13,6 +13,7 @@ import { AuthProvider, useAuth } from './auth'
 import Login from './Login'
 import RbacMatrix from './RbacMatrix'
 import Shell from './Shell'
+import HarmonizationPage from './HarmonizationPage'
 import { DASHBOARDS, FALLBACK } from './dashboards'
 import { useLiveDashboard } from './useLiveDashboard'
 
@@ -57,6 +58,8 @@ function SignedIn() {
     <Shell view={view} setView={setView} live={live}>
       {view === 'access' ? (
         <RbacMatrix highlightRole={user.role} />
+      ) : view === 'harmonization' ? (
+        <HarmonizationPage user={user} />
       ) : live.status === 'refused' ? (
         <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{live.error}</p>
       ) : !live.dashboard ? (

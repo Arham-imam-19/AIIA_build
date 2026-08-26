@@ -89,6 +89,24 @@ export const simulateOptions = () => api('/api/simulate/options')
 export const simulate = (key, body = {}) =>
   api(`/api/simulate/${key}`, { method: 'POST', body })
 
+// Phase 3: Harmonization Endpoints
+export const previewHarmonization = async (file) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  
+  const token = savedToken()
+  const res = await fetch('/api/harmonization/preview', {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  })
+  if (!res.ok) throw new ApiError(res.status, await readDetail(res))
+  return res.json()
+}
+
+export const commitHarmonization = (body) =>
+  api('/api/harmonization/commit', { method: 'POST', body })
+
 // The WebSocket cannot send an Authorization header, so the token rides in the
 // query string instead. Same server-side check either way.
 export function liveUrl(token) {

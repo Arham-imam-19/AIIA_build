@@ -2,7 +2,8 @@
 
 from datetime import date, datetime
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel, Column
+from sqlalchemy.dialects.postgresql import JSONB
 
 from app.models.base import utcnow
 
@@ -53,6 +54,10 @@ class Subject(SQLModel, table=True):
     # --- Ayurveda-specific baseline. One of enums.Prakriti; Phase 6 expands
     # --- this into a full per-dosha assessment.
     prakriti: str | None = Field(default=None, max_length=30, index=True)
+
+    # --- Phase 3: Supplemental Qualifiers (Metadata)
+    # CDISC SDTM SUPPQUAL model for non-standard parameters (e.g., dosha scores)
+    suppqual: dict = Field(default_factory=dict, sa_column=Column(JSONB, server_default='{}'))
 
     # --- Exits.
     completed_date: date | None = Field(default=None)

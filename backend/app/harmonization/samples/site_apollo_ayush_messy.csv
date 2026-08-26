@@ -1,0 +1,4 @@
+pt_id,patient_age_yrs,gender,dob_date,observed_reaction,reaction_severity,contact_phone_num,prakriti_dominant,bp_sys
+AIIA-001,45,M,1981-05-12,Headache,MILD,9876543210,Vata,120
+AIIA-002,34,F,1992-11-23,Nausea,MODERATE,9876543211,Pitta,115
+AIIA-003,50,M,1976-02-18,Dizziness,SEVERE,9876543212,Kapha,130

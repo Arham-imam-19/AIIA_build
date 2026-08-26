@@ -26,6 +26,7 @@ from app.routers import (
     stats,
     subjects,
     trials,
+    harmonization,
 )
 
 ALL_ROUTERS = (
@@ -40,6 +41,7 @@ ALL_ROUTERS = (
     stats.router,
     simulate.router,
     live.router,
+    harmonization.router,
 )
 
 __all__ = [

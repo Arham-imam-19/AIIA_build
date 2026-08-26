@@ -39,3 +39,7 @@ redis==5.2.1
 # Tests
 pytest==8.3.4
 httpx==0.28.1
+
+# --- Phase 3: AI Data-Harmonization Engine -----------------------------------
+rapidfuzz==3.9.0
+python-multipart==0.0.12

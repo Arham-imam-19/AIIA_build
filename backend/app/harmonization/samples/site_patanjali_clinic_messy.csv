@@ -1,0 +1,4 @@
+SubjectCode,YearsOld,Sex,Side_FX,Severity_Grade,SBP_Value,Residential_Address,Agni_Type,email
+PAT-001,28,Male,Vomiting,Grade 2,110,123 Main St,Tikshna,pat001@example.com
+PAT-002,62,Female,Rash,Grade 1,125,456 Elm St,Manda,pat002@example.com
+PAT-003,41,Male,Fatigue,Grade 3,135,789 Oak St,Sama,pat003@example.com

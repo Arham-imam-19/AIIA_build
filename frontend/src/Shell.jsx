@@ -83,7 +83,10 @@ export default function Shell({ view, setView, live, children }) {
               {[
                 ['dashboard', 'Dashboard'],
                 ['access', 'Access rules'],
-              ].map(([key, label]) => (
+                ['harmonization', 'CDISC Ingestion'],
+              ]
+                .filter(([key]) => key !== 'harmonization' || ['admin', 'coordinator', 'principal_investigator'].includes(user.role))
+                .map(([key, label]) => (
                 <button
                   key={key}
                   onClick={() => setView(key)}
