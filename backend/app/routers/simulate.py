@@ -278,6 +278,10 @@ async def simulate_enrollment(
     body = body or SimulateRequest()
     trial = _trial(session, body.trial_id)
     site = _site(session, trial, user, body.site_id)
+    if site.trial_id != trial.id:
+        raise HTTPException(
+            status_code=404, detail=f"no site with id {site.id} in this trial"
+        )
 
     today = date.today()
     rng = random.Random()

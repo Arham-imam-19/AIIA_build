@@ -40,9 +40,9 @@ import pytest
 from sqlmodel import Session, select
 from starlette.websockets import WebSocketDisconnect
 
-from app.enums import UserRole
+from app.enums import TrialPhase, TrialStatus, UserRole
 from app.main import app
-from app.models import AuditLog, Subject, User
+from app.models import AuditLog, Subject, Trial, User, Visit
 from tests.conftest import client_for, token_for, token_for_user, users_by_role
 
 # 1008 is "policy violation". A WebSocket handshake has already succeeded by the
@@ -485,6 +485,47 @@ def test_a_site_scoped_writer_cannot_choose_someone_elses_site(
     )
     assert response.status_code == 201
     assert response.json()["event"]["site_id"] == mine.site_id
+
+
+def test_a_site_scoped_writer_cannot_enrol_into_another_sites_trial(
+    live, seeded_engine, investigators
+):
+    writer = investigators[0]
+    with Session(seeded_engine) as session:
+        other_trial = Trial(
+            protocol_number="SYNTHETIC-SIMULATION-OTHER-TRIAL",
+            title="Synthetic simulation ownership regression trial",
+            short_title="Synthetic ownership regression",
+            phase=TrialPhase.PHASE_1.value,
+            status=TrialStatus.PLANNING.value,
+            indication="Synthetic indication",
+            intervention="Synthetic intervention",
+            design="Synthetic design",
+            sponsor_name="Synthetic sponsor",
+        )
+        session.add(other_trial)
+        session.commit()
+        session.refresh(other_trial)
+        other_trial_id = other_trial.id
+        assert other_trial_id is not None
+        before_subjects = len(session.exec(select(Subject)).all())
+        before_visits = len(session.exec(select(Visit)).all())
+        before_audits = len(session.exec(select(AuditLog)).all())
+
+    response = live.post(
+        "/api/simulate/enrollment",
+        json={"trial_id": other_trial_id},
+        headers={"Authorization": f"Bearer {token_for_user(writer)}"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        f"no site with id {writer.site_id} in this trial"
+    )
+    with Session(seeded_engine) as session:
+        assert len(session.exec(select(Subject)).all()) == before_subjects
+        assert len(session.exec(select(Visit)).all()) == before_visits
+        assert len(session.exec(select(AuditLog)).all()) == before_audits
 
 
 def test_simulating_against_an_empty_database_says_what_to_run(empty_client):
