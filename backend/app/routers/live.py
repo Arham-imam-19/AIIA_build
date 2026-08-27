@@ -33,6 +33,7 @@ from fastapi.encoders import jsonable_encoder
 from sqlmodel import Session
 
 from app.db import get_session
+from app.enums import UserRole
 from app.events import bus, now_iso
 from app.kpi import build_dashboard
 from app.rbac import CurrentUser, Permission, user_from_token
@@ -60,6 +61,8 @@ EVENT_DETAIL_PERMISSION = {
     "adverse_event.reported": Permission.AE_READ,
     "adverse_event.serious": Permission.AE_READ,
     "visit.deviation": Permission.VISIT_READ,
+    "econsent.signed": Permission.ECONSENT_READ,
+    "patient_request.created": Permission.PATIENT_REQUEST_READ,
 }
 
 
@@ -82,12 +85,18 @@ def _for_viewer(user: CurrentUser, event: dict | None) -> dict | None:
 def _visible_to(user: CurrentUser, event: dict | None) -> bool:
     """Should this user be told about this event at all?
 
-    A site-scoped viewer must not be nudged by another site's activity: the numbers
-    on their screen would not change, and the notification itself would leak that
-    something happened somewhere they cannot see.
+    * A patient viewer must ONLY receive events scoped specifically to their own subject_id.
+    * A site-scoped staff viewer must not be nudged by another site's activity.
+    * Trial-wide roles receive events across all sites.
     """
     if event is None:
         return True
+
+    # Patient visibility is strictly Subject-scoped
+    if user.role == UserRole.PATIENT.value:
+        event_subject_id = event.get("subject_id")
+        return event_subject_id is not None and event_subject_id == user.subject_id
+
     scope = user.scope_site_id
     if scope is None:
         return True

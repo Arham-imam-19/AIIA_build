@@ -250,6 +250,13 @@ def options(user: CurrentUser = Depends(get_current_user)) -> dict:
             {
                 **action,
                 "allowed": user.can(Permission(action["permission"])),
+                "reason": (
+                    None
+                    if user.can(Permission(action["permission"]))
+                    else f"A {user.role_label} does not enter trial data. Log in as the "
+                    "Principal Investigator or Coordinator to do this - this screen "
+                    "will update on its own when they do."
+                ),
                 "why_not": (
                     None
                     if user.can(Permission(action["permission"]))

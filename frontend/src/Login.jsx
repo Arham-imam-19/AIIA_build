@@ -10,11 +10,14 @@ import { demoUsers, health } from './api'
 import { useAuth } from './auth'
 
 const ROLE_BLURB = {
-  principal_investigator: 'runs the trial at one hospital',
-  coordinator: 'books visits and enters the data',
-  sponsor: 'watches every site for progress',
-  ethics_committee: 'reviews safety and deviations',
-  regulator: 'inspects registration and the audit trail',
+  admin: 'Primary Admin: manages institutions & system oversight',
+  institution_admin: 'manages hospital site, researchers & patient inquiries',
+  principal_investigator: 'Lead Researcher: runs clinical trial at the site',
+  coordinator: 'books visits, enters data & coordinates care',
+  patient: 'trial participant: view schedule & message hospital admin',
+  sponsor: 'funds the trial and watches progress across all sites',
+  ethics_committee: 'reviews safety events and protocol deviations',
+  regulator: 'inspects CTRI registration and the audit trail',
 }
 
 export default function Login() {

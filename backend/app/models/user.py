@@ -28,10 +28,12 @@ class User(SQLModel, table=True):
     # Set in Phase 2 when authentication lands.
     hashed_password: str | None = Field(default=None, max_length=255)
 
-    # Site staff (investigators, coordinators) belong to one site. Sponsors,
-    # regulators and ethics-committee members oversee all sites, so this is null
-    # for them.
+    # Site staff and patients belong to one site. Sponsors, regulators, ethics-committee
+    # and primary admin oversee all sites, so this is null for them.
     site_id: int | None = Field(default=None, foreign_key="sites.id", index=True)
+
+    # For patient accounts: link to their clinical Subject participant record.
+    subject_id: int | None = Field(default=None, foreign_key="subjects.id", index=True)
 
     organization: str | None = Field(default=None, max_length=200)
     phone: str | None = Field(default=None, max_length=40)

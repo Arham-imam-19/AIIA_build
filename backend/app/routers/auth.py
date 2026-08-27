@@ -1,18 +1,7 @@
-"""Logging in and out.
+"""Authentication endpoints: login, logout, who-am-i, and demo accounts.
 
-**JWT (JSON Web Token)** in one sentence: a signed ID card the server hands you
-at login, which the browser then shows with every request - like a festival
-wristband, where staff trust the hologram instead of phoning the box office.
-
-The flow:
-
-    POST /api/auth/login      email + password  ->  token
-    GET  /api/auth/me         token             ->  who you are, what you may do
-    POST /api/auth/logout     token             ->  token is dead
-
-Logging in and out are both written to the audit trail, including failed
-attempts. In a regulated system "who was in the system, when" is part of the
-record, not an operational detail.
+Phase 2 added JWT authentication. An endpoint is protected by adding
+`Depends(require(...))` - see `app/rbac.py` for how that is enforced.
 """
 
 from __future__ import annotations
@@ -24,10 +13,10 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from app import audit, config, security
+from app.db import get_session
 from app.enums import AuditAction, UserRole
 from app.events import bus
 from app.models import Trial, User
-from app.db import get_session
 from app.rbac import (
     PERMISSION_LABELS,
     ROLE_LABELS,
@@ -37,10 +26,13 @@ from app.rbac import (
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-# Roles the demo has a login for, in the order the pitch introduces them.
+# Roles the demo has a login for, ordered through the hierarchy.
 DEMO_ROLE_ORDER = [
+    UserRole.ADMIN.value,
+    UserRole.INSTITUTION_ADMIN.value,
     UserRole.PRINCIPAL_INVESTIGATOR.value,
     UserRole.COORDINATOR.value,
+    UserRole.PATIENT.value,
     UserRole.SPONSOR.value,
     UserRole.ETHICS_COMMITTEE.value,
     UserRole.REGULATOR.value,
@@ -76,6 +68,7 @@ class MePayload(BaseModel):
     role: str
     role_label: str
     site_id: int | None
+    subject_id: int | None = None
     organization: str | None
     site_scoped: bool
     permissions: list[str]
@@ -91,6 +84,7 @@ def _me(user: CurrentUser) -> MePayload:
         role=user.role,
         role_label=user.role_label,
         site_id=user.site_id,
+        subject_id=user.subject_id,
         organization=user.organization,
         site_scoped=user.is_site_scoped,
         permissions=granted,
@@ -157,6 +151,7 @@ def login(
         full_name=user.full_name,
         role=user.role,
         site_id=user.site_id,
+        subject_id=user.subject_id,
         organization=user.organization,
     )
 
@@ -175,14 +170,12 @@ def login(
     )
     session.commit()
 
-    return LoginResponse(access_token=token, expires_at=expires_at, user=_me(current))
-
-
-@router.get("/me", response_model=MePayload)
-def me(user: CurrentUser = Depends(get_current_user)) -> MePayload:
-    """Who the current token belongs to. The frontend calls this on page load to
-    find out whether a saved token is still good."""
-    return _me(user)
+    return LoginResponse(
+        access_token=token,
+        token_type="bearer",
+        expires_at=expires_at,
+        user=_me(current),
+    )
 
 
 @router.post("/logout")
@@ -191,14 +184,13 @@ async def logout(
     user: CurrentUser = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> dict:
-    """Revoke the current token.
+    """Revoke this token for the rest of its lifetime.
 
-    A JWT is self-contained, so the server cannot simply forget it - it has to
-    remember that this particular one is no longer welcome. Its id goes on a deny
-    list until the moment it would have expired anyway, after which there is
-    nothing left to revoke. Like cancelling a keycard rather than changing every
-    lock in the hotel.
+    Tells Redis to drop the session. Any open WebSocket sharing this token will
+    receive a logout message and be closed.
     """
+    if user.jti:
+        await bus.revoke_token(user.jti)
     audit.record(
         session,
         user=user,
@@ -211,15 +203,22 @@ async def logout(
         request=request,
     )
     session.commit()
+    return {"status": "signed out", "logged_out": True}
 
-    if user.jti:
-        await bus.revoke_token(user.jti, config.ACCESS_TOKEN_TTL_MINUTES * 60)
-    return {"logged_out": True, "detail": "token revoked; log in again to continue"}
+
+@router.get("/me", response_model=MePayload)
+def me(user: CurrentUser = Depends(get_current_user)) -> MePayload:
+    """Who is currently signed in, and what they are allowed to do.
+
+    The frontend calls this on startup to restore a session from localStorage.
+    If the token has expired, the 401 kicks them back to the login screen.
+    """
+    return _me(user)
 
 
 @router.get("/demo-users")
 def demo_users(session: Session = Depends(get_session)) -> dict:
-    """The five demo personas and the password they share.
+    """The demo personas and the password they share.
 
     Development only. Printing credentials from an API would be indefensible in a
     real deployment, so this returns 404 unless APP_ENV=development - the same
@@ -247,7 +246,7 @@ def demo_users(session: Session = Depends(get_session)) -> dict:
     return {
         "password": config.DEMO_PASSWORD,
         "note": (
-            "Synthetic demo accounts. All five share one password so a five-minute "
+            "Synthetic demo accounts. All share one password so a five-minute "
             "pitch does not become a typing exercise."
         ),
         "users": [

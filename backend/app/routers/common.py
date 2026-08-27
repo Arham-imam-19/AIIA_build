@@ -50,11 +50,11 @@ def paginate(session: Session, statement, limit: int, offset: int) -> tuple[int,
     two can never disagree about which rows matched.
     """
     count_statement = sa_select(func.count()).select_from(statement.subquery())
-    total = session.exec(count_statement).one()
-    # SQLAlchemy returns a 1-tuple for a scalar select; SQLModel unwraps some but
-    # not all. Handle both so this works whichever path is taken.
-    if isinstance(total, tuple):
-        total = total[0]
+    res = session.exec(count_statement).one()
+    if hasattr(res, "__getitem__"):
+        total = res[0]
+    else:
+        total = res
 
     rows = session.exec(statement.limit(limit).offset(offset)).all()
     return int(total), list(rows)

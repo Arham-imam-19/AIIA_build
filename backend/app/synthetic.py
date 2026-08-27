@@ -22,6 +22,7 @@ seeder to resolve; every other key is a real column.
 
 from __future__ import annotations
 
+import hashlib
 import random
 from datetime import date, datetime, timedelta
 
@@ -30,6 +31,7 @@ from app.enums import (
     AEOutcome,
     AESeverity,
     AuditAction,
+    ConsentStatus,
     Prakriti,
     Sex,
     SiteStatus,
@@ -151,7 +153,7 @@ PRAKRITI_WEIGHTS: list[tuple[str, float]] = [
     (Prakriti.PITTA.value, 0.13),
     (Prakriti.PITTA_KAPHA.value, 0.12),
     (Prakriti.KAPHA.value, 0.09),
-    (Prakriti.TRIDOSHA.value, 0.04),
+    (Prakriti.TRIDOSHIC.value, 0.04),
 ]
 
 SCREEN_FAILURE_REASONS = [
@@ -576,6 +578,24 @@ def _build_users() -> list[dict]:
     """
     users: list[dict] = []
 
+    # Institution Administrators (Site Admins who coordinate researchers & manage the hospital's trial operations)
+    institution_admins = [
+        ("Dr. Ananya Deshmukh", "01"),
+        ("Dr. Rajesh Verma", "02"),
+        ("Dr. Debashis Sen", "03"),
+        ("Dr. Pravin Joshi", "04"),
+    ]
+    for name, site_code in institution_admins:
+        site_name = next(s["name"] for s in SITE_SPECS if s["site_code"] == site_code)
+        users.append(
+            {
+                "email": _email(name),
+                "full_name": name,
+                "role": UserRole.INSTITUTION_ADMIN.value,
+                "organization": site_name,
+                "_site_code": site_code,
+            }
+        )
     # One Principal Investigator per site.
     for spec in SITE_SPECS:
         users.append(
@@ -604,6 +624,24 @@ def _build_users() -> list[dict]:
                 "role": UserRole.COORDINATOR.value,
                 "organization": site_name,
                 "_site_code": site_code,
+            }
+        )
+
+    # Demo Patients (trial participants who can log into the Patient Portal)
+    demo_patients = [
+        ("Aarav Sharma", "01", "patient.01.014@demo.aiia-ctms.in", "AIIA-ASH-01-014"),
+        ("Sunita Patel", "02", "patient.02.005@demo.aiia-ctms.in", "AIIA-ASH-02-005"),
+    ]
+    for name, site_code, email_addr, subject_code in demo_patients:
+        site_name = next(s["name"] for s in SITE_SPECS if s["site_code"] == site_code)
+        users.append(
+            {
+                "email": email_addr,
+                "full_name": name,
+                "role": UserRole.PATIENT.value,
+                "organization": site_name,
+                "_site_code": site_code,
+                "_subject_code": subject_code,
             }
         )
 
@@ -1184,6 +1222,137 @@ def _build_audit_logs(
     return logs
 
 
+def _build_patient_requests(
+    rng: random.Random,
+    reference_date: date,
+    users: list[dict],
+) -> list[dict]:
+    patient_users = [u for u in users if u["role"] == UserRole.PATIENT.value]
+    admin_users = [u for u in users if u["role"] == UserRole.INSTITUTION_ADMIN.value]
+
+    p1 = patient_users[0] if patient_users else None
+    p2 = patient_users[1] if len(patient_users) > 1 else p1
+    a1 = admin_users[0] if admin_users else None
+
+    if not p1:
+        return []
+
+    def at(day: date, hour: int = 10, minute: int = 30) -> datetime:
+        return datetime(day.year, day.month, day.day, hour, minute)
+
+    requests = [
+        {
+            "_patient_email": p1["email"],
+            "_site_code": p1.get("_site_code", "01"),
+            "_subject_code": p1.get("_subject_code", "AIIA-ASH-01-014"),
+            "_assigned_admin_email": a1["email"] if a1 else None,
+            "category": "medication_query",
+            "subject_line": "Timing of morning dose with warm milk",
+            "message": "Can the morning churna dose be taken 15 minutes before breakfast instead of after food? Taking it on an empty stomach feels slightly easier.",
+            "status": "resolved",
+            "admin_response": "As per protocol guidance approved by Dr. Meenakshi Sharma (PI), the churna must be taken after food with warm milk to ensure optimal absorption and prevent gastric discomfort.",
+            "created_at": at(reference_date - timedelta(days=6), 10, 15),
+            "updated_at": at(reference_date - timedelta(days=5), 14, 30),
+            "resolved_at": at(reference_date - timedelta(days=5), 14, 30),
+        },
+        {
+            "_patient_email": p1["email"],
+            "_site_code": p1.get("_site_code", "01"),
+            "_subject_code": p1.get("_subject_code", "AIIA-ASH-01-014"),
+            "_assigned_admin_email": a1["email"] if a1 else None,
+            "category": "appointment_reschedule",
+            "subject_line": "Request to reschedule Week 8 visit",
+            "message": "I have family commitments this Friday. Could my Week 8 follow-up appointment be moved to the following Monday morning?",
+            "status": "in_review",
+            "admin_response": "Coordinator Kavita Nair is checking the allowable protocol visit window (+/- 3 days) with the investigator.",
+            "created_at": at(reference_date - timedelta(days=2), 11, 45),
+            "updated_at": at(reference_date - timedelta(days=1), 16, 20),
+            "resolved_at": None,
+        },
+        {
+            "_patient_email": p1["email"],
+            "_site_code": p1.get("_site_code", "01"),
+            "_subject_code": p1.get("_subject_code", "AIIA-ASH-01-014"),
+            "_assigned_admin_email": None,
+            "category": "symptom_inquiry",
+            "subject_line": "Mild dry mouth noticed in the evening",
+            "message": "Noticed slight dryness of mouth for the last two days in the evening. Is this expected or related to the trial medicine?",
+            "status": "submitted",
+            "admin_response": None,
+            "created_at": at(reference_date - timedelta(days=1), 9, 30),
+            "updated_at": at(reference_date - timedelta(days=1), 9, 30),
+            "resolved_at": None,
+        },
+    ]
+    if p2 and p2 != p1:
+        requests.append(
+            {
+                "_patient_email": p2["email"],
+                "_site_code": p2.get("_site_code", "02"),
+                "_subject_code": p2.get("_subject_code", "AIIA-ASH-02-005"),
+                "_assigned_admin_email": None,
+                "category": "general_inquiry",
+                "subject_line": "Trial travel reimbursement query",
+                "message": "Inquiring about the procedure for submitting travel reimbursement receipts for the baseline visit.",
+                "status": "submitted",
+                "admin_response": None,
+                "created_at": at(reference_date - timedelta(days=3), 14, 0),
+                "updated_at": at(reference_date - timedelta(days=3), 14, 0),
+                "resolved_at": None,
+            }
+        )
+    return requests
+
+
+def _build_econsents(
+    rng: random.Random,
+    reference_date: date,
+    subjects: list[dict],
+    users: list[dict],
+) -> list[dict]:
+    """Seed digital e-Consent records for participants enrolled on study."""
+    econsents: list[dict] = []
+    sample_sig = (
+        "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxODAiIGhlaWdodD0iNjAiPjxwYXRoIGQ9Ik0xMCA0MCBRIDMwIDEwIDUwIDM1IFQgOTAgMjAgVCAxNDAgNDAgVCAxNzAgMjAiIHN0cm9rZT0iIzFkNGVkOCIgc3Ryb2tlLXdpZHRoPSIzIiBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz48L3N2Zz4="
+    )
+
+    enrolled = [s for s in subjects if s.get("enrollment_date") is not None]
+    for s in enrolled:
+        # Keep the demo participant's consent pending so user can sign live during the presentation!
+        if s["subject_code"] == "AIIA-ASH-01-014":
+            continue
+        enroll_d = s["enrollment_date"]
+        signed_at = datetime(enroll_d.year, enroll_d.month, enroll_d.day, 10, 15)
+        name_clean = f"Participant {s['subject_code']}"
+        lang = "hi" if rng.random() < 0.4 else "en"
+        abha = f"14-{rng.randint(1000, 9999)}-{rng.randint(1000, 9999)}-{rng.randint(1000, 9999)}"
+
+        digest_source = (
+            f"AIIA-CTMS-ECONSENT:trial=1:site={s['_site_code']}:subject={s['subject_code']}:"
+            f"lang={lang}:time={signed_at.isoformat()}"
+        )
+        sha = hashlib.sha256(digest_source.encode("utf-8")).hexdigest()
+
+        econsents.append(
+            {
+                "_subject_code": s["subject_code"],
+                "_site_code": s["_site_code"],
+                "language": lang,
+                "abha_id": abha,
+                "signer_name": name_clean,
+                "signature_data_url": sample_sig,
+                "sha256_hash": sha,
+                "status": ConsentStatus.SIGNED.value,
+                "signed_at": signed_at,
+                "ip_address": f"10.20.{rng.randint(1, 4)}.{rng.randint(10, 240)}",
+                "user_agent": "AIIA-CTMS-Portal/1.0 (Mobile Web)",
+                "created_at": signed_at,
+                "updated_at": signed_at,
+            }
+        )
+    return econsents
+
+
 def generate(
     reference_date: date | None = None, random_seed: int = DEFAULT_SEED
 ) -> dict:
@@ -1209,6 +1378,8 @@ def generate(
     visits = _build_visits(rng, reference_date, subjects, users)
     adverse_events = _build_adverse_events(rng, reference_date, subjects, users)
     audit_logs = _build_audit_logs(rng, reference_date, trial, users, subjects, adverse_events)
+    patient_requests = _build_patient_requests(rng, reference_date, users)
+    econsents = _build_econsents(rng, reference_date, subjects, users)
 
     return {
         "reference_date": reference_date,
@@ -1218,6 +1389,8 @@ def generate(
         "subjects": subjects,
         "visits": visits,
         "adverse_events": adverse_events,
+        "patient_requests": patient_requests,
+        "econsents": econsents,
         "audit_logs": audit_logs,
         "summary": {
             "sites": len(sites),
@@ -1228,6 +1401,8 @@ def generate(
             ),
             "visits": len(visits),
             "adverse_events": len(adverse_events),
+            "patient_requests": len(patient_requests),
+            "econsents": len(econsents),
             "serious_adverse_events": sum(
                 1 for e in adverse_events if e["is_serious"]
             ),
