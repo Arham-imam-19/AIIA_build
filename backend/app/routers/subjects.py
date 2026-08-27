@@ -24,7 +24,15 @@ from sqlmodel import Session, select
 
 from app import audit
 from app.db import get_session
-from app.enums import AuditAction, Sex, SiteStatus, StudyArm, SubjectStatus, TrialStatus
+from app.enums import (
+    AuditAction,
+    Prakriti,
+    Sex,
+    SiteStatus,
+    StudyArm,
+    SubjectStatus,
+    TrialStatus,
+)
 from app.models import AdverseEvent, Site, Subject, Trial, Visit
 from app.models.base import utcnow
 from app.rbac import (
@@ -121,6 +129,39 @@ class SubjectScreeningOutcomeResponse(BaseModel):
     subject_code: str
     status: str
     screen_failure_reason: str
+    updated_at: datetime
+
+
+class SubjectEnrollmentUpdate(BaseModel):
+    """The protocol facts needed to enrol and randomize a screened Subject."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enrollment_date: date
+    randomization_date: date
+    arm: StudyArm
+    prakriti: Prakriti | None = None
+
+    @field_validator("arm")
+    @classmethod
+    def randomized_arm(cls, value: StudyArm) -> StudyArm:
+        if value == StudyArm.NOT_RANDOMIZED:
+            raise ValueError("arm must be treatment, placebo, or comparator")
+        return value
+
+
+class SubjectEnrollmentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    trial_id: int
+    site_id: int
+    subject_code: str
+    status: str
+    enrollment_date: date
+    randomization_date: date
+    arm: str
+    prakriti: str | None
     updated_at: datetime
 
 
@@ -353,6 +394,121 @@ def record_subject_screening_outcome(
 
     session.refresh(subject)
     return SubjectScreeningOutcomeResponse.model_validate(subject)
+
+
+@router.patch(
+    "/subjects/{subject_id}/enrollment",
+    response_model=SubjectEnrollmentResponse,
+)
+def enroll_subject(
+    subject_id: int,
+    body: SubjectEnrollmentUpdate,
+    request: Request,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.SUBJECT_WRITE)),
+) -> SubjectEnrollmentResponse:
+    """Atomically enrol and randomize an existing screening Subject."""
+    subject = session.exec(
+        select(Subject).where(Subject.id == subject_id).with_for_update()
+    ).one_or_none()
+    if subject is None:
+        session.rollback()
+        raise HTTPException(status_code=404, detail=f"no subject with id {subject_id}")
+
+    try:
+        assert_site_visible(user, subject.site_id)
+        site = session.get(Site, subject.site_id)
+        trial = session.get(Trial, subject.trial_id)
+        if site is None or trial is None or site.trial_id != subject.trial_id:
+            raise HTTPException(
+                status_code=409,
+                detail="subject has inconsistent Trial or Site linkage",
+            )
+        if trial.status != TrialStatus.RECRUITING.value:
+            raise HTTPException(status_code=409, detail="this trial is not recruiting")
+        if site.status != SiteStatus.RECRUITING.value:
+            raise HTTPException(status_code=409, detail="this site is not recruiting")
+
+        result = validate_subject_transition(
+            subject,
+            SubjectStatus.ENROLLED.value,
+            as_of=date.today(),
+            enrollment_date=body.enrollment_date,
+            randomization_date=body.randomization_date,
+            arm=body.arm.value,
+        )
+
+        old_value = json.dumps(
+            {
+                "arm": subject.arm,
+                "enrollment_date": (
+                    subject.enrollment_date.isoformat()
+                    if subject.enrollment_date is not None
+                    else None
+                ),
+                "prakriti": subject.prakriti,
+                "randomization_date": (
+                    subject.randomization_date.isoformat()
+                    if subject.randomization_date is not None
+                    else None
+                ),
+                "status": subject.status,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+        subject.status = result.status
+        subject.screening_date = result.screening_date
+        subject.enrollment_date = result.enrollment_date
+        subject.randomization_date = result.randomization_date
+        subject.arm = result.arm
+        subject.screen_failure_reason = result.screen_failure_reason
+        subject.completed_date = result.completed_date
+        subject.withdrawal_date = result.withdrawal_date
+        subject.withdrawal_reason = result.withdrawal_reason
+        subject.prakriti = body.prakriti.value if body.prakriti is not None else None
+        subject.updated_at = utcnow()
+        session.add(subject)
+
+        new_value = json.dumps(
+            {
+                "arm": subject.arm,
+                "enrollment_date": subject.enrollment_date.isoformat(),
+                "prakriti": subject.prakriti,
+                "randomization_date": subject.randomization_date.isoformat(),
+                "status": subject.status,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        audit.record(
+            session,
+            user=user,
+            action=AuditAction.UPDATE,
+            entity_type="subjects",
+            entity_id=subject.id,
+            entity_label=subject.subject_code,
+            field_name="enrollment",
+            old_value=old_value,
+            new_value=new_value,
+            reason="Subject enrolled and randomized.",
+            trial_id=subject.trial_id,
+            request=request,
+        )
+        session.commit()
+    except SubjectTransitionError as exc:
+        session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+    except Exception:
+        session.rollback()
+        raise
+
+    session.refresh(subject)
+    return SubjectEnrollmentResponse.model_validate(subject)
 
 
 @router.get("/subjects", response_model=Page[Subject])
