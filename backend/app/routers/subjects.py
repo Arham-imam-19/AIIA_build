@@ -165,6 +165,23 @@ class SubjectEnrollmentResponse(BaseModel):
     updated_at: datetime
 
 
+class SubjectActivationUpdate(BaseModel):
+    """Contemporaneous confirmation that the Subject received a first dose."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SubjectActivationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    trial_id: int
+    site_id: int
+    subject_code: str
+    status: str
+    updated_at: datetime
+
+
 def _next_subject_code(session: Session, site: Site) -> str:
     """Continue the current Ashwagandha trial's per-site subject numbering."""
     prefix = f"AIIA-ASH-{site.site_code}-"
@@ -509,6 +526,96 @@ def enroll_subject(
 
     session.refresh(subject)
     return SubjectEnrollmentResponse.model_validate(subject)
+
+
+@router.patch(
+    "/subjects/{subject_id}/activation",
+    response_model=SubjectActivationResponse,
+)
+def activate_subject(
+    subject_id: int,
+    body: SubjectActivationUpdate,
+    request: Request,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.SUBJECT_WRITE)),
+) -> SubjectActivationResponse:
+    """Confirm first dosing and atomically activate an enrolled Subject."""
+    subject = session.exec(
+        select(Subject).where(Subject.id == subject_id).with_for_update()
+    ).one_or_none()
+    if subject is None:
+        session.rollback()
+        raise HTTPException(status_code=404, detail=f"no subject with id {subject_id}")
+
+    try:
+        assert_site_visible(user, subject.site_id)
+        site = session.get(Site, subject.site_id)
+        trial = session.get(Trial, subject.trial_id)
+        if site is None or trial is None or site.trial_id != subject.trial_id:
+            raise HTTPException(
+                status_code=409,
+                detail="subject has inconsistent Trial or Site linkage",
+            )
+        if trial.status != TrialStatus.RECRUITING.value:
+            raise HTTPException(status_code=409, detail="this trial is not recruiting")
+        if site.status != SiteStatus.RECRUITING.value:
+            raise HTTPException(status_code=409, detail="this site is not recruiting")
+
+        result = validate_subject_transition(
+            subject,
+            SubjectStatus.ACTIVE.value,
+            as_of=date.today(),
+        )
+        old_value = json.dumps(
+            {"status": result.previous_status},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+        subject.status = result.status
+        subject.screening_date = result.screening_date
+        subject.enrollment_date = result.enrollment_date
+        subject.randomization_date = result.randomization_date
+        subject.arm = result.arm
+        subject.screen_failure_reason = result.screen_failure_reason
+        subject.completed_date = result.completed_date
+        subject.withdrawal_date = result.withdrawal_date
+        subject.withdrawal_reason = result.withdrawal_reason
+        subject.updated_at = utcnow()
+        session.add(subject)
+
+        new_value = json.dumps(
+            {"status": result.status},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        audit.record(
+            session,
+            user=user,
+            action=AuditAction.UPDATE,
+            entity_type="subjects",
+            entity_id=subject.id,
+            entity_label=subject.subject_code,
+            field_name="activation",
+            old_value=old_value,
+            new_value=new_value,
+            reason="Subject activated after first dose confirmation.",
+            trial_id=subject.trial_id,
+            request=request,
+        )
+        session.commit()
+    except SubjectTransitionError as exc:
+        session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+    except Exception:
+        session.rollback()
+        raise
+
+    session.refresh(subject)
+    return SubjectActivationResponse.model_validate(subject)
 
 
 @router.get("/subjects", response_model=Page[Subject])

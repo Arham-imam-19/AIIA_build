@@ -38,6 +38,7 @@ _ALLOWED_TRANSITIONS = frozenset(
     {
         (SubjectStatus.SCREENING.value, SubjectStatus.SCREEN_FAILED.value),
         (SubjectStatus.SCREENING.value, SubjectStatus.ENROLLED.value),
+        (SubjectStatus.ENROLLED.value, SubjectStatus.ACTIVE.value),
         (SubjectStatus.ENROLLED.value, SubjectStatus.WITHDRAWN.value),
         (SubjectStatus.ENROLLED.value, SubjectStatus.LOST_TO_FOLLOW_UP.value),
         (SubjectStatus.ACTIVE.value, SubjectStatus.COMPLETED.value),
@@ -153,6 +154,49 @@ def validate_subject_transition(
             enrollment_date=enrollment_date,
             randomization_date=randomization_date,
             arm=arm,
+            screen_failure_reason=None,
+            completed_date=None,
+            withdrawal_date=None,
+            withdrawal_reason=None,
+        )
+
+    if target_status == SubjectStatus.ACTIVE.value:
+        if subject.enrollment_date is None or subject.randomization_date is None:
+            _reject(
+                "ENROLLMENT_FACTS_REQUIRED",
+                "Enrolment and randomisation dates are required before activation.",
+            )
+        randomized_arms = {
+            StudyArm.TREATMENT.value,
+            StudyArm.PLACEBO.value,
+            StudyArm.COMPARATOR.value,
+        }
+        if subject.arm not in randomized_arms:
+            _reject(
+                "RANDOMIZED_ARM_REQUIRED",
+                "A valid randomised study arm is required before activation.",
+            )
+        if (
+            subject.screen_failure_reason is not None
+            or subject.completed_date is not None
+            or subject.withdrawal_date is not None
+            or subject.withdrawal_reason is not None
+            or screen_failure_reason is not None
+            or completed_date is not None
+            or withdrawal_date is not None
+            or withdrawal_reason is not None
+        ):
+            _reject(
+                "OUTCOME_FIELDS_MUST_BE_EMPTY",
+                "Screen failure, completion, and withdrawal fields must be empty at activation.",
+            )
+        return SubjectTransitionResult(
+            previous_status=subject.status,
+            status=target_status,
+            screening_date=subject.screening_date,
+            enrollment_date=subject.enrollment_date,
+            randomization_date=subject.randomization_date,
+            arm=subject.arm,
             screen_failure_reason=None,
             completed_date=None,
             withdrawal_date=None,

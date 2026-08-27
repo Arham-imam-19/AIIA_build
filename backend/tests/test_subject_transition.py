@@ -66,6 +66,7 @@ def request(current: SubjectStatus, target: SubjectStatus, **overrides):
 ALLOWED = {
     (SubjectStatus.SCREENING, SubjectStatus.SCREEN_FAILED),
     (SubjectStatus.SCREENING, SubjectStatus.ENROLLED),
+    (SubjectStatus.ENROLLED, SubjectStatus.ACTIVE),
     (SubjectStatus.ENROLLED, SubjectStatus.WITHDRAWN),
     (SubjectStatus.ENROLLED, SubjectStatus.LOST_TO_FOLLOW_UP),
     (SubjectStatus.ACTIVE, SubjectStatus.COMPLETED),
@@ -115,6 +116,75 @@ def test_terminal_statuses_have_no_outgoing_transition(terminal):
 def test_same_status_is_forbidden(status):
     with pytest.raises(SubjectTransitionError) as raised:
         request(status, status)
+    assert raised.value.code == "TRANSITION_NOT_ALLOWED"
+
+
+def test_activation_preserves_enrollment_facts_and_normalizes_outcomes():
+    original = subject(
+        SubjectStatus.ENROLLED,
+        prakriti="vata_pitta",
+    )
+    result = validate_subject_transition(
+        original,
+        SubjectStatus.ACTIVE.value,
+        as_of=AS_OF,
+    )
+    assert result.previous_status == SubjectStatus.ENROLLED.value
+    assert result.status == SubjectStatus.ACTIVE.value
+    assert result.screening_date == original.screening_date
+    assert result.enrollment_date == original.enrollment_date
+    assert result.randomization_date == original.randomization_date
+    assert result.arm == original.arm
+    assert result.screen_failure_reason is None
+    assert result.completed_date is None
+    assert result.withdrawal_date is None
+    assert result.withdrawal_reason is None
+    assert original.prakriti == "vata_pitta"
+
+
+@pytest.mark.parametrize("missing", ["enrollment_date", "randomization_date"])
+def test_activation_requires_existing_enrollment_facts(missing):
+    with pytest.raises(SubjectTransitionError) as raised:
+        validate_subject_transition(
+            subject(SubjectStatus.ENROLLED, **{missing: None}),
+            SubjectStatus.ACTIVE.value,
+            as_of=AS_OF,
+        )
+    assert raised.value.code == "ENROLLMENT_FACTS_REQUIRED"
+
+
+def test_activation_requires_a_randomized_arm():
+    with pytest.raises(SubjectTransitionError) as raised:
+        validate_subject_transition(
+            subject(SubjectStatus.ENROLLED, arm=StudyArm.NOT_RANDOMIZED.value),
+            SubjectStatus.ACTIVE.value,
+            as_of=AS_OF,
+        )
+    assert raised.value.code == "RANDOMIZED_ARM_REQUIRED"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"screen_failure_reason": "failed"},
+        {"completed_date": AS_OF},
+        {"withdrawal_date": AS_OF},
+        {"withdrawal_reason": "left"},
+    ],
+)
+def test_activation_rejects_incompatible_outcome_fields(overrides):
+    with pytest.raises(SubjectTransitionError) as raised:
+        validate_subject_transition(
+            subject(SubjectStatus.ENROLLED, **overrides),
+            SubjectStatus.ACTIVE.value,
+            as_of=AS_OF,
+        )
+    assert raised.value.code == "OUTCOME_FIELDS_MUST_BE_EMPTY"
+
+
+def test_repeated_activation_is_rejected():
+    with pytest.raises(SubjectTransitionError) as raised:
+        request(SubjectStatus.ACTIVE, SubjectStatus.ACTIVE)
     assert raised.value.code == "TRANSITION_NOT_ALLOWED"
 
 
