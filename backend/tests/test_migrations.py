@@ -306,6 +306,21 @@ def test_unique_columns_are_unique_in_the_migration(
         )
 
 
+def test_visit_number_is_unique_per_subject_in_migration(
+    migrated_engine: sa.Engine,
+) -> None:
+    inspector = sa.inspect(migrated_engine)
+    unique_columns = {
+        tuple(index["column_names"])
+        for index in inspector.get_indexes("visits")
+        if index["unique"]
+    } | {
+        tuple(constraint["column_names"])
+        for constraint in inspector.get_unique_constraints("visits")
+    }
+    assert ("subject_id", "visit_number") in unique_columns
+
+
 # ----------------------------------------------------------------- downgrade
 
 

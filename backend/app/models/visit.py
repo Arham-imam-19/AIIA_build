@@ -2,6 +2,7 @@
 
 from datetime import date, datetime
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from app.models.base import utcnow
@@ -22,6 +23,13 @@ class Visit(SQLModel, table=True):
     """
 
     __tablename__ = "visits"
+    __table_args__ = (
+        UniqueConstraint(
+            "subject_id",
+            "visit_number",
+            name="uq_visits_subject_id_visit_number",
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     subject_id: int = Field(foreign_key="subjects.id", index=True)

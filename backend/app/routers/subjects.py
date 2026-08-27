@@ -209,6 +209,56 @@ class SubjectOutcomeResponse(BaseModel):
     updated_at: datetime
 
 
+class VisitScheduleCreate(BaseModel):
+    """The caller-supplied facts for one manually scheduled Visit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    visit_name: str
+    visit_number: int
+    visit_day: int
+    scheduled_date: date
+
+    @field_validator("visit_name")
+    @classmethod
+    def nonblank_trimmed_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("visit_name must not be blank")
+        if len(value) > 120:
+            raise ValueError("visit_name must not exceed 120 characters")
+        return value
+
+    @field_validator("visit_number")
+    @classmethod
+    def positive_visit_number(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("visit_number must be at least 1")
+        return value
+
+    @field_validator("scheduled_date")
+    @classmethod
+    def present_or_future_schedule(cls, value: date) -> date:
+        if value < date.today():
+            raise ValueError("scheduled_date cannot be in the past")
+        return value
+
+
+class VisitScheduleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    subject_id: int
+    trial_id: int
+    visit_name: str
+    visit_number: int
+    visit_day: int
+    scheduled_date: date
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class VisitOutcomeUpdate(BaseModel):
     """Only caller-supplied facts used to record a terminal Visit outcome."""
 
@@ -256,6 +306,15 @@ def _is_subject_code_conflict(exc: IntegrityError) -> bool:
     return (
         "ix_subjects_subject_code" in detail
         or "subjects.subject_code" in detail
+    )
+
+
+def _is_visit_number_conflict(exc: IntegrityError) -> bool:
+    """Recognise only the Subject/visit-number composite uniqueness rule."""
+    detail = str(exc.orig).lower()
+    return (
+        "uq_visits_subject_id_visit_number" in detail
+        or "visits.subject_id, visits.visit_number" in detail
     )
 
 
@@ -821,6 +880,126 @@ def get_subject(
     user: CurrentUser = Depends(require(Permission.SUBJECT_READ)),
 ) -> Subject:
     return _visible_subject(session, subject_id, user)
+
+
+@router.post(
+    "/subjects/{subject_id}/visits",
+    response_model=VisitScheduleResponse,
+    status_code=201,
+)
+def schedule_subject_visit(
+    subject_id: int,
+    body: VisitScheduleCreate,
+    request: Request,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.VISIT_WRITE)),
+) -> VisitScheduleResponse:
+    """Atomically schedule one manually specified Visit for a Subject."""
+    subject = session.exec(
+        select(Subject).where(Subject.id == subject_id).with_for_update()
+    ).one_or_none()
+    if subject is None:
+        session.rollback()
+        raise HTTPException(status_code=404, detail=f"no subject with id {subject_id}")
+
+    try:
+        assert_site_visible(user, subject.site_id)
+        site = session.get(Site, subject.site_id)
+        trial = session.get(Trial, subject.trial_id)
+        if site is None or trial is None or site.trial_id != subject.trial_id:
+            raise HTTPException(
+                status_code=409,
+                detail="subject has inconsistent Trial or Site linkage",
+            )
+        if subject.status not in {
+            SubjectStatus.ENROLLED.value,
+            SubjectStatus.ACTIVE.value,
+        }:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "SUBJECT_NOT_SCHEDULABLE",
+                    "message": "visits may be scheduled only for enrolled or active subjects",
+                },
+            )
+
+        duplicate = session.exec(
+            select(Visit.id).where(
+                Visit.subject_id == subject.id,
+                Visit.visit_number == body.visit_number,
+            )
+        ).first()
+        if duplicate is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "VISIT_NUMBER_ALREADY_SCHEDULED",
+                    "message": "this subject already has that visit_number",
+                },
+            )
+
+        now = utcnow()
+        visit = Visit(
+            subject_id=subject.id,
+            trial_id=subject.trial_id,
+            visit_name=body.visit_name,
+            visit_number=body.visit_number,
+            visit_day=body.visit_day,
+            scheduled_date=body.scheduled_date,
+            actual_date=None,
+            status=VisitStatus.SCHEDULED.value,
+            is_protocol_deviation=False,
+            deviation_description=None,
+            notes=None,
+            performed_by_user_id=None,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(visit)
+        session.flush()
+        new_value = json.dumps(
+            {
+                "scheduled_date": visit.scheduled_date.isoformat(),
+                "status": visit.status,
+                "visit_day": visit.visit_day,
+                "visit_name": visit.visit_name,
+                "visit_number": visit.visit_number,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        audit.record(
+            session,
+            user=user,
+            action=AuditAction.CREATE,
+            entity_type="visits",
+            entity_id=visit.id,
+            entity_label=f"{subject.subject_code} {visit.visit_name}",
+            field_name="schedule",
+            old_value=None,
+            new_value=new_value,
+            reason="Visit scheduled.",
+            trial_id=subject.trial_id,
+            request=request,
+        )
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        if _is_visit_number_conflict(exc):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "VISIT_NUMBER_ALREADY_SCHEDULED",
+                    "message": "this subject already has that visit_number",
+                },
+            ) from exc
+        raise
+    except Exception:
+        session.rollback()
+        raise
+
+    session.refresh(visit)
+    return VisitScheduleResponse.model_validate(visit)
 
 
 @router.get("/subjects/{subject_id}/visits", response_model=list[Visit])
