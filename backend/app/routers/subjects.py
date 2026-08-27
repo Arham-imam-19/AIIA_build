@@ -12,11 +12,19 @@ browsing who is enrolled.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import math
+from datetime import date, datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from app import audit
 from app.db import get_session
-from app.models import AdverseEvent, Subject, Visit
+from app.enums import AuditAction, Sex, SiteStatus, StudyArm, SubjectStatus, TrialStatus
+from app.models import AdverseEvent, Site, Subject, Trial, Visit
+from app.models.base import utcnow
 from app.rbac import (
     CurrentUser,
     Permission,
@@ -29,6 +37,81 @@ from app.routers.common import Page, limit_param, offset_param, paginate
 router = APIRouter(prefix="/api", tags=["subjects"])
 
 
+class SubjectScreeningCreate(BaseModel):
+    """Only the de-identified information available when screening begins."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    trial_id: int
+    site_id: int | None = None
+    screening_date: date
+    sex: Sex
+    year_of_birth: int | None = None
+    height_cm: float | None = None
+    weight_kg: float | None = None
+
+    @field_validator("height_cm", "weight_kg")
+    @classmethod
+    def positive_finite_measurement(cls, value: float | None) -> float | None:
+        if value is not None and (not math.isfinite(value) or value <= 0):
+            raise ValueError("measurement must be finite and positive")
+        return value
+
+    @model_validator(mode="after")
+    def valid_screening_demographics(self) -> "SubjectScreeningCreate":
+        if self.screening_date > date.today():
+            raise ValueError("screening_date cannot be in the future")
+        if (
+            self.year_of_birth is not None
+            and self.year_of_birth > self.screening_date.year
+        ):
+            raise ValueError("year_of_birth cannot be later than the screening year")
+        return self
+
+
+class SubjectScreeningResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    trial_id: int
+    site_id: int
+    subject_code: str
+    status: str
+    arm: str
+    screening_date: date
+    sex: str
+    year_of_birth: int | None
+    height_cm: float | None
+    weight_kg: float | None
+    created_at: datetime
+    updated_at: datetime
+
+
+def _next_subject_code(session: Session, site: Site) -> str:
+    """Continue the current Ashwagandha trial's per-site subject numbering."""
+    prefix = f"AIIA-ASH-{site.site_code}-"
+    codes = session.exec(
+        select(Subject.subject_code).where(Subject.site_id == site.id)
+    ).all()
+    highest = 0
+    for code in codes:
+        if not code.startswith(prefix):
+            continue
+        tail = code[len(prefix):]
+        if tail.isdigit():
+            highest = max(highest, int(tail))
+    return f"{prefix}{highest + 1:03d}"
+
+
+def _is_subject_code_conflict(exc: IntegrityError) -> bool:
+    """Recognise only the existing unique index on subjects.subject_code."""
+    detail = str(exc.orig).lower()
+    return (
+        "ix_subjects_subject_code" in detail
+        or "subjects.subject_code" in detail
+    )
+
+
 def _visible_subject(session: Session, subject_id: int, user: CurrentUser) -> Subject:
     """Fetch a subject, 404 if absent and 403 if it belongs to another site."""
     subject = session.get(Subject, subject_id)
@@ -36,6 +119,118 @@ def _visible_subject(session: Session, subject_id: int, user: CurrentUser) -> Su
         raise HTTPException(status_code=404, detail=f"no subject with id {subject_id}")
     assert_site_visible(user, subject.site_id)
     return subject
+
+
+@router.post(
+    "/subjects",
+    response_model=SubjectScreeningResponse,
+    status_code=201,
+)
+def create_subject_in_screening(
+    body: SubjectScreeningCreate,
+    request: Request,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.SUBJECT_WRITE)),
+) -> SubjectScreeningResponse:
+    """Create one de-identified Subject at the start of screening."""
+    trial = session.get(Trial, body.trial_id)
+    if trial is None:
+        raise HTTPException(status_code=404, detail=f"no trial with id {body.trial_id}")
+
+    scope = user.scope_site_id
+    if scope is None:
+        if body.site_id is None:
+            raise HTTPException(
+                status_code=404,
+                detail="site_id is required for a writer without an assigned site",
+            )
+        site = session.get(Site, body.site_id)
+        if site is None:
+            raise HTTPException(status_code=404, detail=f"no site with id {body.site_id}")
+    else:
+        if user.site_id is None:
+            raise HTTPException(
+                status_code=409,
+                detail="your account is not attached to a valid site",
+            )
+        if body.site_id is not None and body.site_id != scope:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "cannot create a subject at another site. "
+                    f"{user.role_label} access is limited to site id {user.site_id}."
+                ),
+            )
+        site = session.get(Site, scope)
+        if site is None:
+            raise HTTPException(
+                status_code=409,
+                detail="your account is attached to a site that no longer exists",
+            )
+
+    if site.trial_id != trial.id:
+        raise HTTPException(
+            status_code=404,
+            detail=f"no site with id {site.id} in this trial",
+        )
+    if trial.status != TrialStatus.RECRUITING.value:
+        raise HTTPException(status_code=409, detail="this trial is not recruiting")
+    if site.status != SiteStatus.RECRUITING.value:
+        raise HTTPException(status_code=409, detail="this site is not recruiting")
+
+    now = utcnow()
+    code = _next_subject_code(session, site)
+    subject = Subject(
+        trial_id=trial.id,
+        site_id=site.id,
+        subject_code=code,
+        status=SubjectStatus.SCREENING.value,
+        screening_date=body.screening_date,
+        enrollment_date=None,
+        randomization_date=None,
+        arm=StudyArm.NOT_RANDOMIZED.value,
+        year_of_birth=body.year_of_birth,
+        age_at_enrollment=None,
+        sex=body.sex.value,
+        height_cm=body.height_cm,
+        weight_kg=body.weight_kg,
+        prakriti=None,
+        completed_date=None,
+        withdrawal_date=None,
+        withdrawal_reason=None,
+        screen_failure_reason=None,
+        created_at=now,
+        updated_at=now,
+    )
+    try:
+        session.add(subject)
+        session.flush()
+        audit.record(
+            session,
+            user=user,
+            action=AuditAction.CREATE,
+            entity_type="subjects",
+            entity_id=subject.id,
+            entity_label=code,
+            reason="Subject entered screening.",
+            trial_id=trial.id,
+            request=request,
+        )
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        if _is_subject_code_conflict(exc):
+            raise HTTPException(
+                status_code=409,
+                detail="the next subject code is already in use",
+            ) from exc
+        raise
+    except Exception:
+        session.rollback()
+        raise
+
+    session.refresh(subject)
+    return SubjectScreeningResponse.model_validate(subject)
 
 
 @router.get("/subjects", response_model=Page[Subject])
