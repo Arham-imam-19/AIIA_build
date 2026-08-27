@@ -12,8 +12,10 @@ browsing who is enrolled.
 
 from __future__ import annotations
 
+import json
 import math
 from datetime import date, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -33,6 +35,10 @@ from app.rbac import (
     scoped,
 )
 from app.routers.common import Page, limit_param, offset_param, paginate
+from app.services.subject_transition import (
+    SubjectTransitionError,
+    validate_subject_transition,
+)
 
 router = APIRouter(prefix="/api", tags=["subjects"])
 
@@ -84,6 +90,37 @@ class SubjectScreeningResponse(BaseModel):
     height_cm: float | None
     weight_kg: float | None
     created_at: datetime
+    updated_at: datetime
+
+
+class SubjectScreeningOutcomeUpdate(BaseModel):
+    """The only standalone screening outcome represented by the Subject model."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: Literal["screen_failed"]
+    reason: str
+
+    @field_validator("reason")
+    @classmethod
+    def nonblank_trimmed_reason(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("reason must not be blank")
+        if len(value) > 500:
+            raise ValueError("reason must not exceed 500 characters")
+        return value
+
+
+class SubjectScreeningOutcomeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    trial_id: int
+    site_id: int
+    subject_code: str
+    status: str
+    screen_failure_reason: str
     updated_at: datetime
 
 
@@ -231,6 +268,91 @@ def create_subject_in_screening(
 
     session.refresh(subject)
     return SubjectScreeningResponse.model_validate(subject)
+
+
+@router.patch(
+    "/subjects/{subject_id}/screening-outcome",
+    response_model=SubjectScreeningOutcomeResponse,
+)
+def record_subject_screening_outcome(
+    subject_id: int,
+    body: SubjectScreeningOutcomeUpdate,
+    request: Request,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.SUBJECT_WRITE)),
+) -> SubjectScreeningOutcomeResponse:
+    """Record that an existing screening Subject failed screening."""
+    subject = session.exec(
+        select(Subject).where(Subject.id == subject_id).with_for_update()
+    ).one_or_none()
+    if subject is None:
+        raise HTTPException(status_code=404, detail=f"no subject with id {subject_id}")
+    assert_site_visible(user, subject.site_id)
+
+    try:
+        result = validate_subject_transition(
+            subject,
+            SubjectStatus.SCREEN_FAILED.value,
+            as_of=date.today(),
+            screen_failure_reason=body.reason,
+        )
+    except SubjectTransitionError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+
+    old_value = json.dumps(
+        {
+            "screen_failure_reason": subject.screen_failure_reason,
+            "status": subject.status,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    now = utcnow()
+    subject.status = result.status
+    subject.screening_date = result.screening_date
+    subject.enrollment_date = result.enrollment_date
+    subject.randomization_date = result.randomization_date
+    subject.arm = result.arm
+    subject.screen_failure_reason = result.screen_failure_reason
+    subject.completed_date = result.completed_date
+    subject.withdrawal_date = result.withdrawal_date
+    subject.withdrawal_reason = result.withdrawal_reason
+    subject.updated_at = now
+    session.add(subject)
+
+    new_value = json.dumps(
+        {
+            "screen_failure_reason": result.screen_failure_reason,
+            "status": result.status,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    try:
+        audit.record(
+            session,
+            user=user,
+            action=AuditAction.UPDATE,
+            entity_type="subjects",
+            entity_id=subject.id,
+            entity_label=subject.subject_code,
+            field_name="screening_outcome",
+            old_value=old_value,
+            new_value=new_value,
+            reason="Subject failed screening.",
+            trial_id=subject.trial_id,
+            request=request,
+        )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+
+    session.refresh(subject)
+    return SubjectScreeningOutcomeResponse.model_validate(subject)
 
 
 @router.get("/subjects", response_model=Page[Subject])
