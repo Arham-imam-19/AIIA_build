@@ -32,6 +32,7 @@ from app.enums import (
     StudyArm,
     SubjectStatus,
     TrialStatus,
+    VisitStatus,
 )
 from app.models import AdverseEvent, Site, Subject, Trial, Visit
 from app.models.base import utcnow
@@ -47,6 +48,7 @@ from app.services.subject_transition import (
     SubjectTransitionError,
     validate_subject_transition,
 )
+from app.services.visit_transition import VisitTransitionError, validate_visit_transition
 
 router = APIRouter(prefix="/api", tags=["subjects"])
 
@@ -179,6 +181,31 @@ class SubjectActivationResponse(BaseModel):
     site_id: int
     subject_code: str
     status: str
+    updated_at: datetime
+
+
+class VisitOutcomeUpdate(BaseModel):
+    """Only caller-supplied facts used to record a terminal Visit outcome."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["completed", "missed"]
+    actual_date: date | None = None
+    is_protocol_deviation: bool
+    deviation_description: str | None = None
+
+
+class VisitOutcomeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    subject_id: int
+    status: str
+    scheduled_date: date
+    actual_date: date | None
+    is_protocol_deviation: bool
+    deviation_description: str | None
+    performed_by_user_id: int | None
     updated_at: datetime
 
 
@@ -741,3 +768,105 @@ def get_visit(
         subject = session.get(Subject, visit.subject_id)
         assert_site_visible(user, subject.site_id if subject else None)
     return visit
+
+
+@router.patch("/visits/{visit_id}/outcome", response_model=VisitOutcomeResponse)
+def record_visit_outcome(
+    visit_id: int,
+    body: VisitOutcomeUpdate,
+    request: Request,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.VISIT_WRITE)),
+) -> VisitOutcomeResponse:
+    """Atomically record completion or non-attendance for a scheduled Visit."""
+    visit = session.exec(
+        select(Visit).where(Visit.id == visit_id).with_for_update()
+    ).one_or_none()
+    if visit is None:
+        session.rollback()
+        raise HTTPException(status_code=404, detail=f"no visit with id {visit_id}")
+
+    try:
+        subject = session.get(Subject, visit.subject_id)
+        if subject is None:
+            raise HTTPException(
+                status_code=409,
+                detail="visit has inconsistent Subject, Trial, or Site linkage",
+            )
+        assert_site_visible(user, subject.site_id)
+        trial = session.get(Trial, visit.trial_id)
+        site = session.get(Site, subject.site_id)
+        if (
+            trial is None
+            or site is None
+            or visit.trial_id != subject.trial_id
+            or site.trial_id != subject.trial_id
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="visit has inconsistent Subject, Trial, or Site linkage",
+            )
+        if subject.status != SubjectStatus.ACTIVE.value:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "SUBJECT_NOT_ACTIVE",
+                    "message": "visit outcomes require an active subject",
+                },
+            )
+
+        result = validate_visit_transition(
+            visit,
+            body.status,
+            actual_date=body.actual_date,
+            is_protocol_deviation=body.is_protocol_deviation,
+            deviation_description=body.deviation_description,
+            acting_user_id=user.id,
+            as_of=date.today(),
+        )
+        old_value = json.dumps(
+            {
+                "actual_date": visit.actual_date.isoformat() if visit.actual_date else None,
+                "deviation_description": visit.deviation_description,
+                "is_protocol_deviation": visit.is_protocol_deviation,
+                "performed_by_user_id": visit.performed_by_user_id,
+                "status": visit.status,
+            }, sort_keys=True, separators=(",", ":"),
+        )
+        visit.status = result.status
+        visit.actual_date = result.actual_date
+        visit.is_protocol_deviation = result.is_protocol_deviation
+        visit.deviation_description = result.deviation_description
+        visit.performed_by_user_id = result.performed_by_user_id
+        visit.updated_at = utcnow()
+        session.add(visit)
+        new_value = json.dumps(
+            {
+                "actual_date": result.actual_date.isoformat() if result.actual_date else None,
+                "deviation_description": result.deviation_description,
+                "is_protocol_deviation": result.is_protocol_deviation,
+                "performed_by_user_id": result.performed_by_user_id,
+                "status": result.status,
+            }, sort_keys=True, separators=(",", ":"),
+        )
+        audit.record(
+            session, user=user, action=AuditAction.UPDATE,
+            entity_type="visits", entity_id=visit.id,
+            entity_label=f"{subject.subject_code} {visit.visit_name}",
+            field_name="outcome", old_value=old_value, new_value=new_value,
+            reason=("Visit completed." if result.status == VisitStatus.COMPLETED.value
+                    else "Visit marked missed."),
+            trial_id=visit.trial_id, request=request,
+        )
+        session.commit()
+    except VisitTransitionError as exc:
+        session.rollback()
+        raise HTTPException(
+            status_code=409, detail={"code": exc.code, "message": exc.message}
+        ) from exc
+    except Exception:
+        session.rollback()
+        raise
+
+    session.refresh(visit)
+    return VisitOutcomeResponse.model_validate(visit)
