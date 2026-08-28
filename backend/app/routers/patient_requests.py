@@ -7,7 +7,7 @@ Institution Admins review, coordinate with researchers, and post official respon
 """
 
 from __future__ import annotations
-
+from typing import Literal
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -31,15 +31,27 @@ router = APIRouter(prefix="/api/patient-requests", tags=["patient-requests"])
 
 
 class CreatePatientRequest(BaseModel):
-    category: str = Field(description="e.g. symptom_inquiry, appointment_reschedule, general_inquiry")
+    category: PatientRequestCategory = Field(
+        description="symptom_inquiry, appointment_reschedule, adverse_event_alert, medication_query, grievance, or general_inquiry"
+    )
     subject_line: str = Field(min_length=3, max_length=200)
     message: str = Field(min_length=5, max_length=3000)
-    site_id: int | None = Field(default=None, description="Optional target institution if known")
+    site_id: int | None = Field(
+        default=None,
+        description="Optional target institution if known",
+    )
 
 
 class RespondPatientRequest(BaseModel):
     response: str = Field(min_length=2, max_length=3000)
-    status: str = Field(default=PatientRequestStatus.RESOLVED.value, description="in_review, resolved, escalated")
+    status: Literal[
+        PatientRequestStatus.IN_REVIEW.value,
+        PatientRequestStatus.RESOLVED.value,
+        PatientRequestStatus.ESCALATED.value,
+    ] = Field(
+        default=PatientRequestStatus.RESOLVED.value,
+        description="in_review, resolved, or escalated",
+    )
 
 
 class PatientRequestPublic(BaseModel):
@@ -153,7 +165,7 @@ async def create_patient_request(
         trial_id=trial_id,
         patient_user_id=user.id,
         subject_id=subject_id,
-        category=body.category,
+        category=body.category.value,
         subject_line=body.subject_line,
         message=body.message,
         status=PatientRequestStatus.SUBMITTED.value,
