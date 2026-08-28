@@ -578,3 +578,14 @@ def test_the_matrix_is_readable_without_a_token(anonymous_client):
     """It documents the rules; it does not expose anything the rules protect."""
     response = anonymous_client.get("/api/rbac-matrix")
     assert response.status_code == 200
+
+
+def test_every_permission_has_a_human_readable_label() -> None:
+    missing_or_raw = {
+        permission.value
+        for permission in Permission
+        if not PERMISSION_LABELS.get(permission.value)
+        or PERMISSION_LABELS[permission.value] == permission.value
+    }
+
+    assert missing_or_raw == set()

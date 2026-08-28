@@ -232,6 +232,7 @@ PERMISSION_LABELS: dict[str, str] = {
     _P.COMPLIANCE_READ.value: "View ethics and regulatory compliance",
     _P.ETHICS_WRITE.value: "Update trial ethics approval",
     _P.CTRI_WRITE.value: "Update trial CTRI registration",
+    _P.REGULATORY_WRITE.value: "Update trial regulatory approval",
     _P.ACTIVATION_WRITE.value: "Activate an eligible trial",
     _P.AUDIT_READ.value: "View the audit trail",
     _P.USER_READ.value: "View study personnel and researchers",
