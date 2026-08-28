@@ -89,6 +89,31 @@ export const simulateOptions = () => api('/api/simulate/options')
 export const simulate = (key, body = {}) =>
   api(`/api/simulate/${key}`, { method: 'POST', body })
 
+export const listPatientRequests = (params = {}) => {
+  const query = new URLSearchParams(params).toString()
+  return api(`/api/patient-requests${query ? `?${query}` : ''}`)
+}
+
+export const createPatientRequest = (body) =>
+  api('/api/patient-requests', { method: 'POST', body })
+
+export const respondPatientRequest = (id, body) =>
+  api(`/api/patient-requests/${id}/respond`, { method: 'PATCH', body })
+
+export const createSite = (body) =>
+  api('/api/sites', { method: 'POST', body })
+
+export const createUser = (body) =>
+  api('/api/users', { method: 'POST', body })
+
+export const getMyEConsent = () => api('/api/econsent/my')
+
+export const signEConsent = (body) =>
+  api('/api/econsent/sign', { method: 'POST', body })
+
+export const getSubjectEConsent = (subjectId) =>
+  api(`/api/econsent/subjects/${subjectId}`)
+
 // The WebSocket cannot send an Authorization header, so the token rides in the
 // query string instead. Same server-side check either way.
 export function liveUrl(token) {

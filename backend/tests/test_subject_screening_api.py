@@ -115,7 +115,9 @@ def test_admin_creates_exact_screening_state_and_one_audit(client, seeded_engine
             "enrollment_date": None, "randomization_date": None,
             "arm": "not_randomized", "year_of_birth": 1990,
             "age_at_enrollment": None, "sex": "female", "height_cm": 162.5,
-            "weight_kg": 61.0, "prakriti": None, "completed_date": None,
+            "weight_kg": 61.0, "prakriti": None,
+            "assigned_researcher_id": None, "user_id": None,
+            "completed_date": None,
             "withdrawal_date": None, "withdrawal_reason": None,
             "screen_failure_reason": None,
         }

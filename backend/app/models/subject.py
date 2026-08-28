@@ -29,6 +29,13 @@ class Subject(SQLModel, table=True):
     # The participant's public identifier, e.g. "AIIA-ASH-01-014".
     subject_code: str = Field(max_length=60, unique=True, index=True)
 
+    # Lead researcher (PI or Coordinator) managing this participant.
+    assigned_researcher_id: int | None = Field(
+        default=None, foreign_key="users.id", index=True
+    )
+    # Linked user login account for the patient portal, if created.
+    user_id: int | None = Field(default=None, foreign_key="users.id", index=True)
+
     # One of enums.SubjectStatus.
     status: str = Field(max_length=30, index=True)
 

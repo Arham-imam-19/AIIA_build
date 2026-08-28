@@ -107,8 +107,8 @@ def test_migrations_create_every_model_table(migrated_engine: sa.Engine) -> None
     assert built - expected == set(), "tables created by migrations with no model"
 
 
-def test_seven_core_tables_exist(migrated_engine: sa.Engine) -> None:
-    """The Phase 1 data model, spelled out so a rename cannot pass silently."""
+def test_all_model_tables_exist(migrated_engine: sa.Engine) -> None:
+    """The CTMS data model tables, spelled out so a rename cannot pass silently."""
     built = set(sa.inspect(migrated_engine).get_table_names())
     assert built == {
         "trials",
@@ -117,6 +117,8 @@ def test_seven_core_tables_exist(migrated_engine: sa.Engine) -> None:
         "subjects",
         "visits",
         "adverse_events",
+        "patient_requests",
+        "econsents",
         "audit_logs",
     }
 
@@ -203,7 +205,7 @@ def _type_family(type_: object) -> str:
         ("date", sa.Date),
         ("string", sa.String),
     ):
-        if isinstance(type_, klass):
+        if isinstance(type_, klass) or (isinstance(type_, type) and issubclass(type_, klass)):
             return family
     if type(type_).__name__ == "AutoString":
         return "string"

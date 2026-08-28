@@ -16,7 +16,10 @@ from app.enums import (
     AEOutcome,
     AESeverity,
     AuditAction,
+    ConsentStatus,
     EthicsApprovalStatus,
+    PatientRequestCategory,
+    PatientRequestStatus,
     Prakriti,
     Sex,
     SiteStatus,
@@ -28,6 +31,8 @@ from app.enums import (
     VisitStatus,
     values,
 )
+from app.models.econsent import EConsent
+from app.models.patient_request import PatientRequest
 from app.models.site import Site
 from app.models.subject import Subject
 from app.models.trial import Trial
@@ -42,6 +47,8 @@ __all__ = [
     "Subject",
     "Visit",
     "AdverseEvent",
+    "PatientRequest",
+    "EConsent",
     "AuditLog",
     # Vocabularies.
     "UserRole",
@@ -49,13 +56,16 @@ __all__ = [
     "TrialPhase",
     "SiteStatus",
     "SubjectStatus",
-    "Sex",
     "StudyArm",
+    "Sex",
     "Prakriti",
     "VisitStatus",
     "AESeverity",
     "AECausality",
     "AEOutcome",
+    "PatientRequestCategory",
+    "PatientRequestStatus",
+    "ConsentStatus",
     "AuditAction",
     "EthicsApprovalStatus",
     # Helpers.

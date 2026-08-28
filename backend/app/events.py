@@ -177,9 +177,9 @@ class EventBus:
         """How many WebSocket connections this process is currently serving."""
         return len(self._queues)
 
-    # ----------------------------------------------------- token revocation
-
-    async def revoke_token(self, jti: str, ttl_seconds: int) -> None:
+    async def revoke_token(
+        self, jti: str, ttl_seconds: int = config.ACCESS_TOKEN_TTL_MINUTES * 60
+    ) -> None:
         """Remember that this token was logged out."""
         self._revoked_local.add(jti)
         if self._redis is not None:

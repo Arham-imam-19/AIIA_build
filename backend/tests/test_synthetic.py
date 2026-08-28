@@ -116,9 +116,9 @@ def test_emails_are_unique_and_obviously_synthetic(data):
 
 def test_site_staff_are_tied_to_a_site_and_oversight_roles_are_not(data):
     for user in data["users"]:
-        if user["role"] in {"principal_investigator", "coordinator"}:
+        if user["role"] in {"principal_investigator", "coordinator", "institution_admin", "patient"}:
             assert user["_site_code"] is not None, user["email"]
-        elif user["role"] in {"sponsor", "ethics_committee", "regulator"}:
+        elif user["role"] in {"sponsor", "ethics_committee", "regulator", "admin"}:
             assert user["_site_code"] is None, user["email"]
 
 

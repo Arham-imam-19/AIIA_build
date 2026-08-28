@@ -9,6 +9,7 @@
     dashboard.py   one role-shaped payload per persona, plus the RBAC matrix
     live.py        the WebSocket that pushes a fresh dashboard on every change
     simulate.py    demo tooling that writes real rows so the live update is real
+    patient_requests.py patient inquiries and communications
 
 Phase 1 was read-only. Phase 2 added authentication, so every endpoint above now
 needs a token, and the first writes appear - in `simulate.py`, each one paired with
@@ -20,7 +21,9 @@ from app.routers import (
     auth,
     compliance,
     dashboard,
+    econsent,
     live,
+    patient_requests,
     safety,
     simulate,
     stats,
@@ -36,21 +39,10 @@ ALL_ROUTERS = (
     trials.router,
     subjects.router,
     safety.router,
+    patient_requests.router,
+    econsent.router,
     compliance.router,
     stats.router,
     simulate.router,
     live.router,
 )
-
-__all__ = [
-    "ALL_ROUTERS",
-    "auth",
-    "compliance",
-    "dashboard",
-    "live",
-    "safety",
-    "simulate",
-    "stats",
-    "subjects",
-    "trials",
-]

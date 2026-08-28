@@ -32,6 +32,7 @@ from app.enums import (
     StudyArm,
     SubjectStatus,
     TrialStatus,
+    UserRole,
     VisitStatus,
 )
 from app.models import AdverseEvent, Site, Subject, Trial, Visit
@@ -319,11 +320,15 @@ def _is_visit_number_conflict(exc: IntegrityError) -> bool:
 
 
 def _visible_subject(session: Session, subject_id: int, user: CurrentUser) -> Subject:
-    """Fetch a subject, 404 if absent and 403 if it belongs to another site."""
+    """Fetch a subject, 404 if absent, 403 if it belongs to another site or another patient."""
     subject = session.get(Subject, subject_id)
     if subject is None:
         raise HTTPException(status_code=404, detail=f"no subject with id {subject_id}")
-    assert_site_visible(user, subject.site_id)
+    if user.role == UserRole.PATIENT.value:
+        if user.subject_id is None or user.subject_id != subject_id:
+            raise HTTPException(status_code=403, detail="forbidden: patients may only access their own record")
+    else:
+        assert_site_visible(user, subject.site_id)
     return subject
 
 
@@ -1006,7 +1011,7 @@ def schedule_subject_visit(
 def list_subject_visits(
     subject_id: int,
     session: Session = Depends(get_session),
-    user: CurrentUser = Depends(require(Permission.SUBJECT_READ, Permission.VISIT_READ)),
+    user: CurrentUser = Depends(require(Permission.VISIT_READ)),
 ) -> list[Visit]:
     """One participant's whole visit schedule, in protocol order.
 
@@ -1061,9 +1066,13 @@ def list_visits(
         statement = statement.where(Visit.status == status)
     if deviations_only:
         statement = statement.where(Visit.is_protocol_deviation == True)  # noqa: E712
-    # A visit has no site column of its own - it inherits one from its subject.
-    # So the scope is applied by joining through subjects.
-    if user.scope_site_id is not None:
+    # If the user is a Patient: strictly isolate to their own subject_id
+    if user.role == UserRole.PATIENT.value:
+        if user.subject_id is None:
+            statement = statement.where(Visit.id == -1)
+        else:
+            statement = statement.where(Visit.subject_id == user.subject_id)
+    elif user.scope_site_id is not None:
         statement = statement.where(
             Visit.subject_id.in_(  # type: ignore[union-attr]
                 select(Subject.id).where(Subject.site_id == user.scope_site_id)
@@ -1082,7 +1091,10 @@ def get_visit(
     visit = session.get(Visit, visit_id)
     if visit is None:
         raise HTTPException(status_code=404, detail=f"no visit with id {visit_id}")
-    if user.scope_site_id is not None:
+    if user.role == UserRole.PATIENT.value:
+        if user.subject_id is None or visit.subject_id != user.subject_id:
+            raise HTTPException(status_code=403, detail="forbidden: patients may only access their own visits")
+    elif user.scope_site_id is not None:
         subject = session.get(Subject, visit.subject_id)
         assert_site_visible(user, subject.site_id if subject else None)
     return visit

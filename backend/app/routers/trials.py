@@ -15,7 +15,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, select
+from sqlmodel import Session, SQLModel, select
 
 from app import audit
 from app.db import get_session
@@ -716,3 +716,39 @@ def list_site_subjects(
     )
     total, items = paginate(session, statement, limit, offset)
     return Page(total=total, limit=limit, offset=offset, items=items)
+
+
+class CreateSiteRequest(SQLModel):
+    trial_id: int
+    site_code: str
+    name: str
+    city: str
+    state: str
+    country: str = "India"
+    pi_name: str
+    pi_email: str | None = None
+    contact_phone: str | None = None
+    status: str = "activated"
+    target_enrollment: int = 0
+
+
+@router.post("/sites", response_model=Site, status_code=201)
+def create_site(
+    body: CreateSiteRequest,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.INSTITUTION_MANAGE)),
+) -> Site:
+    """Primary Admin creates a new participating Institution / Site."""
+    trial = session.get(Trial, body.trial_id)
+    if trial is None:
+        raise HTTPException(status_code=404, detail=f"trial {body.trial_id} not found")
+
+    existing = session.exec(select(Site).where(Site.site_code == body.site_code)).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"site code {body.site_code} already exists")
+
+    site = Site(**body.model_dump())
+    session.add(site)
+    session.commit()
+    session.refresh(site)
+    return site

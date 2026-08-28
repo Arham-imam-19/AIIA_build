@@ -295,7 +295,7 @@ def test_an_enrolment_moves_the_investigators_numbers_with_no_refresh(
     assert event["site_id"] == person.site_id
     # Who did it, shown in the UI's notification. An anonymous change is not a
     # change anybody can act on.
-    assert event["actor"]["role_label"] == "Administrator"
+    assert event["actor"]["role_label"] in ("Administrator", "Primary Administrator")
     assert created["subject"]["subject_code"] in event["message"]
 
 

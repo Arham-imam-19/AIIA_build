@@ -266,12 +266,14 @@ def role_clients(seeded_engine) -> dict[str, ScopedClient]:
     clients = {
         role.value: client_for(seeded_engine, role.value)
         for role in (
+            UserRole.ADMIN,
+            UserRole.INSTITUTION_ADMIN,
             UserRole.PRINCIPAL_INVESTIGATOR,
             UserRole.COORDINATOR,
+            UserRole.PATIENT,
             UserRole.SPONSOR,
             UserRole.ETHICS_COMMITTEE,
             UserRole.REGULATOR,
-            UserRole.ADMIN,
         )
     }
     yield clients

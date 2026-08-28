@@ -24,19 +24,21 @@ from enum import Enum
 
 
 class UserRole(str, Enum):
-    """The five personas the dashboards are built for, plus an admin.
+    """The user roles across the hierarchy, from Primary Admin to Patient.
 
     RBAC (role-based access control) means permissions hang off these roles
     rather than off individual people - like a hotel keycard that opens your
     floor, while the manager's opens all of them.
     """
 
-    PRINCIPAL_INVESTIGATOR = "principal_investigator"  # runs the trial at a site
+    ADMIN = "admin"  # Primary / System Administrator (creates institutions, oversees system)
+    INSTITUTION_ADMIN = "institution_admin"  # Institution / Site Administrator (manages site & researchers)
+    PRINCIPAL_INVESTIGATOR = "principal_investigator"  # Lead Researcher at a site
+    COORDINATOR = "coordinator"  # Clinical Research Coordinator (enters data, manages visits)
     SPONSOR = "sponsor"  # funds the trial, watches cost and timelines
     ETHICS_COMMITTEE = "ethics_committee"  # approves the trial, reviews safety
     REGULATOR = "regulator"  # CDSCO / Ministry of Ayush oversight
-    COORDINATOR = "coordinator"  # Clinical Research Coordinator, enters the data
-    ADMIN = "admin"  # system administrator
+    PATIENT = "patient"  # Trial participant (can view schedule and contact Institution Admin)
 
 
 class TrialStatus(str, Enum):
@@ -103,34 +105,29 @@ class SubjectStatus(str, Enum):
     LOST_TO_FOLLOW_UP = "lost_to_follow_up"  # stopped responding
 
 
+class StudyArm(str, Enum):
+    """The randomised groups in this protocol (1:1 allocation)."""
+
+    TREATMENT = "treatment"  # Ashwagandha root churna
+    PLACEBO = "placebo"  # matched placebo churna
+    COMPARATOR = "comparator"  # existing standard treatment
+    NOT_RANDOMIZED = "not_randomized"  # for screened/failed participants
+
+
 class Sex(str, Enum):
+    """Biological sex as captured for CDISC SDTM DM (Demographics) domain."""
+
     MALE = "male"
     FEMALE = "female"
     OTHER = "other"
 
 
-class StudyArm(str, Enum):
-    """Which group a participant was randomised into.
-
-    Randomisation = deciding by chance, so the two groups are comparable and the
-    result cannot be explained by who was put where.
-    """
-
-    TREATMENT = "treatment"
-    PLACEBO = "placebo"  # a look-alike with no active ingredient
-    COMPARATOR = "comparator"  # an existing standard treatment
-    NOT_RANDOMIZED = "not_randomized"
-
-
 class Prakriti(str, Enum):
-    """Ayurvedic constitutional type, recorded at baseline.
+    """Ayurvedic constitutional phenotype, assessed at baseline.
 
-    A person's prakriti is their inborn body-mind constitution, expressed as the
-    balance of three doshas (vata, pitta, kapha) - roughly a baseline body-type
-    classification. Most people are a blend of two.
-
-    Phase 6 expands this into a full prakriti assessment with per-dosha scores;
-    this single field is the placeholder the seed data already populates.
+    This is the core domain differentiator: a modern clinical trial stratified
+    by Ayurvedic constitution to test whether response to Ashwagandha varies by
+    dosha predominance.
     """
 
     VATA = "vata"
@@ -139,52 +136,82 @@ class Prakriti(str, Enum):
     VATA_PITTA = "vata_pitta"
     PITTA_KAPHA = "pitta_kapha"
     VATA_KAPHA = "vata_kapha"
-    TRIDOSHA = "tridosha"  # all three roughly balanced
+    TRIDOSHA = "tridosha"
 
 
 class VisitStatus(str, Enum):
-    """A visit is one scheduled appointment in the protocol's timetable."""
+    """State of an individual protocol visit."""
 
-    SCHEDULED = "scheduled"  # in the future
+    SCHEDULED = "scheduled"  # in the calendar, date set
     IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-    MISSED = "missed"  # window passed without the visit happening
-    CANCELLED = "cancelled"
+    COMPLETED = "completed"  # participant attended, data collected
+    MISSED = "missed"  # window closed without a visit
+    CANCELLED = "cancelled"  # e.g. after early withdrawal
 
 
 class AESeverity(str, Enum):
-    """How intense an adverse event was.
+    """CTCAE / ICH-GCP severity grading."""
 
-    Note: severity is NOT the same as seriousness. A migraine can be *severe*
-    (very painful) without being *serious* (life-threatening or requiring
-    hospitalisation). Regulators care about both, separately.
-    """
-
-    MILD = "mild"  # noticeable, no interference with daily activity
-    MODERATE = "moderate"  # interferes with daily activity
-    SEVERE = "severe"  # prevents daily activity
+    MILD = "mild"  # awareness of sign/symptom, easily tolerated
+    MODERATE = "moderate"  # discomfort enough to interfere with usual activity
+    SEVERE = "severe"  # incapacitating, unable to work or do daily activity
 
 
 class AECausality(str, Enum):
-    """The investigator's judgement of whether the study treatment caused it."""
+    """Investigator's attribution of the event to the study drug.
 
-    UNRELATED = "unrelated"
-    UNLIKELY = "unlikely"
-    POSSIBLE = "possible"
-    PROBABLE = "probable"
+    Follows the WHO-UMC causality categories used in Indian pharmacovigilance.
+    """
+
+    CERTAIN = "certain"
     DEFINITE = "definite"
+    PROBABLE = "probable"
+    POSSIBLE = "possible"
+    UNLIKELY = "unlikely"
+    CONDITIONAL = "conditional"
+    UNCLASSIFIABLE = "unclassifiable"
+    UNRELATED = "unrelated"
     NOT_ASSESSABLE = "not_assessable"
 
 
 class AEOutcome(str, Enum):
-    """How the adverse event ended."""
+    """Status of the event at the time of reporting."""
 
     RECOVERED = "recovered"
     RECOVERING = "recovering"
     ONGOING = "ongoing"
-    RECOVERED_WITH_SEQUELAE = "recovered_with_sequelae"  # better, but lasting effects
+    NOT_RECOVERED = "not_recovered"
+    RECOVERED_WITH_SEQUELAE = "recovered_with_sequelae"
     FATAL = "fatal"
     UNKNOWN = "unknown"
+
+
+class PatientRequestCategory(str, Enum):
+    """Categories of participant inquiries submitted to Institution Admins."""
+
+    SYMPTOM_INQUIRY = "symptom_inquiry"  # reporting or asking about a symptom / reaction
+    APPOINTMENT_RESCHEDULE = "appointment_reschedule"  # request to change upcoming visit date
+    ADVERSE_EVENT_ALERT = "adverse_event_alert"  # notifying hospital of an adverse occurrence
+    MEDICATION_QUERY = "medication_query"  # posology / dosage / administration question
+    GRIEVANCE = "grievance"  # complaint or compliance concern
+    GENERAL_INQUIRY = "general_inquiry"  # trial logistics or general contact
+
+
+class PatientRequestStatus(str, Enum):
+    """Lifecycle status of a patient request."""
+
+    SUBMITTED = "submitted"  # newly submitted by patient
+    IN_REVIEW = "in_review"  # under review by institution admin / coordinator
+    RESOLVED = "resolved"  # response sent and resolved
+    ESCALATED = "escalated"  # escalated to PI or Ethics Committee
+
+
+class ConsentStatus(str, Enum):
+    """Lifecycle status of a participant's electronic informed consent."""
+
+    PENDING = "pending"  # not yet signed
+    SIGNED = "signed"  # digitally signed and verified
+    REVOKED = "revoked"  # consent withdrawn by participant
 
 
 class AuditAction(str, Enum):
@@ -205,6 +232,7 @@ class AuditAction(str, Enum):
     SIGN = "sign"  # electronic signature applied
     APPROVE = "approve"
     REJECT = "reject"
+    RESPOND = "respond"  # responding to a patient request or inquiry
 
 
 def values(enum_cls: type[Enum]) -> list[str]:
