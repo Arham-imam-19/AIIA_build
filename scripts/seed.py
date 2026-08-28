@@ -133,6 +133,12 @@ def seed(
         user_role_by_email[user.email] = user.role
         user_obj_by_email[user.email] = user
 
+    trial.activated_by_user_id = user_id_by_email[
+        data["trial"]["_activated_by_email"]
+    ]
+    session.add(trial)
+    session.flush()
+
     # ------------------------------------------------------------- subjects
     subject_id_by_code: dict[str, int] = {}
     subject_site_by_code: dict[str, int] = {}

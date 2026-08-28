@@ -32,6 +32,7 @@ from app.enums import (
     AESeverity,
     AuditAction,
     ConsentStatus,
+    EthicsApprovalStatus,
     Prakriti,
     Sex,
     SiteStatus,
@@ -534,8 +535,11 @@ def _build_trial(reference_date: date) -> dict:
         "actual_end_date": None,
         "ethics_approval_number": "AIIA/IEC/2025/114",
         "ethics_approval_date": start - timedelta(days=45),
+        "ethics_approval_status": EthicsApprovalStatus.APPROVED.value,
+        "ethics_approval_valid_until": reference_date + timedelta(days=365),
         "regulatory_approval_number": "CDSCO/AYUSH/CT/2025/0391",
         "regulatory_approval_date": start - timedelta(days=30),
+        "activated_at": datetime(start.year, start.month, start.day, 10) - timedelta(days=1),
     }
 
 
@@ -1374,6 +1378,9 @@ def generate(
     trial = _build_trial(reference_date)
     sites = _build_sites(reference_date)
     users = _build_users()
+    trial["_activated_by_email"] = next(
+        user["email"] for user in users if user["role"] == UserRole.SPONSOR.value
+    )
     subjects = _build_subjects(rng, reference_date)
     visits = _build_visits(rng, reference_date, subjects, users)
     adverse_events = _build_adverse_events(rng, reference_date, subjects, users)

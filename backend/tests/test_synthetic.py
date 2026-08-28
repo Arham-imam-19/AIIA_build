@@ -65,6 +65,20 @@ def test_trial_has_the_registration_fields_compliance_needs(data):
     assert trial["status"] in values(TrialStatus)
 
 
+def test_recruiting_trial_has_complete_activation_history(data):
+    trial = data["trial"]
+
+    assert trial["status"] == TrialStatus.RECRUITING.value
+    assert trial["ethics_approval_status"] == "approved"
+    assert trial["ethics_approval_valid_until"] >= REFERENCE
+    assert trial["activated_at"].date() <= trial["start_date"]
+
+    activator = next(
+        user for user in data["users"] if user["email"] == trial["_activated_by_email"]
+    )
+    assert activator["role"] in {"admin", "sponsor"}
+
+
 def test_trial_approvals_precede_the_first_enrolment(data):
     """Ethics and regulatory approval must predate the study start, and CTRI
     registration must predate the first participant. That ordering is the whole
