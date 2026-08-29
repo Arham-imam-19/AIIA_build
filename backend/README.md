@@ -6,7 +6,7 @@ This directory contains the FastAPI backend for the Clinical Trial Management Sy
 
 The backend is responsible for:
 
-- persisting the seven core entities and exposing their supported read APIs;
+- persisting the nine application entities and exposing their supported APIs;
 - enforcing role permissions and Site visibility;
 - applying Trial, Subject, and Visit workflow rules;
 - committing supported clinical mutations together with their audit records;
@@ -88,17 +88,19 @@ Add routes to the relevant router, persistence fields to a model plus a new migr
 
 ## Core Domain Model
 
-The migration chain creates seven tables: `trials`, `sites`, `users`, `subjects`, `visits`, `adverse_events`, and `audit_logs`.
+The migration chain creates nine application tables: `trials`, `sites`, `users`, `subjects`, `visits`, `adverse_events`, `audit_logs`, `patient_requests`, and `econsents`. Alembic's `alembic_version` bookkeeping table is not an application table.
 
 - A **Trial** is the top-level protocol record. A Trial has many Sites and Subjects. Visits and adverse events also carry `trial_id` for direct trial filtering. `activated_by_user_id` identifies the User who activated it.
 - A **Site** belongs to exactly one Trial. This project represents an institution participating in multiple trials as separate Site rows rather than a many-to-many institution model.
-- A **Subject** belongs to one Trial and one Site. Subjects are de-identified: the model stores a generated subject code and coarse demographics, not a name, address, phone number, or full date of birth.
+- A **Subject** belongs to one Trial and one Site. Subjects remain de-identified: the model stores a generated subject code and coarse demographics, not a name, address, phone number, or full date of birth. Consent identity and signature fields belong in `econsents`, not `subjects`.
 - A **Visit** belongs to one Subject and one Trial. `performed_by_user_id` may identify the User who recorded a completed Visit.
-- A **User** may belong to one Site. Principal Investigators and Coordinators are Site-scoped; trial-wide roles have a null `site_id`.
+- A **User** may belong to one Site. Institution Administrators, Principal Investigators, Coordinators, and Patients are Site-scoped; trial-wide roles have a null `site_id`.
 - An **AuditLog** may reference a User and Trial and identifies the affected entity using `entity_type`, optional `entity_id`, and `entity_label`. User email and role are copied into the entry so attribution does not rely only on the current User row.
 - An **AdverseEvent** belongs to a Subject, Trial, and Site and may link to a Visit and reporting or coding-review Users.
+- A **PatientRequest** is a patient-submitted, Site-linked inquiry or request, optionally linked to a Trial and Subject, with category, message, workflow status, assigned administrator, response, and resolution timestamps.
+- An **EConsent** is the single electronic-consent record for a Subject, linked to its Trial, Site, and User. It stores signer identity, language, optional ABHA ID, signature data, SHA-256 digest, status, signing time, and request metadata.
 
-Site isolation is enforced in API queries and object lookups, not by a client-supplied filter. Principal Investigators and Coordinators are restricted to their own Site. A list query is narrowed server-side; a direct request for another Site's record is rejected with `403`. A Site-scoped user without an assigned Site fails closed. Trial-wide roles are not Site-scoped, but they still require the relevant domain permission.
+Site isolation is enforced in API queries and object lookups, not by a client-supplied filter. Institution Administrators, Principal Investigators, Coordinators, and Patients are restricted to their own Site. A list query is narrowed server-side; a direct request for another Site's record is rejected with `403`. A Site-scoped user without an assigned Site fails closed. Trial-wide roles are not Site-scoped, but they still require the relevant domain permission.
 
 ## Clinical Workflow
 
@@ -142,10 +144,12 @@ The tables below summarize registered routes. Except where noted, `/api` routes 
 | GET | `/` | API metadata and links | Public | `200` |
 | GET | `/api/health` | Database, schema, and live-bus health | Public | `200` (payload may say `degraded`) |
 | GET | `/api/info` | Static project metadata | Public | `200` |
-| POST | `/api/auth/login` | Exchange email/password for a bearer token | Public | `200`, `401`, `403` |
+| POST | `/api/auth/login` | Staff-only exchange of email/password for a bearer token; patient and invalid credentials receive the same generic response | Public | `200`, `401`, `403` |
+| POST | `/api/auth/patient/login` | Patient-only exchange of email/password for a bearer token; staff and invalid credentials receive the same generic response | Public | `200`, `401`, `403` |
 | GET | `/api/auth/me` | Return current identity, Site scope, and grants | Authenticated | `200`, `401` |
 | POST | `/api/auth/logout` | Audit logout and revoke the current token | Authenticated | `200`, `401` |
-| GET | `/api/auth/demo-users` | Development-only synthetic persona list | Public; only when `APP_ENV=development` | `200`, `404` |
+| GET | `/api/auth/demo-users` | Development-only synthetic staff persona list | Public; only when `APP_ENV=development` | `200`, `404` |
+| GET | `/api/auth/patient/demo-users` | Development-only synthetic patient persona list | Public; only when `APP_ENV=development` | `200`, `404` |
 | GET | `/api/rbac-matrix` | Return role/permission rules | Public | `200` |
 
 ### Trials and Sites
@@ -162,6 +166,7 @@ The tables below summarize registered routes. Except where noted, `/api` routes 
 | GET | `/api/sites` | List/filter visible Sites | `site:read` | `200`, `401`, `403` |
 | GET | `/api/sites/{site_id}` | Get a visible Site | `site:read` | `200`, `403`, `404` |
 | GET | `/api/sites/{site_id}/subjects` | List a Site's Subjects | `site:read`, `subject:read` | `200`, `403`, `404` |
+| POST | `/api/sites` | Create a participating Site | `institution:manage` | `201`, `400`, `401`, `403`, `404`, `422` |
 
 ### Subjects and Visits
 
@@ -202,6 +207,14 @@ IDs, Subject code, lifecycle status not explicitly accepted by a transition cont
 | GET | `/api/audit-log` | List/filter audit entries | `audit:read` | `200`, `401`, `403` |
 | GET | `/api/users` | List visible study personnel without password hashes | `user:read` | `200`, `401`, `403` |
 | GET | `/api/users/{user_id}` | Get visible study personnel | `user:read` | `200`, `403`, `404` |
+| POST | `/api/users` | Create a User; Site-scoped managers cannot assign another Site | `user:manage` | `201`, `400`, `401`, `403`, `422` |
+| GET | `/api/patient-requests` | List own patient requests or Site-scoped visible requests | `patient_request:read` | `200`, `401`, `403`, `422` |
+| POST | `/api/patient-requests` | Submit a patient inquiry or request | `patient_request:write` | `201`, `401`, `403`, `422` |
+| GET | `/api/patient-requests/{request_id}` | Get an owned or Site-visible patient request | `patient_request:read` | `200`, `401`, `403`, `404` |
+| PATCH | `/api/patient-requests/{request_id}/respond` | Respond and update request status within Site scope | `patient_request:respond` | `200`, `401`, `403`, `404`, `422` |
+| GET | `/api/econsent/my` | Return the current patient's consent status and information sheet | `econsent:read` | `200`, `401`, `403` |
+| POST | `/api/econsent/sign` | Create or replace the linked Subject's signed e-consent | `econsent:sign` | `200`, `400`, `401`, `403`, `404`, `422` |
+| GET | `/api/econsent/subjects/{subject_id}` | Get a Subject's consent certificate subject to ownership/Site scope | `econsent:read` | `200`, `401`, `403`, `404` |
 | GET | `/api/dashboard` | Role- and Site-shaped dashboard payload | `trial:read` | `200`, `401`, `403` |
 | GET | `/api/stats` | Aggregate dashboard statistics | `trial:read` | `200`, `401`, `403` |
 | GET | `/api/stats/enrollment-timeline` | Cumulative enrollment by month | `trial:read` | `200`, `401`, `403` |
@@ -215,7 +228,7 @@ List endpoints use a common `{total, limit, offset, items}` envelope, except Sub
 
 ## Authentication, Authorization and Site Scope
 
-HTTP clients obtain a token from `/api/auth/login` and send it as:
+Staff authenticate through `/api/auth/login`; patients authenticate through `/api/auth/patient/login`. Wrong-portal accounts receive the same generic `401` response as invalid credentials. Clients send the resulting token as:
 
 ```http
 Authorization: Bearer <access-token>
@@ -225,14 +238,16 @@ The current implementation decodes the JWT, checks its revocation state, reloads
 
 Permissions are defined in [app/rbac.py](app/rbac.py):
 
-- Principal Investigator: clinical read/write at one Site, plus compliance and User reads.
-- Coordinator: clinical read/write at one Site, without compliance or User reads.
-- Sponsor: trial-wide read access, exports, CTRI/regulatory updates, and activation; no Site-level clinical writes.
-- Ethics Committee: Trial/Site/Visit/adverse-event/compliance/audit reads and ethics updates; no Subject read.
-- Regulator: trial-wide read access including Subjects, audit, Users, and export; no writes.
-- Administrator: all defined permissions.
+- `admin` (Administrator): all defined permissions.
+- `institution_admin` (Institution Administrator): Site-scoped Trial, Site, Subject, Visit, adverse-event, compliance, User, patient-request, and e-consent reads; may manage Users and respond to patient requests, but has no clinical write grants.
+- `principal_investigator` (Principal Investigator): clinical read/write at one Site, plus compliance and User reads.
+- `coordinator` (Coordinator): clinical read/write at one Site, without compliance or User reads.
+- `patient` (Patient): Site-scoped Trial, Site, and Visit reads; may read and submit their own patient requests and read and sign their own e-consent.
+- `sponsor` (Sponsor): trial-wide read access including `compliance:read`, exports, CTRI/regulatory updates, and activation; no Site-level clinical writes.
+- `ethics_committee` (Ethics Committee): Trial/Site/Visit/adverse-event/compliance/audit reads and ethics updates; no Subject read.
+- `regulator` (Regulator): trial-wide read access including Subjects, audit, Users, and export; no writes.
 
-Authentication code is present in this branch, but login, logout, JWT creation/verification, token revocation, password handling, the central role list, and permission grants are authentication-owned concerns. Clinical Subject/Visit work consumes `CurrentUser`, `require(...)`, `scoped(...)`, and `assert_site_visible(...)`; it should not fork those rules or treat frontend visibility as enforcement.
+This integrated backend owns staff and patient login, logout, JWT creation and verification, token revocation, password handling, the central role list, permission grants, and server-side authorization. Clinical routes consume `CurrentUser`, `require(...)`, `scoped(...)`, and `assert_site_visible(...)`; frontend visibility is never a substitute for API enforcement.
 
 ## Data Integrity and Transactions
 
@@ -260,9 +275,11 @@ Docker Compose runs PostgreSQL 16 as service `db`. The backend uses `DATABASE_UR
 
 Alembic configuration is in [alembic.ini](alembic.ini), environment setup in [alembic/env.py](alembic/env.py), and revisions in [alembic/versions/](alembic/versions/). The current linear chain is:
 
-1. `0001`: seven core tables and indexes;
-2. `0002`: ethics validity and Trial activation fields; and
-3. `0003`: unique `(subject_id, visit_number)` constraint.
+1. `0001_initial_schema.py`: creates the original seven Trial, Site, User, Subject, Visit, adverse-event, and audit tables with their indexes and foreign keys;
+2. `0002_trial_activation_fields.py`: adds Trial ethics-approval status/validity and activation timestamp/actor fields;
+3. `0003_visit_subject_number_unique.py`: adds the unique `(subject_id, visit_number)` constraint;
+4. `0004_user_hierarchy_and_patient_portal.py`: links patient Users and Subjects, adds assigned researchers, and creates `patient_requests`; and
+5. `0005_digital_econsent.py`: creates one digitally signed `econsents` record per Subject with identity, signature, integrity, status, and request metadata.
 
 The backend entrypoint automatically applies migrations before starting Uvicorn. Manual verified commands from the repository root are:
 
@@ -343,9 +360,9 @@ Follow lifecycle order: activate the Trial after compliance gates, create screen
 
 Do not send server-controlled IDs, Subject codes, actor fields, timestamps, default statuses/arms, or audit values. For Site-scoped users, do not assume a supplied `site_id` can widen access.
 
-## Authentication-Team Integration Boundary
+## Integrated Authentication Boundary
 
-Subject and Visit workflow code intentionally relies on, rather than redesigns, these authentication-owned areas:
+Subject and Visit workflow code relies on these integrated authentication and authorization components:
 
 - [app/security.py](app/security.py): password hashing and JWT creation/verification;
 - [app/routers/auth.py](app/routers/auth.py): login, logout, current-user, and demo-user endpoints;
@@ -363,7 +380,7 @@ Integration checklist:
 - verify Principal Investigator and Coordinator identities carry the correct Site; and
 - rerun authorization, Site-isolation, clinical API, audit-rollback, and full-suite tests after authentication changes.
 
-Coordinate changes to authentication-owned files instead of modifying them as an incidental part of clinical workflow work.
+Keep authentication changes deliberate and rerun the relevant integration checks rather than modifying these components incidentally during clinical workflow work.
 
 ## Synthetic Data and Production Workflows
 
@@ -396,7 +413,7 @@ These are statements about the current implementation, not a claim that every po
 - Route lifecycle changes through the compliance/transition services; do not introduce an alternate state machine in a router or client.
 - Validate Trial/Site/Subject/Visit linkage before persistence and retain database uniqueness constraints.
 - Add focused unit/API tests and run the complete suite.
-- Coordinate before changing authentication-owned files, roles, grants, token behavior, or credential fields.
+- Coordinate before changing authentication files, roles, grants, token behavior, or credential fields.
 - Avoid unrelated refactoring in workflow changes, especially around transaction and authorization boundaries.
 
 ## Integration Checklist
