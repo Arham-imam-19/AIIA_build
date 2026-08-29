@@ -74,11 +74,17 @@ export async function api(path, { method = 'GET', body, token = savedToken() } =
 export const login = (email, password) =>
   api('/api/auth/login', { method: 'POST', body: { email, password }, token: null })
 
+export const patientLogin = (email, password) =>
+  api('/api/auth/patient/login', { method: 'POST', body: { email, password }, token: null })
+
 export const logout = () => api('/api/auth/logout', { method: 'POST' })
 
 export const me = (token) => api('/api/auth/me', { token })
 
 export const demoUsers = () => api('/api/auth/demo-users', { token: null })
+
+export const patientDemoUsers = () =>
+  api('/api/auth/patient/demo-users', { token: null })
 
 export const rbacMatrix = () => api('/api/rbac-matrix', { token: null })
 

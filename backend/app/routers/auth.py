@@ -32,7 +32,6 @@ DEMO_ROLE_ORDER = [
     UserRole.INSTITUTION_ADMIN.value,
     UserRole.PRINCIPAL_INVESTIGATOR.value,
     UserRole.COORDINATOR.value,
-    UserRole.PATIENT.value,
     UserRole.SPONSOR.value,
     UserRole.ETHICS_COMMITTEE.value,
     UserRole.REGULATOR.value,
@@ -97,19 +96,24 @@ def _first_trial_id(session: Session) -> int | None:
     return session.exec(select(Trial.id).order_by(Trial.id)).first()
 
 
-@router.post("/login", response_model=LoginResponse)
-def login(
+def _login_for_portal(
     body: LoginRequest,
     request: Request,
-    session: Session = Depends(get_session),
+    session: Session,
+    *,
+    patient_portal: bool,
 ) -> LoginResponse:
-    """Exchange an email and password for a token."""
+    """Exchange valid credentials for a token only through the correct portal."""
     # Email is stored lower-case by the seed; compare case-insensitively so a
     # demo typed with a capital letter still works.
     email = body.email.strip().lower()
     user = session.exec(select(User).where(User.email == email)).first()
 
-    if user is None or not security.verify_password(body.password, user.hashed_password):
+    if (
+        user is None
+        or not security.verify_password(body.password, user.hashed_password)
+        or (user.role == UserRole.PATIENT.value) != patient_portal
+    ):
         # Log the attempt, then commit it - a failed login that leaves no trace is
         # exactly what an attacker would prefer.
         audit.record(
@@ -178,6 +182,26 @@ def login(
     )
 
 
+@router.post("/login", response_model=LoginResponse)
+def login(
+    body: LoginRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+) -> LoginResponse:
+    """Authenticate active clinical staff through the staff portal."""
+    return _login_for_portal(body, request, session, patient_portal=False)
+
+
+@router.post("/patient/login", response_model=LoginResponse)
+def patient_login(
+    body: LoginRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+) -> LoginResponse:
+    """Authenticate active trial participants through the patient portal."""
+    return _login_for_portal(body, request, session, patient_portal=True)
+
+
 @router.post("/logout")
 async def logout(
     request: Request,
@@ -216,9 +240,8 @@ def me(user: CurrentUser = Depends(get_current_user)) -> MePayload:
     return _me(user)
 
 
-@router.get("/demo-users")
-def demo_users(session: Session = Depends(get_session)) -> dict:
-    """The demo personas and the password they share.
+def _demo_users_for_roles(session: Session, role_order: list[str]) -> dict:
+    """Return development-only synthetic personas for one portal.
 
     Development only. Printing credentials from an API would be indefensible in a
     real deployment, so this returns 404 unless APP_ENV=development - the same
@@ -239,7 +262,7 @@ def demo_users(session: Session = Depends(get_session)) -> dict:
     # picking the lowest id makes "the demo PI" a stable choice.
     chosen: dict[str, User] = {}
     for user in users:
-        if user.role in DEMO_ROLE_ORDER and user.role not in chosen:
+        if user.role in role_order and user.role not in chosen:
             if user.hashed_password:
                 chosen[user.role] = user
 
@@ -258,7 +281,7 @@ def demo_users(session: Session = Depends(get_session)) -> dict:
                 "site_id": chosen[role].site_id,
                 "organization": chosen[role].organization,
             }
-            for role in DEMO_ROLE_ORDER
+            for role in role_order
             if role in chosen
         ],
         "seeded": bool(chosen),
@@ -268,6 +291,18 @@ def demo_users(session: Session = Depends(get_session)) -> dict:
             else None
         ),
     }
+
+
+@router.get("/demo-users")
+def demo_users(session: Session = Depends(get_session)) -> dict:
+    """List synthetic clinical-staff personas for the staff login page."""
+    return _demo_users_for_roles(session, DEMO_ROLE_ORDER)
+
+
+@router.get("/patient/demo-users")
+def patient_demo_users(session: Session = Depends(get_session)) -> dict:
+    """List synthetic patient personas for the patient login page."""
+    return _demo_users_for_roles(session, [UserRole.PATIENT.value])
 
 
 # Resolve the forward reference to MePayload now that it is defined.
