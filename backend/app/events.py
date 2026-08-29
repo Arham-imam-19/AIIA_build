@@ -102,11 +102,11 @@ class EventBus:
         if self._pubsub is not None:
             with contextlib.suppress(Exception):
                 await self._pubsub.unsubscribe(CHANNEL)
-                await self._pubsub.close()
+                await self._pubsub.aclose()
             self._pubsub = None
         if self._redis is not None:
             with contextlib.suppress(Exception):
-                await self._redis.close()
+                await self._redis.aclose()
             self._redis = None
         self.backend = "in-process"
         self.detail = "stopped"
