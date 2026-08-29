@@ -147,6 +147,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.SUBJECT_READ,
             _P.VISIT_READ,
             _P.AE_READ,
+            _P.COMPLIANCE_READ,
             _P.USER_READ,
             _P.EXPORT,
 

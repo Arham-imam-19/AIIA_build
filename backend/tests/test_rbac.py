@@ -387,6 +387,14 @@ def test_only_sponsor_and_admin_can_write_trial_ctri_registration():
     }
     assert granted == expected
 
+
+def test_sponsor_can_read_trial_compliance():
+    assert (
+        Permission.COMPLIANCE_READ
+        in rbac.ROLE_PERMISSIONS[UserRole.SPONSOR.value]
+    )
+
+
 def test_only_sponsor_and_admin_can_write_trial_regulatory_approval():
     expected = {
         UserRole.SPONSOR.value,
