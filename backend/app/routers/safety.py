@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.models import AdverseEvent
+from app.models import AdverseEvent, Site, Trial
 from app.rbac import (
     CurrentUser,
     Permission,
@@ -33,8 +33,44 @@ from app.rbac import (
     scoped,
 )
 from app.routers.common import Page, limit_param, offset_param, paginate
+from app.services.safety_signals import (
+    SignalEvent,
+    SignalSite,
+    calculate_safety_signals,
+)
 
 router = APIRouter(prefix="/api", tags=["safety"])
+
+
+@router.get("/trials/{trial_id}/safety-signals")
+def trial_safety_signals(
+    trial_id: int,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.AE_READ)),
+) -> dict:
+    """Calculate demo PRR signals for each visible Site and verbatim AE term."""
+    if session.get(Trial, trial_id) is None:
+        raise HTTPException(status_code=404, detail=f"trial {trial_id} not found")
+
+    site_statement = select(Site).where(Site.trial_id == trial_id)
+    site_statement = scoped(site_statement, Site.id, user)
+    sites = session.exec(site_statement).all()
+    events = session.exec(
+        select(AdverseEvent).where(AdverseEvent.trial_id == trial_id)
+    ).all()
+
+    return calculate_safety_signals(
+        trial_id,
+        (
+            SignalSite(id=site.id, code=site.site_code, name=site.name)
+            for site in sites
+            if site.id is not None
+        ),
+        (
+            SignalEvent(site_id=event.site_id, term=event.term_verbatim)
+            for event in events
+        ),
+    )
 
 
 @router.get("/adverse-events", response_model=Page[AdverseEvent])
