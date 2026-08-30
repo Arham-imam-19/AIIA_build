@@ -224,6 +224,7 @@ def _sae_reporting(session: Session, trial_id: int, user: CurrentUser) -> dict:
 
         rows.append(
             {
+                "event_id": event.id,
                 "ae_number": event.ae_number,
                 "subject": codes.get(event.subject_id, "?"),
                 "site": sites.get(event.site_id, "?"),
@@ -718,15 +719,22 @@ def _regulator(session, user, stats, trial, today) -> tuple[list, list]:
              ("target_enrollment", "Target")],
             stats["sites"]["detail"],
         ),
-        _table(
-            "sae_reporting",
-            "Serious adverse events",
-            [("ae_number", "AE"), ("site", "Site"), ("term", "Event"),
-             ("onset", "Onset"), ("to_ethics", "To ethics"),
-             ("days", "Days"), ("verdict", "Verdict")],
-            sae["rows"],
-            empty="No serious adverse events reported.",
-        ),
+        {
+            **_table(
+                "sae_reporting",
+                "Serious adverse events",
+                [("ae_number", "AE"), ("site", "Site"), ("term", "Event"),
+                 ("onset", "Onset"), ("to_ethics", "To ethics"),
+                 ("days", "Days"), ("verdict", "Verdict")],
+                sae["rows"],
+                empty="No serious adverse events reported.",
+            ),
+            "row_action": {
+                "kind": "safety_report",
+                "id_key": "event_id",
+                "label": "PDF",
+            },
+        },
     ]
     return tiles, blocks
 

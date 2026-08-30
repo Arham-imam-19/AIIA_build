@@ -120,6 +120,29 @@ export const signEConsent = (body) =>
 export const getSubjectEConsent = (subjectId) =>
   api(`/api/econsent/subjects/${subjectId}`)
 
+export async function downloadSafetyReport(eventId, token = savedToken()) {
+  const res = await fetch(
+    `/api/adverse-events/${encodeURIComponent(eventId)}/safety-report.pdf`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    },
+  )
+  if (!res.ok) throw new ApiError(res.status, await readDetail(res))
+
+  const disposition = res.headers.get('Content-Disposition') || ''
+  const match = disposition.match(/filename="?([^";]+)"?/i)
+  const filename = match?.[1] || `safety-report-${eventId}.pdf`
+  const url = URL.createObjectURL(await res.blob())
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  return filename
+}
+
 // The WebSocket cannot send an Authorization header, so the token rides in the
 // query string instead. Same server-side check either way.
 export function liveUrl(token) {
