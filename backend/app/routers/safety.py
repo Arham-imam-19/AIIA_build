@@ -143,7 +143,73 @@ def export_adverse_event_safety_report(
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
-@router.get("/adverse-events", response_model=Page[AdverseEvent])
+from datetime import date, datetime, timedelta
+from sqlmodel import SQLModel
+
+
+class AdverseEventPublic(SQLModel):
+    id: int
+    trial_id: int
+    site_id: int
+    subject_id: int
+    ae_number: str
+    term_verbatim: str
+    description: str | None = None
+    onset_date: date
+    resolution_date: date | None = None
+    severity: str
+    is_serious: bool
+    seriousness_criteria: str | None = None
+    causality: str
+    outcome: str
+    action_taken: str | None = None
+    meddra_pt_code: str | None = None
+    meddra_pt_term: str | None = None
+    meddra_soc: str | None = None
+    coding_confidence: float | None = None
+    reported_date: date | None = None
+    reported_to_ec: bool = False
+    reported_to_ec_date: date | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    # NPvCC / NDCT Rules 2019 Rule 42 Regulatory Timeline Fields
+    expedited_deadline: date | None = None
+    detailed_report_deadline: date | None = None
+    regulatory_urgency: str | None = None
+
+
+def _hydrate_adverse_event(
+    event: AdverseEvent, today: date | None = None
+) -> AdverseEventPublic:
+    eval_date = today or date.today()
+    expedited_deadline = None
+    detailed_deadline = None
+    urgency = None
+
+    if event.is_serious:
+        expedited_deadline = event.onset_date + timedelta(days=1)
+        detailed_deadline = event.onset_date + timedelta(days=14)
+
+        if event.reported_to_ec:
+            urgency = "COMPLIANT_SUBMITTED"
+        elif eval_date > expedited_deadline:
+            urgency = "EXPEDITED_OVERDUE"
+        elif eval_date == expedited_deadline or eval_date == event.onset_date:
+            urgency = "EXPEDITED_DUE_SOON"
+        else:
+            urgency = "EXPEDITED_PENDING"
+    else:
+        urgency = "NON_SERIOUS"
+
+    dto = AdverseEventPublic.model_validate(event, from_attributes=True)
+    dto.expedited_deadline = expedited_deadline
+    dto.detailed_report_deadline = detailed_deadline
+    dto.regulatory_urgency = urgency
+    return dto
+
+
+@router.get("/adverse-events", response_model=Page[AdverseEventPublic])
 def list_adverse_events(
     session: Session = Depends(get_session),
     user: CurrentUser = Depends(require(Permission.AE_READ)),
@@ -162,7 +228,7 @@ def list_adverse_events(
     ),
     limit: int = limit_param(),
     offset: int = offset_param(),
-) -> Page[AdverseEvent]:
+) -> Page[AdverseEventPublic]:
     # Newest first: a safety reviewer cares about what just came in.
     statement = select(AdverseEvent).order_by(AdverseEvent.onset_date.desc())  # type: ignore[union-attr]
     if trial_id is not None:
@@ -181,17 +247,19 @@ def list_adverse_events(
         statement = statement.where(AdverseEvent.meddra_pt_code.is_(None))  # type: ignore[union-attr]
     statement = scoped(statement, AdverseEvent.site_id, user)
     total, items = paginate(session, statement, limit, offset)
-    return Page(total=total, limit=limit, offset=offset, items=items)
+    today = date.today()
+    hydrated = [_hydrate_adverse_event(item, today) for item in items]
+    return Page(total=total, limit=limit, offset=offset, items=hydrated)
 
 
-@router.get("/adverse-events/{event_id}", response_model=AdverseEvent)
+@router.get("/adverse-events/{event_id}", response_model=AdverseEventPublic)
 def get_adverse_event(
     event_id: int,
     session: Session = Depends(get_session),
     user: CurrentUser = Depends(require(Permission.AE_READ)),
-) -> AdverseEvent:
+) -> AdverseEventPublic:
     event = session.get(AdverseEvent, event_id)
     if event is None:
         raise HTTPException(status_code=404, detail=f"no adverse event with id {event_id}")
     assert_site_visible(user, event.site_id)
-    return event
+    return _hydrate_adverse_event(event)

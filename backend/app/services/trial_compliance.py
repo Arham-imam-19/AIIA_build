@@ -184,13 +184,15 @@ def check_activation_eligibility(
     )
 
 
-def check_ethics_clearance_for_enrollment(
+def check_regulatory_and_ethics_clearance_for_enrollment(
     trial: Trial, as_of: date | None = None
 ) -> tuple[bool, str | None]:
-    """Verify that a trial has valid, active Institutional Ethics Committee (IEC) approval.
+    """Verify that a trial has valid Institutional Ethics Committee (IEC) approval
+    and prospective Clinical Trials Registry - India (CTRI) registration.
 
-    Under NDCT Rules 2019 (Rule 22) and GCP guidelines, no participant may be screened
-    or enrolled without active ethics committee approval.
+    Under NDCT Rules 2019 (Rule 22), ICMR Ethical Guidelines, and GCP-ASU:
+    1. IEC approval must be formally granted, active, and not expired.
+    2. CTRI registration must be prospectively secured before the first participant is screened.
     """
     evaluation_date = as_of or date.today()
     if trial.ethics_approval_status != EthicsApprovalStatus.APPROVED.value:
@@ -213,5 +215,15 @@ def check_ethics_clearance_for_enrollment(
             False,
             f"IEC approval expired on {trial.ethics_approval_valid_until.isoformat()}; screening and enrollment are blocked.",
         )
+    if not trial.ctri_number or not trial.ctri_number.strip():
+        return (
+            False,
+            "Prospective CTRI registration number is required before participant screening (NDCT Rules 2019).",
+        )
     return (True, None)
+
+
+# Backward-compatible alias
+check_ethics_clearance_for_enrollment = check_regulatory_and_ethics_clearance_for_enrollment
+
 

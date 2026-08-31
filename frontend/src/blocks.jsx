@@ -80,7 +80,37 @@ function Panel({ title, note, children, wide }) {
 function Cell({ value }) {
   if (value === null || value === undefined || value === '')
     return <span className="text-slate-300">&mdash;</span>
-  return <>{String(value)}</>
+
+  const valStr = String(value)
+  if (valStr === 'EXPEDITED_DUE_SOON') {
+    return (
+      <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+        ⏱️ Due &lt;24h (Expedited)
+      </span>
+    )
+  }
+  if (valStr === 'EXPEDITED_OVERDUE') {
+    return (
+      <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
+        🚨 Overdue &gt;24h (NDCT R42)
+      </span>
+    )
+  }
+  if (valStr === 'COMPLIANT_SUBMITTED') {
+    return (
+      <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">
+        ✅ Reported to EC (Compliant)
+      </span>
+    )
+  }
+  if (valStr === 'NON_SERIOUS') {
+    return (
+      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-600">
+        Routine (Non-Serious)
+      </span>
+    )
+  }
+  return <>{valStr}</>
 }
 
 function RowAction({ action, row }) {

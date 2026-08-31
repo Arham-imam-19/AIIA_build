@@ -209,6 +209,7 @@ def _sae_reporting(session: Session, trial_id: int, user: CurrentUser) -> dict:
     rows: list[dict] = []
     late = 0
     unreported = 0
+    today_eval = date.today()
     for event in events:
         delay: int | None = None
         if event.reported_to_ec_date and event.reported_date:
@@ -221,6 +222,15 @@ def _sae_reporting(session: Session, trial_id: int, user: CurrentUser) -> dict:
             verdict = f"late ({delay} days)"
         else:
             verdict = f"on time ({delay} days)" if delay is not None else "on time"
+
+        # NDCT Rules 2019 24h expedited reporting check
+        expedited_due = event.onset_date + timedelta(days=1)
+        if event.reported_to_ec:
+            urgency = "COMPLIANT_SUBMITTED"
+        elif today_eval > expedited_due:
+            urgency = "EXPEDITED_OVERDUE"
+        else:
+            urgency = "EXPEDITED_DUE_SOON"
 
         rows.append(
             {
@@ -238,6 +248,7 @@ def _sae_reporting(session: Session, trial_id: int, user: CurrentUser) -> dict:
                     else None
                 ),
                 "days": delay,
+                "urgency": urgency,
                 "verdict": verdict,
             }
         )
@@ -583,6 +594,7 @@ def _ethics(session, user, stats, trial, today) -> tuple[list, list]:
             "Serious adverse events and their reporting",
             [("ae_number", "AE"), ("site", "Site"), ("term", "Event"),
              ("criteria", "Why serious"), ("onset", "Onset"),
+             ("urgency", "24h Regulatory Clock"),
              ("reported", "Reported"), ("to_ethics", "To ethics"),
              ("days", "Days"), ("verdict", "Verdict")],
             sae["rows"],
@@ -724,8 +736,8 @@ def _regulator(session, user, stats, trial, today) -> tuple[list, list]:
                 "sae_reporting",
                 "Serious adverse events",
                 [("ae_number", "AE"), ("site", "Site"), ("term", "Event"),
-                 ("onset", "Onset"), ("to_ethics", "To ethics"),
-                 ("days", "Days"), ("verdict", "Verdict")],
+                 ("onset", "Onset"), ("urgency", "24h Regulatory Clock"),
+                 ("to_ethics", "To ethics"), ("days", "Days"), ("verdict", "Verdict")],
                 sae["rows"],
                 empty="No serious adverse events reported.",
             ),
