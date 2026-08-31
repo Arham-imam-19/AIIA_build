@@ -26,6 +26,7 @@ from app.rbac import (
     scoped,
 )
 from app.routers.common import Page, limit_param, offset_param, paginate
+from app.services import privacy
 
 router = APIRouter(prefix="/api/patient-requests", tags=["patient-requests"])
 
@@ -76,11 +77,18 @@ class PatientRequestPublic(BaseModel):
     resolved_at: datetime | None = None
 
 
-def _hydrate_request(session: Session, req: PatientRequest) -> PatientRequestPublic:
+def _hydrate_request(session: Session, req: PatientRequest, user: CurrentUser | None = None) -> PatientRequestPublic:
     site = session.get(Site, req.site_id) if req.site_id else None
     patient = session.get(User, req.patient_user_id) if req.patient_user_id else None
     subject = session.get(Subject, req.subject_id) if req.subject_id else None
     admin = session.get(User, req.assigned_admin_id) if req.assigned_admin_id else None
+
+    p_name = patient.full_name if patient else None
+    p_email = patient.email if patient else None
+
+    if user is not None and privacy.should_mask_patient_pii(user, req.site_id):
+        p_name = privacy.mask_patient_name(p_name, subject.subject_code if subject else None)
+        p_email = privacy.mask_email(p_email)
 
     return PatientRequestPublic(
         id=req.id,  # type: ignore[arg-type]
@@ -88,8 +96,8 @@ def _hydrate_request(session: Session, req: PatientRequest) -> PatientRequestPub
         site_name=site.name if site else None,
         trial_id=req.trial_id,
         patient_user_id=req.patient_user_id,
-        patient_name=patient.full_name if patient else None,
-        patient_email=patient.email if patient else None,
+        patient_name=p_name,
+        patient_email=p_email,
         subject_id=req.subject_id,
         subject_code=subject.subject_code if subject else None,
         category=req.category,
@@ -132,7 +140,7 @@ def list_patient_requests(
         statement = statement.where(PatientRequest.site_id == site_id)
 
     total, items = paginate(session, statement, limit, offset)
-    hydrated = [_hydrate_request(session, req) for req in items]
+    hydrated = [_hydrate_request(session, req, user) for req in items]
     return Page(total=total, limit=limit, offset=offset, items=hydrated)
 
 
@@ -207,7 +215,7 @@ async def create_patient_request(
     except Exception:
         pass
 
-    return _hydrate_request(session, req)
+    return _hydrate_request(session, req, user)
 
 
 @router.get("/{request_id}", response_model=PatientRequestPublic)
@@ -226,7 +234,7 @@ def get_patient_request(
     if user.is_site_scoped and user.role != UserRole.PATIENT.value:
         assert_site_visible(user, req.site_id)
 
-    return _hydrate_request(session, req)
+    return _hydrate_request(session, req, user)
 
 
 @router.patch("/{request_id}/respond", response_model=PatientRequestPublic)
@@ -289,4 +297,4 @@ async def respond_patient_request(
     except Exception:
         pass
 
-    return _hydrate_request(session, req)
+    return _hydrate_request(session, req, user)

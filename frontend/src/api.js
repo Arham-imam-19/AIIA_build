@@ -120,6 +120,22 @@ export const signEConsent = (body) =>
 export const getSubjectEConsent = (subjectId) =>
   api(`/api/econsent/subjects/${subjectId}`)
 
+export const fetchAuditLogs = (params = {}) => {
+  const query = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') {
+      query.append(k, v)
+    }
+  }
+  const qStr = query.toString()
+  return api(`/api/audit-log${qStr ? `?${qStr}` : ''}`)
+}
+
+export const updateEthicsApproval = (trialId, body) =>
+  api(`/api/trials/${trialId}/ethics-approval`, { method: 'PATCH', body })
+
+export const fetchTrials = () => api('/api/trials')
+
 export async function downloadSafetyReport(eventId, token = savedToken()) {
   const res = await fetch(
     `/api/adverse-events/${encodeURIComponent(eventId)}/safety-report.pdf`,

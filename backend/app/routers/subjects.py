@@ -45,6 +45,7 @@ from app.rbac import (
     scoped,
 )
 from app.routers.common import Page, limit_param, offset_param, paginate
+from app.services import trial_compliance
 from app.services.subject_transition import (
     SubjectTransitionError,
     validate_subject_transition,
@@ -389,6 +390,13 @@ def create_subject_in_screening(
     if site.status != SiteStatus.RECRUITING.value:
         raise HTTPException(status_code=409, detail="this site is not recruiting")
 
+    ethics_ok, ethics_reason = trial_compliance.check_ethics_clearance_for_enrollment(trial)
+    if not ethics_ok:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Enrollment Blocked: {ethics_reason}",
+        )
+
     now = utcnow()
     code = _next_subject_code(session, site)
     subject = Subject(
@@ -561,6 +569,13 @@ def enroll_subject(
             raise HTTPException(status_code=409, detail="this trial is not recruiting")
         if site.status != SiteStatus.RECRUITING.value:
             raise HTTPException(status_code=409, detail="this site is not recruiting")
+
+        ethics_ok, ethics_reason = trial_compliance.check_ethics_clearance_for_enrollment(trial)
+        if not ethics_ok:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Enrollment Blocked: {ethics_reason}",
+            )
 
         result = validate_subject_transition(
             subject,

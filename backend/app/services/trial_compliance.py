@@ -182,3 +182,31 @@ def check_activation_eligibility(
         checks=tuple(checks),
         blockers=blocker_values,
     )
+
+
+def check_ethics_clearance_for_enrollment(
+    trial: Trial, as_of: date | None = None
+) -> tuple[bool, str | None]:
+    """Verify that a trial has valid, active Institutional Ethics Committee (IEC) approval.
+
+    Under NDCT Rules 2019 (Rule 22) and GCP guidelines, no participant may be screened
+    or enrolled without active ethics committee approval.
+    """
+    evaluation_date = as_of or date.today()
+    if trial.ethics_approval_status != EthicsApprovalStatus.APPROVED.value:
+        return (
+            False,
+            f"Institutional Ethics Committee (IEC) approval is required before screening or enrolling participants (Current status: '{trial.ethics_approval_status}').",
+        )
+    if not trial.ethics_approval_number or not trial.ethics_approval_number.strip():
+        return (
+            False,
+            "IEC approval number is missing from the trial record.",
+        )
+    if trial.ethics_approval_valid_until is not None and trial.ethics_approval_valid_until < evaluation_date:
+        return (
+            False,
+            f"IEC approval expired on {trial.ethics_approval_valid_until.isoformat()}; screening and enrollment are blocked.",
+        )
+    return (True, None)
+

@@ -21,6 +21,7 @@ from app.rbac import (
     require,
     scoped,
 )
+from app.services import privacy
 
 router = APIRouter(prefix="/api/econsent", tags=["econsent"])
 
@@ -100,20 +101,30 @@ PROTOCOL_INFO_SHEET = ProtocolInfoSheet(
 )
 
 
-def _hydrate_consent(session: Session, consent: EConsent) -> EConsentPublic:
+def _hydrate_consent(session: Session, consent: EConsent, user: CurrentUser | None = None) -> EConsentPublic:
     site = session.get(Site, consent.site_id)
     subject = session.get(Subject, consent.subject_id)
+    subject_code = subject.subject_code if subject else f"SUBJ-{consent.subject_id}"
+
+    signer_name = consent.signer_name
+    abha_id = consent.abha_id
+
+    # Apply DPDP Act 2023 Data Minimization if viewing user is an oversight/admin/regulatory role
+    if user is not None and privacy.should_mask_patient_pii(user, consent.site_id):
+        signer_name = privacy.mask_patient_name(consent.signer_name, subject_code)
+        abha_id = privacy.mask_abha_id(consent.abha_id)
+
     return EConsentPublic(
         id=consent.id,  # type: ignore[arg-type]
         trial_id=consent.trial_id,
         site_id=consent.site_id,
         site_name=site.name if site else f"Site {consent.site_id}",
         subject_id=consent.subject_id,
-        subject_code=subject.subject_code if subject else f"SUBJ-{consent.subject_id}",
+        subject_code=subject_code,
         user_id=consent.user_id,
-        signer_name=consent.signer_name,
+        signer_name=signer_name,
         language=consent.language,
-        abha_id=consent.abha_id,
+        abha_id=abha_id,
         signature_data_url=consent.signature_data_url,
         sha256_hash=consent.sha256_hash,
         status=consent.status,
@@ -140,7 +151,7 @@ def get_my_consent(
     return MyConsentResponse(
         subject_code=subject.subject_code if subject else "UNLINKED",
         has_signed=consent is not None and consent.status == ConsentStatus.SIGNED.value,
-        consent=_hydrate_consent(session, consent) if consent else None,
+        consent=_hydrate_consent(session, consent, user) if consent else None,
         info_sheet=PROTOCOL_INFO_SHEET,
     )
 
@@ -252,7 +263,7 @@ async def sign_econsent(
         # Redis failure must not corrupt or roll back already committed DB record
         pass
 
-    return _hydrate_consent(session, consent)
+    return _hydrate_consent(session, consent, user)
 
 
 @router.get("/subjects/{subject_id}", response_model=EConsentPublic)
@@ -279,4 +290,4 @@ def get_subject_consent(
     if not consent:
         raise HTTPException(status_code=404, detail="e-Consent has not been recorded for this participant yet")
 
-    return _hydrate_consent(session, consent)
+    return _hydrate_consent(session, consent, user)

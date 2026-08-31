@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, time, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_
 from sqlmodel import Session, SQLModel, select
 
 from app.db import get_session
+from app.enums import UserRole
 from app.models import AuditLog, User
 from app.rbac import CurrentUser, Permission, require, scoped
 from app.routers.common import Page, limit_param, offset_param, paginate
+from app.services import privacy
 
 router = APIRouter(prefix="/api", tags=["compliance"])
 
@@ -19,6 +22,7 @@ router = APIRouter(prefix="/api", tags=["compliance"])
 class AuditLogPublic(SQLModel):
     id: int
     timestamp: datetime
+    user_id: int | None = None
     user_email: str | None
     user_role: str | None
     action: str
@@ -28,7 +32,8 @@ class AuditLogPublic(SQLModel):
     field_name: str | None
     old_value: str | None
     new_value: str | None
-    reason: str
+    reason: str | None
+    trial_id: int | None = None
     ip_address: str | None
     user_agent: str | None
 
@@ -52,20 +57,42 @@ def list_audit_log(
     user: CurrentUser = Depends(require(Permission.AUDIT_READ)),
     entity_type: str | None = Query(None, description="filter by entity type"),
     action: str | None = Query(None, description="filter by action"),
+    trial_id: int | None = Query(None, description="filter by trial id"),
+    start_date: date | None = Query(None, description="filter events on or after this date"),
+    end_date: date | None = Query(None, description="filter events on or before this date"),
+    search: str | None = Query(None, description="search in user email, label, reason, or field"),
     limit: int = limit_param(),
     offset: int = offset_param(),
 ) -> Page[AuditLogPublic]:
-    """The 21 CFR Part 11 audit trail.
+    """The 21 CFR Part 11 ALCOA+ audit trail.
 
-    Append-only. Visible only to oversight roles (Ethics Committee, Regulator,
-    Admin). It is never filtered by site: a regulator inspecting the trial needs
-    the complete timeline.
+    Append-only. Visible only to oversight roles (Ethics Committee, Regulator, Admin).
+    It is never filtered by site: a regulator inspecting the trial needs the complete timeline.
     """
-    statement = select(AuditLog).order_by(AuditLog.timestamp.desc())
+    statement = select(AuditLog).order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
     if entity_type:
         statement = statement.where(AuditLog.entity_type == entity_type)
     if action:
         statement = statement.where(AuditLog.action == action)
+    if trial_id is not None:
+        statement = statement.where(AuditLog.trial_id == trial_id)
+    if start_date is not None:
+        start_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
+        statement = statement.where(AuditLog.timestamp >= start_dt)
+    if end_date is not None:
+        end_dt = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
+        statement = statement.where(AuditLog.timestamp <= end_dt)
+    if search and search.strip():
+        term = f"%{search.strip().lower()}%"
+        statement = statement.where(
+            or_(
+                AuditLog.user_email.ilike(term),  # type: ignore[union-attr]
+                AuditLog.entity_label.ilike(term),  # type: ignore[union-attr]
+                AuditLog.reason.ilike(term),  # type: ignore[union-attr]
+                AuditLog.field_name.ilike(term),  # type: ignore[union-attr]
+            )
+        )
+
     total, items = paginate(session, statement, limit, offset)
     return Page(
         total=total,
@@ -87,7 +114,7 @@ def list_users(
     """Study personnel.
 
     Site-scoped callers see only people at their own hospital. Passwords are
-    never returned - see `UserPublic` above.
+    never returned. Patient accounts are minimized for non-site callers under DPDP Act 2023.
     """
     statement = select(User).order_by(User.full_name)
     if role:
@@ -96,11 +123,33 @@ def list_users(
         statement = statement.where(User.site_id == site_id)
     statement = scoped(statement, User.site_id, caller)
     total, items = paginate(session, statement, limit, offset)
+
+    sanitized_items = []
+    for item in items:
+        # Check data minimization for patient roles
+        if item.role == UserRole.PATIENT.value and privacy.should_mask_patient_pii(caller, item.site_id):
+            sanitized_items.append(
+                UserPublic(
+                    id=item.id,  # type: ignore[arg-type]
+                    email=privacy.mask_email(item.email) or item.email,
+                    full_name=privacy.mask_patient_name(item.full_name),
+                    role=item.role,
+                    site_id=item.site_id,
+                    organization=item.organization,
+                    phone=privacy.mask_phone(item.phone),
+                    is_active=item.is_active,
+                    created_at=item.created_at,
+                    last_login_at=item.last_login_at,
+                )
+            )
+        else:
+            sanitized_items.append(UserPublic.model_validate(item, from_attributes=True))
+
     return Page(
         total=total,
         limit=limit,
         offset=offset,
-        items=[UserPublic.model_validate(item, from_attributes=True) for item in items],
+        items=sanitized_items,
     )
 
 
@@ -122,6 +171,21 @@ def get_user(
                 f"limited to site id {caller.site_id}."
             ),
         )
+
+    if found.role == UserRole.PATIENT.value and privacy.should_mask_patient_pii(caller, found.site_id):
+        return UserPublic(
+            id=found.id,  # type: ignore[arg-type]
+            email=privacy.mask_email(found.email) or found.email,
+            full_name=privacy.mask_patient_name(found.full_name),
+            role=found.role,
+            site_id=found.site_id,
+            organization=found.organization,
+            phone=privacy.mask_phone(found.phone),
+            is_active=found.is_active,
+            created_at=found.created_at,
+            last_login_at=found.last_login_at,
+        )
+
     return UserPublic.model_validate(found, from_attributes=True)
 
 

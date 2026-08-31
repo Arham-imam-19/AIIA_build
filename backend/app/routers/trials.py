@@ -20,6 +20,7 @@ from sqlmodel import Session, SQLModel, select
 from app import audit
 from app.db import get_session
 from app.enums import AuditAction, EthicsApprovalStatus, TrialStatus
+from app.events import bus, now_iso
 from app.models import Site, Subject, Trial
 from app.models.base import utcnow
 from app.services import trial_compliance
@@ -337,7 +338,7 @@ def get_trial(
     "/trials/{trial_id}/ethics-approval",
     response_model=TrialEthicsApprovalResponse,
 )
-def update_trial_ethics_approval(
+async def update_trial_ethics_approval(
     trial_id: int,
     body: TrialEthicsApprovalUpdate,
     request: Request,
@@ -407,6 +408,20 @@ def update_trial_ethics_approval(
     )
     session.commit()
     session.refresh(trial)
+
+    try:
+        await bus.publish(
+            {
+                "type": "trial.ethics_updated",
+                "at": now_iso(),
+                "trial_id": trial.id,
+                "status": trial.ethics_approval_status,
+                "label": f"Ethics {trial.ethics_approval_status}",
+                "message": f"Trial ethics approval updated to {trial.ethics_approval_status}.",
+            }
+        )
+    except Exception:
+        pass
 
     return TrialEthicsApprovalResponse(
         trial_id=trial.id,
