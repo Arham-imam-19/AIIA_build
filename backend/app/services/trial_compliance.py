@@ -220,6 +220,11 @@ def check_regulatory_and_ethics_clearance_for_enrollment(
             False,
             "Prospective CTRI registration number is required before participant screening (NDCT Rules 2019).",
         )
+    if trial.ctri_registration_date is not None and trial.ctri_registration_date > evaluation_date:
+        return (
+            False,
+            f"CTRI registration date ({trial.ctri_registration_date.isoformat()}) is in the future; participant screening is blocked.",
+        )
     return (True, None)
 
 
