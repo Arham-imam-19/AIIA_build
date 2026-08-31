@@ -17,6 +17,7 @@ from typing import Generic, TypeVar
 from fastapi import Query
 from pydantic import BaseModel
 from sqlalchemy import func, select as sa_select
+from sqlalchemy.engine import Row
 from sqlmodel import Session
 
 T = TypeVar("T")
@@ -51,10 +52,20 @@ def paginate(session: Session, statement, limit: int, offset: int) -> tuple[int,
     """
     count_statement = sa_select(func.count()).select_from(statement.subquery())
     total = session.exec(count_statement).one()
-    # SQLAlchemy returns a 1-tuple for a scalar select; SQLModel unwraps some but
-    # not all. Handle both so this works whichever path is taken.
-    if isinstance(total, tuple):
+    # SQLModel may unwrap a scalar select, while SQLAlchemy may return a tuple or
+    # Row. A COUNT query must contain exactly one value in either container.
+    if isinstance(total, (tuple, Row)):
+        if len(total) != 1:
+            raise TypeError(
+                f"count query returned {len(total)} values; expected exactly one"
+            )
         total = total[0]
 
     rows = session.exec(statement.limit(limit).offset(offset)).all()
-    return int(total), list(rows)
+    try:
+        scalar_total = int(total)
+    except (TypeError, ValueError) as exc:
+        raise TypeError(
+            f"count query returned unsupported scalar type {type(total).__name__}"
+        ) from exc
+    return scalar_total, list(rows)

@@ -32,7 +32,7 @@ from sqlmodel import Session, select
 
 from app.enums import AEOutcome, AESeverity, SubjectStatus, UserRole, VisitStatus
 from app.events import bus
-from app.models import AdverseEvent, AuditLog, Site, Subject, Trial, Visit
+from app.models import AdverseEvent, AuditLog, PatientRequest, Site, Subject, Trial, User, Visit
 from app.rbac import CurrentUser, Permission
 from app.routers.stats import build_stats, build_timeline, resolve_trial, visits_at_site
 
@@ -224,6 +224,7 @@ def _sae_reporting(session: Session, trial_id: int, user: CurrentUser) -> dict:
 
         rows.append(
             {
+                "event_id": event.id,
                 "ae_number": event.ae_number,
                 "subject": codes.get(event.subject_id, "?"),
                 "site": sites.get(event.site_id, "?"),
@@ -718,15 +719,22 @@ def _regulator(session, user, stats, trial, today) -> tuple[list, list]:
              ("target_enrollment", "Target")],
             stats["sites"]["detail"],
         ),
-        _table(
-            "sae_reporting",
-            "Serious adverse events",
-            [("ae_number", "AE"), ("site", "Site"), ("term", "Event"),
-             ("onset", "Onset"), ("to_ethics", "To ethics"),
-             ("days", "Days"), ("verdict", "Verdict")],
-            sae["rows"],
-            empty="No serious adverse events reported.",
-        ),
+        {
+            **_table(
+                "sae_reporting",
+                "Serious adverse events",
+                [("ae_number", "AE"), ("site", "Site"), ("term", "Event"),
+                 ("onset", "Onset"), ("to_ethics", "To ethics"),
+                 ("days", "Days"), ("verdict", "Verdict")],
+                sae["rows"],
+                empty="No serious adverse events reported.",
+            ),
+            "row_action": {
+                "kind": "safety_report",
+                "id_key": "event_id",
+                "label": "PDF",
+            },
+        },
     ]
     return tiles, blocks
 
@@ -751,18 +759,223 @@ def _audit_rows(session: Session, trial_id: int, limit: int = 12) -> list[dict]:
     ]
 
 
+def _institution_admin(
+    session: Session, user: CurrentUser, stats: dict, trial: Trial, today: date
+) -> tuple[list[dict], list[dict]]:
+    site_id = user.scope_site_id
+    site_obj = session.get(Site, site_id) if site_id else None
+    site_name = site_obj.name if site_obj else (user.organization or "All Sites")
+    site_code = site_obj.site_code if site_obj else ""
+
+    # Personnel count
+    researchers = list(session.exec(
+        select(User).where(User.site_id == site_id, User.is_active == True)  # noqa: E712
+    ).all()) if site_id else []
+
+    # Patient requests
+    req_query = select(PatientRequest).where(PatientRequest.site_id == site_id) if site_id else select(PatientRequest)
+    requests = list(session.exec(req_query.order_by(PatientRequest.created_at.desc())).all())
+    pending_reqs = sum(1 for r in requests if r.status != "resolved")
+
+    enrolled = stats.get("enrollment", {}).get("enrolled", 0)
+    screened = stats.get("enrollment", {}).get("screened", 0)
+    target = stats.get("enrollment", {}).get("target", 0)
+    recruitment_pct = stats.get("enrollment", {}).get("percent_of_target", 0)
+    sae_count = stats.get("safety", {}).get("serious", 0)
+    open_ae_val = _open_ae_count(session, trial.id, user)
+    deviations = stats.get("visits", {}).get("protocol_deviations", 0)
+
+    tiles = [
+        _tile("institution", "Institution", f"{site_code} {site_name}".strip() or "All Sites", tone="neutral"),
+        _tile("researchers", "Researchers & Staff", len(researchers), hint="Active personnel", tone="good"),
+        _tile("enrolled", "Recruited", f"{enrolled} / {target}", hint=f"{recruitment_pct}% of target", tone="good" if recruitment_pct >= 80 else "warn"),
+        _tile("pending_requests", "Pending Patient Requests", pending_reqs, hint="Requires admin action", tone="warn" if pending_reqs > 0 else "good"),
+        _tile("open_aes", "Open Safety Events", open_ae_val, tone="warn" if open_ae_val > 0 else "good"),
+        _tile("sae_count", "Serious AEs", sae_count, tone="bad" if sae_count > 0 else "good"),
+        _tile("deviations", "Protocol Deviations", deviations, tone="warn" if deviations > 0 else "neutral"),
+        _tile("screened", "Screened Participants", screened, hint=f"{enrolled} enrolled", tone="neutral"),
+    ]
+
+    req_rows = [
+        {
+            "category": r.category.replace("_", " ").title(),
+            "subject": r.subject_line,
+            "status": r.status.upper(),
+            "date": r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "-",
+            "response": r.admin_response or "Awaiting response",
+        }
+        for r in requests[:8]
+    ]
+
+    staff_rows = [
+        {
+            "name": u.full_name,
+            "role": u.role.replace("_", " ").title(),
+            "email": u.email,
+            "phone": u.phone or "—",
+        }
+        for u in researchers
+    ]
+
+    blocks = [
+        _table(
+            "patient_requests",
+            "Patient Inquiries & Communications",
+            [
+                ("category", "Category"),
+                ("subject", "Subject"),
+                ("status", "Status"),
+                ("date", "Submitted"),
+                ("response", "Response"),
+            ],
+            req_rows,
+            empty="No patient inquiries submitted yet.",
+        ),
+        _table(
+            "staff",
+            "Institutional Researchers & Clinical Staff",
+            [
+                ("name", "Name"),
+                ("role", "Role"),
+                ("email", "Email"),
+                ("phone", "Phone"),
+            ],
+            staff_rows,
+            empty="No staff members assigned.",
+        ),
+        _breakdown(
+            "status_breakdown",
+            "Participant Status Breakdown",
+            stats.get("subjects_by_status", {}),
+        ),
+    ]
+    return tiles, blocks
+
+
+def _patient(
+    session: Session, user: CurrentUser, stats: dict, trial: Trial, today: date
+) -> tuple[list[dict], list[dict]]:
+    # Fetch linked subject record
+    subject = session.get(Subject, user.subject_id) if user.subject_id else None
+    site = session.get(Site, user.site_id) if user.site_id else (session.get(Site, subject.site_id) if subject else None)
+
+    # Fetch patient's visits
+    visits = []
+    if subject:
+        visits = list(session.exec(select(Visit).where(Visit.subject_id == subject.id).order_by(Visit.visit_number)).all())
+
+    next_visit = next((v for v in visits if v.status == "scheduled" and v.scheduled_date and v.scheduled_date >= today), None)
+    completed_visits = sum(1 for v in visits if v.status == "completed")
+
+    # Fetch patient's requests
+    requests = list(session.exec(
+        select(PatientRequest).where(PatientRequest.patient_user_id == user.id).order_by(PatientRequest.created_at.desc())
+    ).all())
+    resolved_count = sum(1 for r in requests if r.status == "resolved")
+
+    # Care team
+    pi_user = session.exec(select(User).where(User.site_id == user.site_id, User.role == UserRole.PRINCIPAL_INVESTIGATOR.value)).first()
+    crc_user = session.exec(select(User).where(User.site_id == user.site_id, User.role == UserRole.COORDINATOR.value)).first()
+
+    tiles = [
+        _tile("my_id", "Participant ID", subject.subject_code if subject else "Assigned", tone="neutral"),
+        _tile("my_status", "Trial Status", (subject.status if subject else "Enrolled").replace("_", " ").title(), tone="good"),
+        _tile("next_visit", "Next Appointment", str(next_visit.scheduled_date) if next_visit else "None scheduled", hint=next_visit.visit_name if next_visit else None, tone="good"),
+        _tile("completed_visits", "Completed Visits", f"{completed_visits} / {len(visits)}", tone="good"),
+        _tile("requests_submitted", "My Inquiries", len(requests), tone="neutral"),
+        _tile("requests_resolved", "Resolved", resolved_count, tone="good" if resolved_count == len(requests) else "warn"),
+        _tile("institution", "Hospital", site.name if site else "AIIA", tone="neutral"),
+        _tile("trial", "Protocol", trial.short_title, tone="neutral"),
+    ]
+
+    req_rows = [
+        {
+            "category": r.category.replace("_", " ").title(),
+            "subject": r.subject_line,
+            "status": r.status.upper(),
+            "date": r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "-",
+            "response": r.admin_response or "Pending review by hospital admin",
+        }
+        for r in requests
+    ]
+
+    visit_rows = [
+        {
+            "visit": v.visit_name,
+            "scheduled": str(v.scheduled_date or "—"),
+            "status": v.status.replace("_", " ").title(),
+            "notes": v.notes or "—",
+        }
+        for v in visits
+    ]
+
+    care_team_rows = []
+    if pi_user:
+        care_team_rows.append({"name": pi_user.full_name, "role": "Principal Investigator", "contact": pi_user.email})
+    if crc_user:
+        care_team_rows.append({"name": crc_user.full_name, "role": "Study Coordinator", "contact": crc_user.email})
+
+    blocks = [
+        _table(
+            "my_requests",
+            "My Inquiries & Hospital Communications",
+            [
+                ("category", "Category"),
+                ("subject", "Subject"),
+                ("status", "Status"),
+                ("date", "Submitted"),
+                ("response", "Hospital Admin Response"),
+            ],
+            req_rows,
+            empty="You have not submitted any inquiries. Use the 'Contact Hospital Admin' action below to submit a question or request.",
+        ),
+        _table(
+            "my_schedule",
+            "My Protocol Visit Schedule",
+            [
+                ("visit", "Visit"),
+                ("scheduled", "Date"),
+                ("status", "Status"),
+                ("notes", "Instructions / Notes"),
+            ],
+            visit_rows,
+            empty="No schedule available.",
+        ),
+        _table(
+            "care_team",
+            "My Clinical Care Team",
+            [
+                ("name", "Name"),
+                ("role", "Role"),
+                ("contact", "Email"),
+            ],
+            care_team_rows,
+            empty="Care team details will appear once assigned.",
+        ),
+    ]
+    return tiles, blocks
+
+
 BUILDERS = {
+    UserRole.ADMIN.value: _regulator,
+    UserRole.INSTITUTION_ADMIN.value: _institution_admin,
     UserRole.PRINCIPAL_INVESTIGATOR.value: _investigator,
     UserRole.COORDINATOR.value: _coordinator,
+    UserRole.PATIENT.value: _patient,
     UserRole.SPONSOR.value: _sponsor,
     UserRole.ETHICS_COMMITTEE.value: _ethics,
     UserRole.REGULATOR.value: _regulator,
-    # An admin has every permission, so the regulator's all-seeing view is the
-    # most useful default rather than a sixth screen nobody demos.
-    UserRole.ADMIN.value: _regulator,
 }
 
 HEADLINES = {
+    UserRole.ADMIN.value: (
+        "Primary Administrator view",
+        "System governance, institution oversight, and global CTMS audit trail.",
+    ),
+    UserRole.INSTITUTION_ADMIN.value: (
+        "Institution Administration",
+        "Site governance, researcher coordination, recruitment KPIs, and patient inquiry management.",
+    ),
     UserRole.PRINCIPAL_INVESTIGATOR.value: (
         "My site",
         "Recruitment, safety and deviations for the site I am responsible for.",
@@ -770,6 +983,10 @@ HEADLINES = {
     UserRole.COORDINATOR.value: (
         "This week at my site",
         "Visits due, people mid-screening, and data still waiting to be entered.",
+    ),
+    UserRole.PATIENT.value: (
+        "Patient Portal",
+        "My clinical trial schedule, assigned care team, and direct communications with hospital administration.",
     ),
     UserRole.SPONSOR.value: (
         "Study overview",
@@ -782,10 +999,6 @@ HEADLINES = {
     UserRole.REGULATOR.value: (
         "Regulatory oversight",
         "Registration, approvals, reporting timeliness and the audit trail.",
-    ),
-    UserRole.ADMIN.value: (
-        "Administrator view",
-        "The regulator's view, plus everything else the system holds.",
     ),
 }
 

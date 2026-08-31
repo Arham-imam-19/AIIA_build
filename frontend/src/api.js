@@ -74,11 +74,17 @@ export async function api(path, { method = 'GET', body, token = savedToken() } =
 export const login = (email, password) =>
   api('/api/auth/login', { method: 'POST', body: { email, password }, token: null })
 
+export const patientLogin = (email, password) =>
+  api('/api/auth/patient/login', { method: 'POST', body: { email, password }, token: null })
+
 export const logout = () => api('/api/auth/logout', { method: 'POST' })
 
 export const me = (token) => api('/api/auth/me', { token })
 
 export const demoUsers = () => api('/api/auth/demo-users', { token: null })
+
+export const patientDemoUsers = () =>
+  api('/api/auth/patient/demo-users', { token: null })
 
 export const rbacMatrix = () => api('/api/rbac-matrix', { token: null })
 
@@ -88,6 +94,54 @@ export const simulateOptions = () => api('/api/simulate/options')
 
 export const simulate = (key, body = {}) =>
   api(`/api/simulate/${key}`, { method: 'POST', body })
+
+export const listPatientRequests = (params = {}) => {
+  const query = new URLSearchParams(params).toString()
+  return api(`/api/patient-requests${query ? `?${query}` : ''}`)
+}
+
+export const createPatientRequest = (body) =>
+  api('/api/patient-requests', { method: 'POST', body })
+
+export const respondPatientRequest = (id, body) =>
+  api(`/api/patient-requests/${id}/respond`, { method: 'PATCH', body })
+
+export const createSite = (body) =>
+  api('/api/sites', { method: 'POST', body })
+
+export const createUser = (body) =>
+  api('/api/users', { method: 'POST', body })
+
+export const getMyEConsent = () => api('/api/econsent/my')
+
+export const signEConsent = (body) =>
+  api('/api/econsent/sign', { method: 'POST', body })
+
+export const getSubjectEConsent = (subjectId) =>
+  api(`/api/econsent/subjects/${subjectId}`)
+
+export async function downloadSafetyReport(eventId, token = savedToken()) {
+  const res = await fetch(
+    `/api/adverse-events/${encodeURIComponent(eventId)}/safety-report.pdf`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    },
+  )
+  if (!res.ok) throw new ApiError(res.status, await readDetail(res))
+
+  const disposition = res.headers.get('Content-Disposition') || ''
+  const match = disposition.match(/filename="?([^";]+)"?/i)
+  const filename = match?.[1] || `safety-report-${eventId}.pdf`
+  const url = URL.createObjectURL(await res.blob())
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  return filename
+}
 
 // The WebSocket cannot send an Authorization header, so the token rides in the
 // query string instead. Same server-side check either way.

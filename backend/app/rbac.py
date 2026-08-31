@@ -40,7 +40,8 @@ class Permission(str, Enum):
     """One capability. Named `area:verb` so a permission reads as a sentence."""
 
     TRIAL_READ = "trial:read"  # the protocol, its dates, its registrations
-    SITE_READ = "site:read"  # the participating hospitals
+    SITE_READ = "site:read"  # the participating hospitals / institutions
+    INSTITUTION_MANAGE = "institution:manage"  # create or manage institutions
     SUBJECT_READ = "subject:read"  # participant records (de-identified)
     SUBJECT_WRITE = "subject:write"  # screen or enrol someone
     VISIT_READ = "visit:read"  # the appointment schedule
@@ -48,9 +49,19 @@ class Permission(str, Enum):
     AE_READ = "ae:read"  # adverse events - the safety picture
     AE_WRITE = "ae:write"  # report a new adverse event
     COMPLIANCE_READ = "compliance:read"  # ethics/regulatory status, deviations
+    ETHICS_WRITE = "ethics:write"  # update trial ethics-approval information
+    CTRI_WRITE = "ctri:write"  # update trial CTRI registration information
+    REGULATORY_WRITE = "regulatory:write"  # update regulatory approval information
+    ACTIVATION_WRITE = "activation:write"  # activate an eligible trial
     AUDIT_READ = "audit:read"  # the who-changed-what trail
     USER_READ = "user:read"  # the list of people on the study
+    USER_MANAGE = "user:manage"  # add or coordinate researchers / staff
     EXPORT = "export"  # pull data out for a submission
+    PATIENT_REQUEST_READ = "patient_request:read"  # view patient inquiries and requests
+    PATIENT_REQUEST_WRITE = "patient_request:write"  # submit patient requests
+    PATIENT_REQUEST_RESPOND = "patient_request:respond"  # respond to patient inquiries
+    ECONSENT_READ = "econsent:read"  # view informed consent records & certificates
+    ECONSENT_SIGN = "econsent:sign"  # digitally sign electronic informed consent
 
 
 # Shorthand so the table below fits on a screen.
@@ -60,6 +71,7 @@ _P = Permission
 # THE MATRIX. This table is the single source of truth for authorisation, and
 # /api/rbac-matrix serves it to the UI so the screen can never disagree with the
 # enforcement.
+
 #
 # Each role is written as "what this person's job actually needs", which is why
 # the sets are uneven:
@@ -69,8 +81,8 @@ _P = Permission
 #   Coordinator (CRC)       does the day-to-day data entry at one hospital. Same
 #                           site limit, no compliance view: not their call.
 #   Sponsor                 funds and monitors the study. Sees everything across
-#                           all sites, changes nothing - a monitor who could edit
-#                           the data would undermine the data.
+#                           all sites and owns trial-wide CTRI registration and
+#                           regulatory approval, but cannot edit site-level data.
 #   Ethics Committee        an independent safety and ethics reviewer. Deliberately
 #                           NOT given the participant list: their remit is safety
 #                           events, deviations and compliance, not browsing who is
@@ -79,8 +91,25 @@ _P = Permission
 #                           everything, including the full audit trail.
 #   Admin                   keeps the system running. Everything, because someone
 #                           has to be able to fix it during a demo.
+
 # --------------------------------------------------------------------------
 ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
+    UserRole.ADMIN.value: frozenset(Permission),
+    UserRole.INSTITUTION_ADMIN.value: frozenset(
+        {
+            _P.TRIAL_READ,
+            _P.SITE_READ,
+            _P.SUBJECT_READ,
+            _P.VISIT_READ,
+            _P.AE_READ,
+            _P.COMPLIANCE_READ,
+            _P.USER_READ,
+            _P.USER_MANAGE,
+            _P.PATIENT_REQUEST_READ,
+            _P.PATIENT_REQUEST_RESPOND,
+            _P.ECONSENT_READ,
+        }
+    ),
     UserRole.PRINCIPAL_INVESTIGATOR.value: frozenset(
         {
             _P.TRIAL_READ,
@@ -93,6 +122,8 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.AE_WRITE,
             _P.COMPLIANCE_READ,
             _P.USER_READ,
+            _P.PATIENT_REQUEST_READ,
+            _P.ECONSENT_READ,
         }
     ),
     UserRole.COORDINATOR.value: frozenset(
@@ -105,6 +136,8 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.VISIT_WRITE,
             _P.AE_READ,
             _P.AE_WRITE,
+            _P.PATIENT_REQUEST_READ,
+            _P.ECONSENT_READ,
         }
     ),
     UserRole.SPONSOR.value: frozenset(
@@ -114,8 +147,16 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.SUBJECT_READ,
             _P.VISIT_READ,
             _P.AE_READ,
+            _P.COMPLIANCE_READ,
             _P.USER_READ,
             _P.EXPORT,
+
+            _P.CTRI_WRITE,
+            _P.REGULATORY_WRITE,
+            _P.ACTIVATION_WRITE,
+
+            _P.ECONSENT_READ,
+
         }
     ),
     UserRole.ETHICS_COMMITTEE.value: frozenset(
@@ -125,7 +166,9 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.VISIT_READ,  # needed to review protocol deviations
             _P.AE_READ,
             _P.COMPLIANCE_READ,
+            _P.ETHICS_WRITE,
             _P.AUDIT_READ,
+            _P.ECONSENT_READ,
         }
     ),
     UserRole.REGULATOR.value: frozenset(
@@ -139,30 +182,48 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.AUDIT_READ,
             _P.USER_READ,
             _P.EXPORT,
+            _P.ECONSENT_READ,
         }
     ),
-    UserRole.ADMIN.value: frozenset(Permission),
+    UserRole.PATIENT.value: frozenset(
+        {
+            _P.TRIAL_READ,
+            _P.SITE_READ,
+            _P.VISIT_READ,
+            _P.PATIENT_REQUEST_READ,
+            _P.PATIENT_REQUEST_WRITE,
+            _P.ECONSENT_READ,
+            _P.ECONSENT_SIGN,
+        }
+    ),
 }
 
-# The roles whose view is narrowed to their own hospital. Everyone else sees all
-# sites. Membership here is the whole of "hard site scoping".
+# The roles whose view is narrowed to their own hospital/institution.
 SITE_SCOPED_ROLES: frozenset[str] = frozenset(
-    {UserRole.PRINCIPAL_INVESTIGATOR.value, UserRole.COORDINATOR.value}
+    {
+        UserRole.INSTITUTION_ADMIN.value,
+        UserRole.PRINCIPAL_INVESTIGATOR.value,
+        UserRole.COORDINATOR.value,
+        UserRole.PATIENT.value,
+    }
 )
 
 # Human labels, used by the dashboards and the matrix endpoint.
 ROLE_LABELS: dict[str, str] = {
-    UserRole.PRINCIPAL_INVESTIGATOR.value: "Principal Investigator",
+    UserRole.ADMIN.value: "Primary Administrator",
+    UserRole.INSTITUTION_ADMIN.value: "Institution Administrator",
+    UserRole.PRINCIPAL_INVESTIGATOR.value: "Principal Investigator (Researcher)",
     UserRole.COORDINATOR.value: "Clinical Research Coordinator",
     UserRole.SPONSOR.value: "Sponsor",
     UserRole.ETHICS_COMMITTEE.value: "Ethics Committee",
     UserRole.REGULATOR.value: "Regulator",
-    UserRole.ADMIN.value: "Administrator",
+    UserRole.PATIENT.value: "Patient (Participant)",
 }
 
 PERMISSION_LABELS: dict[str, str] = {
     _P.TRIAL_READ.value: "View the trial and its protocol",
-    _P.SITE_READ.value: "View participating sites",
+    _P.SITE_READ.value: "View participating sites / institutions",
+    _P.INSTITUTION_MANAGE.value: "Manage institutions and sites",
     _P.SUBJECT_READ.value: "View participants",
     _P.SUBJECT_WRITE.value: "Screen and enrol participants",
     _P.VISIT_READ.value: "View the visit schedule",
@@ -170,9 +231,19 @@ PERMISSION_LABELS: dict[str, str] = {
     _P.AE_READ.value: "View adverse events",
     _P.AE_WRITE.value: "Report adverse events",
     _P.COMPLIANCE_READ.value: "View ethics and regulatory compliance",
+    _P.ETHICS_WRITE.value: "Update trial ethics approval",
+    _P.CTRI_WRITE.value: "Update trial CTRI registration",
+    _P.REGULATORY_WRITE.value: "Update trial regulatory approval",
+    _P.ACTIVATION_WRITE.value: "Activate an eligible trial",
     _P.AUDIT_READ.value: "View the audit trail",
-    _P.USER_READ.value: "View study personnel",
+    _P.USER_READ.value: "View study personnel and researchers",
+    _P.USER_MANAGE.value: "Manage personnel and researchers",
     _P.EXPORT.value: "Export data for submission",
+    _P.PATIENT_REQUEST_READ.value: "View patient requests and inquiries",
+    _P.PATIENT_REQUEST_WRITE.value: "Submit patient requests to institution",
+    _P.PATIENT_REQUEST_RESPOND.value: "Respond to patient inquiries and requests",
+    _P.ECONSENT_READ.value: "View electronic informed consent records & certificates",
+    _P.ECONSENT_SIGN.value: "Digitally sign electronic informed consent",
 }
 
 
@@ -189,6 +260,7 @@ class CurrentUser(BaseModel):
     full_name: str
     role: str
     site_id: int | None = None
+    subject_id: int | None = None
     organization: str | None = None
     # Copied off the token so a WebSocket can log out the same session.
     jti: str | None = None
@@ -272,6 +344,7 @@ async def user_from_token(token: str, session: Session) -> CurrentUser:
         full_name=user.full_name,
         role=user.role,
         site_id=user.site_id,
+        subject_id=user.subject_id,
         organization=user.organization,
         jti=claims.get("jti"),
     )
@@ -359,12 +432,14 @@ def matrix() -> dict:
     about permissions is read from the same table that enforces them.
     """
     roles = [
+        UserRole.ADMIN,
+        UserRole.INSTITUTION_ADMIN,
         UserRole.PRINCIPAL_INVESTIGATOR,
         UserRole.COORDINATOR,
+        UserRole.PATIENT,
         UserRole.SPONSOR,
         UserRole.ETHICS_COMMITTEE,
         UserRole.REGULATOR,
-        UserRole.ADMIN,
     ]
     return {
         "permissions": [

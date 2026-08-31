@@ -6,18 +6,20 @@
 // anywhere in this system.
 
 import { useEffect, useState } from 'react'
-import { demoUsers, health } from './api'
+import { demoUsers, health, patientDemoUsers } from './api'
 import { useAuth } from './auth'
 
 const ROLE_BLURB = {
-  principal_investigator: 'runs the trial at one hospital',
-  coordinator: 'books visits and enters the data',
-  sponsor: 'watches every site for progress',
-  ethics_committee: 'reviews safety and deviations',
-  regulator: 'inspects registration and the audit trail',
+  admin: 'Primary Admin: manages institutions & system oversight',
+  institution_admin: 'manages hospital site, researchers & patient inquiries',
+  principal_investigator: 'Lead Researcher: runs clinical trial at the site',
+  coordinator: 'books visits, enters data & coordinates care',
+  sponsor: 'funds the trial and watches progress across all sites',
+  ethics_committee: 'reviews safety events and protocol deviations',
+  regulator: 'inspects CTRI registration and the audit trail',
 }
 
-export default function Login() {
+export default function Login({ patientPortal = false }) {
   const { signIn, state } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -27,7 +29,8 @@ export default function Login() {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    demoUsers()
+    const loadDemoUsers = patientPortal ? patientDemoUsers : demoUsers
+    loadDemoUsers()
       .then((data) => {
         setDemo(data)
         if (data.users.length) {
@@ -40,7 +43,7 @@ export default function Login() {
     health()
       .then(setStatus)
       .catch(() => setStatus(null))
-  }, [])
+  }, [patientPortal])
 
   // The persona buttons pass their credentials in explicitly. Calling
   // setPassword() and then reading `password` in the same handler would send the
@@ -50,7 +53,7 @@ export default function Login() {
     setBusy(true)
     setError(null)
     try {
-      await signIn(asEmail, asPassword)
+      await signIn(asEmail, asPassword, patientPortal)
     } catch (err) {
       setError(err.detail || err.message)
     } finally {
@@ -65,7 +68,7 @@ export default function Login() {
       <div className="w-full max-w-md">
         <div className="mb-6 text-center">
           <h1 className="text-lg font-semibold tracking-tight text-slate-900">
-            AIIA Clinical Trials Dashboard
+            {patientPortal ? 'Patient Portal' : 'Staff Portal'}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             Ayurveda CTMS &middot; Ministry of Ayush &middot; SIH26046
@@ -147,7 +150,9 @@ export default function Login() {
                         {user.role_label}
                       </span>
                       <span className="text-xs text-slate-400">
-                        {ROLE_BLURB[user.role]}
+                        {patientPortal
+                          ? 'trial participant: view schedule & message hospital admin'
+                          : ROLE_BLURB[user.role]}
                       </span>
                     </div>
                     <div className="mt-0.5 font-mono text-xs text-slate-500">
@@ -184,6 +189,14 @@ export default function Login() {
 
         <p className="mt-6 text-center text-xs text-slate-400">
           All data in this system is synthetic. No real patient data.
+        </p>
+        <p className="mt-3 text-center text-sm">
+          <a
+            href={patientPortal ? '/' : '/patient-login'}
+            className="text-aiia-600 hover:text-aiia-700 hover:underline"
+          >
+            {patientPortal ? 'Go to staff portal' : 'Go to patient portal'}
+          </a>
         </p>
       </div>
     </div>

@@ -1,18 +1,7 @@
-"""Logging in and out.
+"""Authentication endpoints: login, logout, who-am-i, and demo accounts.
 
-**JWT (JSON Web Token)** in one sentence: a signed ID card the server hands you
-at login, which the browser then shows with every request - like a festival
-wristband, where staff trust the hologram instead of phoning the box office.
-
-The flow:
-
-    POST /api/auth/login      email + password  ->  token
-    GET  /api/auth/me         token             ->  who you are, what you may do
-    POST /api/auth/logout     token             ->  token is dead
-
-Logging in and out are both written to the audit trail, including failed
-attempts. In a regulated system "who was in the system, when" is part of the
-record, not an operational detail.
+Phase 2 added JWT authentication. An endpoint is protected by adding
+`Depends(require(...))` - see `app/rbac.py` for how that is enforced.
 """
 
 from __future__ import annotations
@@ -24,10 +13,10 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from app import audit, config, security
+from app.db import get_session
 from app.enums import AuditAction, UserRole
 from app.events import bus
 from app.models import Trial, User
-from app.db import get_session
 from app.rbac import (
     PERMISSION_LABELS,
     ROLE_LABELS,
@@ -37,8 +26,10 @@ from app.rbac import (
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-# Roles the demo has a login for, in the order the pitch introduces them.
+# Roles the demo has a login for, ordered through the hierarchy.
 DEMO_ROLE_ORDER = [
+    UserRole.ADMIN.value,
+    UserRole.INSTITUTION_ADMIN.value,
     UserRole.PRINCIPAL_INVESTIGATOR.value,
     UserRole.COORDINATOR.value,
     UserRole.SPONSOR.value,
@@ -76,6 +67,7 @@ class MePayload(BaseModel):
     role: str
     role_label: str
     site_id: int | None
+    subject_id: int | None = None
     organization: str | None
     site_scoped: bool
     permissions: list[str]
@@ -91,6 +83,7 @@ def _me(user: CurrentUser) -> MePayload:
         role=user.role,
         role_label=user.role_label,
         site_id=user.site_id,
+        subject_id=user.subject_id,
         organization=user.organization,
         site_scoped=user.is_site_scoped,
         permissions=granted,
@@ -103,19 +96,24 @@ def _first_trial_id(session: Session) -> int | None:
     return session.exec(select(Trial.id).order_by(Trial.id)).first()
 
 
-@router.post("/login", response_model=LoginResponse)
-def login(
+def _login_for_portal(
     body: LoginRequest,
     request: Request,
-    session: Session = Depends(get_session),
+    session: Session,
+    *,
+    patient_portal: bool,
 ) -> LoginResponse:
-    """Exchange an email and password for a token."""
+    """Exchange valid credentials for a token only through the correct portal."""
     # Email is stored lower-case by the seed; compare case-insensitively so a
     # demo typed with a capital letter still works.
     email = body.email.strip().lower()
     user = session.exec(select(User).where(User.email == email)).first()
 
-    if user is None or not security.verify_password(body.password, user.hashed_password):
+    if (
+        user is None
+        or not security.verify_password(body.password, user.hashed_password)
+        or (user.role == UserRole.PATIENT.value) != patient_portal
+    ):
         # Log the attempt, then commit it - a failed login that leaves no trace is
         # exactly what an attacker would prefer.
         audit.record(
@@ -157,6 +155,7 @@ def login(
         full_name=user.full_name,
         role=user.role,
         site_id=user.site_id,
+        subject_id=user.subject_id,
         organization=user.organization,
     )
 
@@ -175,14 +174,32 @@ def login(
     )
     session.commit()
 
-    return LoginResponse(access_token=token, expires_at=expires_at, user=_me(current))
+    return LoginResponse(
+        access_token=token,
+        token_type="bearer",
+        expires_at=expires_at,
+        user=_me(current),
+    )
 
 
-@router.get("/me", response_model=MePayload)
-def me(user: CurrentUser = Depends(get_current_user)) -> MePayload:
-    """Who the current token belongs to. The frontend calls this on page load to
-    find out whether a saved token is still good."""
-    return _me(user)
+@router.post("/login", response_model=LoginResponse)
+def login(
+    body: LoginRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+) -> LoginResponse:
+    """Authenticate active clinical staff through the staff portal."""
+    return _login_for_portal(body, request, session, patient_portal=False)
+
+
+@router.post("/patient/login", response_model=LoginResponse)
+def patient_login(
+    body: LoginRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+) -> LoginResponse:
+    """Authenticate active trial participants through the patient portal."""
+    return _login_for_portal(body, request, session, patient_portal=True)
 
 
 @router.post("/logout")
@@ -191,14 +208,13 @@ async def logout(
     user: CurrentUser = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> dict:
-    """Revoke the current token.
+    """Revoke this token for the rest of its lifetime.
 
-    A JWT is self-contained, so the server cannot simply forget it - it has to
-    remember that this particular one is no longer welcome. Its id goes on a deny
-    list until the moment it would have expired anyway, after which there is
-    nothing left to revoke. Like cancelling a keycard rather than changing every
-    lock in the hotel.
+    Tells Redis to drop the session. Any open WebSocket sharing this token will
+    receive a logout message and be closed.
     """
+    if user.jti:
+        await bus.revoke_token(user.jti)
     audit.record(
         session,
         user=user,
@@ -211,15 +227,21 @@ async def logout(
         request=request,
     )
     session.commit()
-
-    if user.jti:
-        await bus.revoke_token(user.jti, config.ACCESS_TOKEN_TTL_MINUTES * 60)
-    return {"logged_out": True, "detail": "token revoked; log in again to continue"}
+    return {"status": "signed out", "logged_out": True}
 
 
-@router.get("/demo-users")
-def demo_users(session: Session = Depends(get_session)) -> dict:
-    """The five demo personas and the password they share.
+@router.get("/me", response_model=MePayload)
+def me(user: CurrentUser = Depends(get_current_user)) -> MePayload:
+    """Who is currently signed in, and what they are allowed to do.
+
+    The frontend calls this on startup to restore a session from localStorage.
+    If the token has expired, the 401 kicks them back to the login screen.
+    """
+    return _me(user)
+
+
+def _demo_users_for_roles(session: Session, role_order: list[str]) -> dict:
+    """Return development-only synthetic personas for one portal.
 
     Development only. Printing credentials from an API would be indefensible in a
     real deployment, so this returns 404 unless APP_ENV=development - the same
@@ -240,14 +262,14 @@ def demo_users(session: Session = Depends(get_session)) -> dict:
     # picking the lowest id makes "the demo PI" a stable choice.
     chosen: dict[str, User] = {}
     for user in users:
-        if user.role in DEMO_ROLE_ORDER and user.role not in chosen:
+        if user.role in role_order and user.role not in chosen:
             if user.hashed_password:
                 chosen[user.role] = user
 
     return {
         "password": config.DEMO_PASSWORD,
         "note": (
-            "Synthetic demo accounts. All five share one password so a five-minute "
+            "Synthetic demo accounts. All share one password so a five-minute "
             "pitch does not become a typing exercise."
         ),
         "users": [
@@ -259,7 +281,7 @@ def demo_users(session: Session = Depends(get_session)) -> dict:
                 "site_id": chosen[role].site_id,
                 "organization": chosen[role].organization,
             }
-            for role in DEMO_ROLE_ORDER
+            for role in role_order
             if role in chosen
         ],
         "seeded": bool(chosen),
@@ -269,6 +291,18 @@ def demo_users(session: Session = Depends(get_session)) -> dict:
             else None
         ),
     }
+
+
+@router.get("/demo-users")
+def demo_users(session: Session = Depends(get_session)) -> dict:
+    """List synthetic clinical-staff personas for the staff login page."""
+    return _demo_users_for_roles(session, DEMO_ROLE_ORDER)
+
+
+@router.get("/patient/demo-users")
+def patient_demo_users(session: Session = Depends(get_session)) -> dict:
+    """List synthetic patient personas for the patient login page."""
+    return _demo_users_for_roles(session, [UserRole.PATIENT.value])
 
 
 # Resolve the forward reference to MePayload now that it is defined.

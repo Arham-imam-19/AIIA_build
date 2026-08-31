@@ -71,15 +71,55 @@ def test_the_five_demo_personas_can_all_log_in(client, personas):
         assert body["user"]["email"] == email
 
 
+
+def test_patient_cannot_use_staff_login(client, personas):
+    response = client.post(
+        "/api/auth/login",
+        json={"email": personas[UserRole.PATIENT.value], "password": DEMO_PASSWORD},
+    )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "incorrect email or password"
+
+
+def test_staff_cannot_use_patient_login(client, personas):
+    response = client.post(
+        "/api/auth/patient/login",
+        json={"email": personas[UserRole.SPONSOR.value], "password": DEMO_PASSWORD},
+    )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "incorrect email or password"
+
+
+def test_patient_can_use_patient_login(client, personas):
+    email = personas[UserRole.PATIENT.value]
+    response = client.post(
+        "/api/auth/patient/login",
+        json={"email": email, "password": DEMO_PASSWORD},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["user"]["role"] == UserRole.PATIENT.value
+    assert body["user"]["email"] == email
+
+
 def test_demo_users_endpoint_lists_one_login_per_role(client):
     body = client.get("/api/auth/demo-users").json()
     assert body["seeded"] is True
     assert body["password"] == DEMO_PASSWORD
     roles = [user["role"] for user in body["users"]]
+    assert UserRole.PATIENT.value not in roles
     assert len(roles) == len(set(roles)), "a role appeared twice"
     for role in ("principal_investigator", "coordinator", "sponsor", "ethics_committee",
                  "regulator"):
         assert role in roles
+
+
+def test_patient_demo_users_endpoint_lists_only_patients(client):
+    body = client.get("/api/auth/patient/demo-users").json()
+    assert body["seeded"] is True
+    assert body["password"] == DEMO_PASSWORD
+    assert body["users"]
+    assert {user["role"] for user in body["users"]} == {UserRole.PATIENT.value}
 
 
 def test_demo_users_never_returns_a_hash(client):

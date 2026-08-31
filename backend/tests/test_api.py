@@ -61,6 +61,16 @@ def counts(seeded_engine) -> dict:
         }
 
 
+def test_seeded_recruiting_trial_has_activation_metadata(seeded_engine):
+    with Session(seeded_engine) as session:
+        trial = session.exec(select(Trial)).one()
+        activator = session.get(User, trial.activated_by_user_id)
+
+    assert trial.activated_at is not None
+    assert activator is not None
+    assert activator.role in {"admin", "sponsor"}
+
+
 LIST_ENDPOINTS = [
     "/api/trials",
     "/api/sites",

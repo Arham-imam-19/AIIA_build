@@ -1,473 +1,267 @@
-# AIIA Clinical Trials Dashboard
+# SIH26046 AIIA Clinical Trials Dashboard
 
-A real-time, cloud-based, GCP-compliant **Clinical Trial Management System (CTMS)** for
-Ayurveda research — built for Smart India Hackathon 2026, problem statement **SIH26046**
-(Ministry of Ayush / All India Institute of Ayurveda).
+The AIIA Clinical Trials Dashboard is a synthetic-data Clinical Trial Management System (CTMS) built for Smart India Hackathon problem statement **SIH26046**. It demonstrates controlled trial activation, participant and visit workflows, safety review, institution administration, patient self-service, auditability, and role-shaped live dashboards for an Ayurveda research scenario.
 
-> **All data in this system is synthetic.** No real patient data is used anywhere.
+> **Synthetic data only.** This is a demonstration system. Do not use it with real patient data or as a production clinical, regulatory, or pharmacovigilance system without independent engineering, privacy, security, clinical, and regulatory validation.
 
----
+## Problem statement and objectives
 
-## Quick start
+Trial teams need to coordinate approvals, sites, recruitment, visits, safety, consent, and oversight without exposing data outside each user's remit. The project demonstrates server-enforced role/site boundaries, traceable clinical state transitions, Patient self-service, de-identified oversight, live operational views, and transparent safety decision support.
 
-```bash
-docker compose up --build
+## Implemented capabilities
+
+- JWT staff and Patient authentication, logout token revocation, bcrypt password hashes, and development-only demo accounts.
+- Eight-role RBAC, server-side site scoping, and fail-closed behavior.
+- Ethics, CTRI, regulatory-readiness, compliance, and trial-activation workflows.
+- Subject screening, failure, enrollment/randomization, activation, visits, completion, withdrawal, and lost-to-follow-up workflows.
+- Transactional audit records for supported production mutations.
+- Institution/site and scoped staff administration.
+- Adverse-event review, serious-event dashboards, exact-term PRR signal calculations, and de-identified safety-case PDFs.
+- Separate staff and Patient portals, Patient dashboard, visits, inquiries/requests, and electronic informed consent.
+- Role-shaped dashboards and WebSocket updates through Redis with a single-process fallback.
+- Deterministic synthetic data, seeding, and simulation tools.
+
+## Architecture and stack
+
+```text
+Browser -> React/Vite (:5173) -> FastAPI (:8000) -> PostgreSQL 16 (:5432)
+   ^              |                    |
+   +---- /ws -----+                    +-> Redis 7 (:6379)
 ```
 
-Then open:
-
-| What | Where |
+| Layer | Repository-confirmed implementation |
 | --- | --- |
-| Dashboard (React) | http://localhost:5173 |
-| API root | http://localhost:8000 |
-| Interactive API docs | http://localhost:8000/docs |
-| Health check | http://localhost:8000/api/health |
+| Frontend | React 18, Vite 6, Tailwind CSS, Recharts |
+| API | Python, FastAPI 0.115.6, Uvicorn 0.34.0 |
+| ORM/validation | SQLModel 0.0.22, SQLAlchemy, Pydantic via FastAPI |
+| Data/schema | PostgreSQL 16, Alembic 1.14.0; SQLite in tests |
+| Auth/live | PyJWT 2.10.1, bcrypt 5.0.0, Redis 7/redis-py 5.2.1, WebSockets |
+| PDF | ReportLab 4.2.5; pypdf 5.1.0 in generated-file tests |
+| Packaging | Docker Compose |
 
-The dashboard shows five status lights — React, FastAPI, PostgreSQL, the schema, and the
-synthetic data. The first four go green on their own once the stack boots. The fifth stays
-red until you load the data:
+The backend entrypoint waits for PostgreSQL, applies `alembic upgrade head`, and starts Uvicorn. Vite proxies `/api` and `/ws`. The API enforces authorization; hidden frontend controls are not security boundaries.
 
-```bash
-docker compose exec backend python scripts/seed.py
-```
+## Eight roles and authorization boundaries
 
-That inserts one complete synthetic trial: 4 sites, 12 users, 225 screened participants
-(186 enrolled), ~1,100 visits, ~60 adverse events and a starting audit trail. It also gives
-every user a password and prints the demo logins. Reload the dashboard and sign in.
+`backend/app/rbac.py` and `GET /api/rbac-matrix` are authoritative.
 
----
-
-## Signing in
-
-Five personas, one shared password. The seed script prints them; they are also the one-click
-buttons on the login screen, served by `GET /api/auth/demo-users` (which answers only while
-`APP_ENV=development` — a deployed system must never hand out logins).
-
-| Role | Email | Sees |
+| Role key | Scope | Boundaries |
 | --- | --- | --- |
-| Principal Investigator | `meenakshi.sharma@demo.aiia-ctms.in` | Site 01 New Delhi only |
-| Clinical Research Coordinator | `kavita.nair@demo.aiia-ctms.in` | Site 01 New Delhi only |
-| Sponsor | `vikram.desai@demo.aiia-ctms.in` | All sites, read-only |
-| Ethics Committee | `lalitha.krishnan@demo.aiia-ctms.in` | All sites: safety, deviations, compliance |
-| Regulator | `shri.arvind.kulkarni@demo.aiia-ctms.in` | All sites, read-only, plus the audit trail |
+| `admin` | Trial-wide | All defined permissions, including administration and export. |
+| `institution_admin` | Own site | Clinical/compliance/user/request/e-consent reads; user management and Patient responses; no clinical writes/export. |
+| `principal_investigator` | Own site | Clinical read/write and compliance/user/request/e-consent read; no export or trial-wide approval writes. |
+| `coordinator` | Own site | Subject, visit, AE read/write plus request/e-consent read; no compliance, user management, or export. |
+| `patient` | Own site and linked Subject | Permitted trial/site/visit reads; own requests and own e-consent. No Subject-read, AE-read, audit, user, or export permission. |
+| `sponsor` | Trial-wide | Read, compliance, CTRI/regulatory updates, activation, and export; no site clinical writes. Output must remain de-identified. |
+| `ethics_committee` | Trial-wide | Trial/site/visit/AE/compliance/audit/e-consent read and ethics updates; deliberately no Subject-read/export. |
+| `regulator` | Trial-wide | Read-only oversight of clinical/compliance/audit/user/e-consent data plus export. |
 
-**Password: `aiia2026`** for all of them. Change it with `DEMO_PASSWORD` in `.env` *before*
-seeding. The database stores a bcrypt hash, never the password itself.
+Site-scoped queries are narrowed by the API, and direct cross-site access returns `403`. Patients are further limited to their linked Subject for owned workflows. Every route still requires its declared permission.
 
-All twelve seeded users get the same password, not just these five — useful when you want a
-*second* site to prove the scoping. NIA Jaipur's investigator is
-`rajeev.ranjan.sinha@demo.aiia-ctms.in`; their coordinator is `sunil.meena@demo.aiia-ctms.in`.
-There is also an Administrator, `priya.raghavan@demo.aiia-ctms.in`, who can do everything —
-deliberately left off the login screen, because "the account that bypasses the rules" is not a
-persona worth demoing.
+## Clinical workflows
 
-Log in by hand if you prefer:
+Trial activation evaluates protocol facts, dates, current ethics approval, CTRI registration, regulatory approval, and lifecycle state. An eligible trial becomes `recruiting`; incomplete, expired, or inconsistent gates return controlled errors.
 
-```bash
-curl -s -X POST http://localhost:8000/api/auth/login -H 'Content-Type: application/json' -d '{"email":"vikram.desai@demo.aiia-ctms.in","password":"aiia2026"}'
+```text
+screening -> not_randomized
+screening -> enrolled -> active -> completed
+             |           |       -> withdrawn
+             +-----------+------ -> lost_to_follow_up
 ```
 
-That returns an **access token** — a signed ID card the server hands you at login. Send it
-back on every request as `Authorization: Bearer <token>`. It lasts 12 hours; logging out
-cancels that one token and leaves your other sessions alone.
+Screening requires a recruiting Trial and Site. The server assigns Subject code, initial state, timestamps, and effective site. Enrollment requires ordered non-future dates and a randomized arm. Activation confirms first dose, persists the `active` status and updated timestamp, and writes an activation audit entry; the Subject model has no `first_dose_date` field. Terminal outcomes require appropriate dates/reasons.
 
----
+Authorized site users explicitly schedule one visit for an enrolled/active Subject. `(subject_id, visit_number)` is unique. A scheduled visit may be completed or marked missed after its window; out-of-window completion becomes a protocol deviation requiring a description. Production does not auto-expand a protocol schedule.
 
-## Who can do what
+Adverse events store trial/site/Subject, severity, seriousness, causality, outcome, reporting, and optional coding fields. Supported clinical mutations and their audit entry share a transaction. Audit append-only behavior is an application convention, not a database trigger.
 
-**RBAC** (role-based access control) attaches permissions to job titles rather than to
-people — a hotel keycard opens your floor, the manager's opens every floor. The table below
-is generated from `backend/app/rbac.py`, served live at `GET /api/rbac-matrix`, and rendered
-in the UI under **Access rules**.
+## Safety-signal detection
 
-| Permission | Principal Investigator | Coordinator | Sponsor | Ethics Committee | Regulator | Administrator |
-| --- | --- | --- | --- | --- | --- | --- |
-| `trial:read` — view the trial and its protocol | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `site:read` — view participating sites | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `subject:read` — view participants | ✅ | ✅ | ✅ | — | ✅ | ✅ |
-| `subject:write` — screen and enrol participants | ✅ | ✅ | — | — | — | ✅ |
-| `visit:read` — view the visit schedule | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `visit:write` — record visits | ✅ | ✅ | — | — | — | ✅ |
-| `ae:read` — view adverse events | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `ae:write` — report adverse events | ✅ | ✅ | — | — | — | ✅ |
-| `compliance:read` — view ethics and regulatory compliance | ✅ | — | — | ✅ | ✅ | ✅ |
-| `audit:read` — view the audit trail | — | — | — | ✅ | ✅ | ✅ |
-| `user:read` — view study personnel | ✅ | — | ✅ | — | ✅ | ✅ |
-| `export` — export data for submission | — | — | ✅ | — | ✅ | ✅ |
-| **Row scope** | own site | own site | all sites | all sites | all sites | all sites |
+`GET /api/trials/{trial_id}/safety-signals` groups exact `term_verbatim` values and calculates `a`, `b`, `c`, `d`, PRR, and Pearson chi-square for every visible target-site/term pair. The full trial forms the comparator while target sites remain scoped. Ordering is deterministic; zero denominators return explicit non-estimable results.
 
-Two limits apply independently, and they are genuinely different things:
+A demonstration signal requires `a >= 3`, `PRR >= 2`, and chi-square `>= 4`. This is **demonstration decision support only**: no normalization, medical coding, or MedDRA population occurs, and it is not validated NPvCC/pharmacovigilance detection. Patient and anonymous access are denied.
 
-- **Permission** — may this role touch this *kind* of thing at all? The Ethics Committee has
-  no `subject:read`, so `/api/subjects` is `403` for them at every site. That is deliberate:
-  an independent reviewer's remit is safety, deviations and compliance, not reading through
-  who is enrolled.
-- **Site scope** — *whose* rows do they get? An investigator has `subject:read`, but only
-  for their own hospital. Another site's participant is a `403`, not an empty page, and
-  `?site_id=` cannot widen the scope — a filter you can remove by editing the URL is not
-  access control.
+## De-identified safety PDF
 
-Every refusal says which permission was missing:
-`"Ethics Committee cannot do this. Missing permission: subject:read"`.
+`GET /api/adverse-events/{event_id}/safety-report.pdf` requires `export`, granted only to Administrator, Sponsor, and Regulator. All other roles and anonymous callers are denied. It loads only Trial, Site, de-identified Subject, and AdverseEvent data. It does not query/render Patient names/emails, EConsent signer/signature data, ABHA IDs, IP addresses, user agents, or Patient-request messages. Missing events return `404`; inconsistent linkage returns `409`.
 
----
+The PDF is a **de-identified demonstration decision-support artifact**, not an official regulatory submission or standardized CDSCO, CIOMS, or NPvCC form. The Regulator dashboard has a one-click action; Ethics sees the safety table without export.
 
-## The live dashboards
+## Patient portal and e-consent
 
-Five screens, one per persona, each showing eight KPIs and three or four panels drawn from
-the same seeded data. The role comes from the signed token, not from the URL, so a regulator
-cannot ask for the sponsor's screen by editing an address.
+Patients use `/api/auth/patient/login`; staff and Patient portals reject wrong-account types with generic invalid-credential responses. Implemented Patient workflows include a Patient dashboard, own visits, creating/reviewing own inquiries, receiving site-scoped institution responses, reading consent information/status, signing/replacing their own e-consent, and retrieving their own certificate.
 
-Updates arrive over a **WebSocket** — a phone line the browser holds open, so the server can
-speak first instead of the page asking "any news?" on a timer. Behind it is **Redis pub/sub**,
-which is a radio station: the API broadcasts "an enrolment happened at site 2" on one
-channel, and every open dashboard hears it and recomputes its own numbers. If Redis is
-missing the backend falls back to an in-process fan-out automatically and says so in
-`/api/health` — the demo never dies on a missing dependency.
+Consent stores signer identity, language, optional ABHA ID, signature data, SHA-256 digest, status, time, IP, and user agent. These sensitive fields are excluded from Sponsor safety output. Hashing and audit logging do not themselves establish legal/regulatory compliance.
 
-### Showing it live
+## Demo access and live updates
 
-Two ways to make something happen. In the UI, open **Simulate an event** and press a button.
-Or from a terminal:
+In development, `GET /api/auth/demo-users` supplies the available synthetic staff personas used by the demo interface. Staff sign in through the staff login; Patients use the separate Patient login. Demo-user endpoints and buttons are development conveniences and should not be exposed as a production authentication design.
 
-```bash
+Dashboard updates are delivered over WebSocket. Redis provides pub/sub fan-out; if Redis is unavailable, one backend process can use the in-process fallback. That fallback does not distribute updates across multiple backend processes.
+
+With the backend running and the intended synthetic database confirmed, safe simulation examples are:
+
+```powershell
 docker compose exec backend python scripts/simulate.py
 ```
 
-```bash
+```powershell
 docker compose exec backend python scripts/simulate.py adverse-event --serious
 ```
 
-```bash
-docker compose exec backend python scripts/simulate.py --count 5 --every 4
+Simulation writes persistent synthetic rows to the connected database. Confirm the target database and obtain approval before running it; do not reset the preserved database to undo simulation output.
+
+## Repository structure
+
+```text
+.
+|-- README.md / HANDOVER.md
+|-- docker-compose.yml / .env.example
+|-- backend/
+|   |-- app/{models,routers,services}/
+|   |-- alembic/versions/       migrations 0001-0005
+|   |-- tests/
+|   |-- requirements.txt
+|   `-- README.md               detailed backend contracts
+|-- frontend/{src,package.json}
+`-- scripts/{seed.py,simulate.py}
 ```
 
-```bash
-docker compose exec backend python scripts/simulate.py --as sponsor
+## Environment and Docker
+
+Prerequisites are Git, Docker with Compose, and free ports `5173`, `8000`, `5432`, `6379`. Compose defaults work without `.env`; optional overrides:
+
+```powershell
+Copy-Item .env.example .env
 ```
 
-The last one is refused, on purpose: a Sponsor has no `subject:write`, because a monitor who
-could edit the data would undermine the data. That makes the better demo anyway — leave the
-Sponsor's screen open, enrol someone as the Coordinator in another window, and watch the
-Sponsor's total move with nobody touching it.
+Never commit real credentials. Non-development deployments must override the insecure development `JWT_SECRET` and review `APP_ENV`, `DATABASE_URL`, `REDIS_URL`, `CORS_ORIGINS`, token lifetime, and demo password. The committed stack sets `APP_ENV=development`.
 
-These write **real rows**: a participant with a full visit schedule, an adverse event with no
-MedDRA code yet, or a visit completed outside its window. Each one also writes an audit entry
-naming who did it. Enrolment goes from 186 to 187 because there is a 187th person in the
-table. Put the baseline back with:
+Start:
 
-```bash
-docker compose exec backend python scripts/seed.py --reset
+```powershell
+docker compose up --build
 ```
 
-### Verifying it end to end
+Background start:
 
-Only the site roles can write, so throughout this the **Coordinator** fires the events and
-everyone else watches. Use two browser windows — one of them private, so the two tokens do not
-overwrite each other.
-
-1. Window A: sign in as the **Sponsor**. Top right shows a green **Live** dot and, next to it,
-   which fan-out is in use (`redis` or `in-process`).
-2. Window B: sign in as the **Coordinator** (site 01). Their screen has an active
-   **Simulate an event** panel.
-3. In window B, press *Enrol a participant*.
-4. Window A moves on its own: **Enrolled** and **Of target** change, the tiles that changed are
-   highlighted for a moment, and a banner names the new participant *and who enrolled them*.
-   Nobody touched window A.
-5. Now make window A the **Ethics Committee** and press *Enrol a participant* again in B. Two
-   things to point at: their tiles do **not** move — an enrolment is not their business, they
-   review safety and deviations — and the notice reads only *"Trial data changed; your figures
-   have been recalculated."* They have no `subject:read`, so they are not told **which**
-   participant. Naming a record to somebody who cannot open it would undo the access rules.
-   Their own Simulate buttons are greyed out, with the reason on hover.
-6. Make window A **NIA Jaipur's investigator** (`rajeev.ranjan.sinha@demo.aiia-ctms.in`) and
-   press *Enrol* in B once more. Nothing happens at all: the event was at site 01 and they are
-   site 02, so they are not even told. Click **refresh** beside the live dot to confirm it is
-   not a stale screen.
-7. Put the **Ethics Committee** back in window A and press the red *Report a SERIOUS event* in
-   B. Now their numbers do move — **Serious events** and **All adverse events** — and this time
-   the notice names the event in full, because an ethics reviewer *does* have `ae:read`. Same
-   mechanism as step 5, opposite outcome; the difference is one permission.
-
-The Coordinator cannot aim at another site either. Their `site_id` is taken from their token,
-so `{"site_id": 3}` in the request body is overwritten with their own — a site scope you could
-escape by editing a payload would not be a scope.
-
----
-
-## Other commands
-
-Wipe and reload the data (useful after changing the generator):
-
-```bash
-docker compose exec backend python scripts/seed.py --reset
+```powershell
+docker compose up --build -d
 ```
 
-Give an already-seeded database the demo passwords, without touching the trial data:
+Frontend: `http://localhost:5173`; API: `http://localhost:8000/`; health: `http://localhost:8000/api/health`.
 
-```bash
-docker compose exec backend python scripts/seed.py --passwords
+Stop while preserving PostgreSQL data:
+
+```powershell
+docker compose down
 ```
 
-Freeze the demo to a fixed date, so every number is identical on every laptop:
+Do **not** use `docker compose down -v` during normal work; it deletes the database volume. Back up important databases before destructive operations.
 
-```bash
-docker compose exec backend python scripts/seed.py --reset --date 2026-08-25 --seed 20260101
-```
+## Database and migrations
 
-Run the tests (321 of them, no network needed):
+Alembic revisions are `0001_initial_schema.py`, `0002_trial_activation_fields.py`, `0003_visit_subject_number_unique.py`, `0004_user_hierarchy_and_patient_portal.py`, and `0005_digital_econsent.py`. Startup upgrades automatically. Manual commands with the backend running:
 
-```bash
-docker compose exec backend pytest
-```
-
-Apply migrations by hand — the entrypoint already does this on every boot, so you only
-need it after writing a new migration:
-
-```bash
+```powershell
 docker compose exec backend alembic upgrade head
 ```
 
-Check the models and the migrations still agree. It should print
-`No new upgrade operations detected.`:
-
-```bash
+```powershell
 docker compose exec backend alembic check
 ```
 
-Tear everything down, database included, for a clean slate:
+Add/review a migration for every schema change. Never hand-edit a deployed schema, use application `create_all()` as a deployment substitute, reseed a preserved database, or delete its volume casually.
 
-```bash
-docker compose down -v
+## Synthetic data
+
+```powershell
+docker compose exec backend python scripts/seed.py
 ```
 
----
+Set passwords without replacing trial rows:
 
-## The data
-
-One trial, generated in pure Python by `backend/app/synthetic.py` and inserted by
-`scripts/seed.py`:
-
-> **ASHWA-GAD** — a multicentre, randomised, double-blind, placebo-controlled trial of
-> *Ashwagandha* (Withania somnifera) root churna in adults with Generalised Anxiety
-> Disorder (Ayurvedic diagnosis: *Chittodvega*), across AIIA Delhi, NIA Jaipur, IPGAE
-> Kolkata and GAU Jamnagar.
-
-It is built to be realistic rather than tidy, because the later phases have to cope with
-real-world mess:
-
-- Adverse-event narratives are written the way a busy coordinator types them — clinical
-  shorthand, inconsistent capitalisation, run-on sentences. Phase 4's NLP reads these.
-- No adverse event has a MedDRA code yet. That empty column *is* Phase 4's work queue.
-- Recruitment is uneven across sites, and one site has a deliberate cluster of
-  gastrointestinal events for Phase 4's signal detection to find.
-- 84 visits are flagged as protocol deviations, and a couple of serious events were
-  reported to the ethics committee late — Phase 5's compliance checks need real problems.
-- Audit entries are timestamped when the thing they describe actually happened, not at
-  load time.
-- Participants are de-identified by design: no name, address, phone or date of birth is
-  stored anywhere, only a year of birth and an age.
-
-Explore it at http://localhost:8000/docs, or start here:
-
-| Endpoint | What it gives you |
-| --- | --- |
-| `/api/stats` | Every headline number in one call — enrolment, per-site recruitment, visits, safety, audit |
-| `/api/stats/enrollment-timeline` | The cumulative recruitment curve, by month |
-| `/api/trials`, `/api/sites` | The study and the four sites running it |
-| `/api/subjects?status=enrolled` | Participants, filterable by site, status, arm and prakriti |
-| `/api/subjects/{id}/visits` | One participant's whole visit schedule |
-| `/api/adverse-events?serious_only=true` | The safety picture, filterable by severity and causality |
-| `/api/audit-log` | Who did what, when — newest first |
-
-Every list endpoint returns the same envelope — `total`, `limit`, `offset`, `items` — so a
-table can show "showing 50 of 186".
-
----
-
-## Jargon, in one line each
-
-| Term | Plain meaning |
-| --- | --- |
-| **CTMS** | Project-management software for a clinical trial — like Jira, but for tracking patients, visits and safety instead of tickets. |
-| **GCP** (Good Clinical Practice) | The international rulebook for running trials ethically and verifiably. Here it means: audit everything, change nothing silently. |
-| **CDISC SDTM** | The standard spreadsheet layout regulators expect trial data in — like a tax form: everyone submits the same boxes in the same order. |
-| **FHIR** | The standard format hospital systems use to exchange records — the USB-C of health data. |
-| **CTRI** | India's public trial registry. Registering a trial there is like filing a company with the registrar: it must exist on the record before you start. |
-| **NDCT Rules 2019** | India's regulations for new drugs and clinical trials — the legal gates a trial must pass through in order. |
-| **Pharmacovigilance** | Drug-safety monitoring: watching for harmful side effects and raising the alarm early. |
-| **Adverse event (AE)** | Anything bad that happens to a participant during a trial, whether or not the treatment caused it. |
-| **Severity vs seriousness** | Two different things. *Severity* is how intense it felt (mild / moderate / severe). *Seriousness* is a regulatory category — death, life-threatening, hospitalisation, disability, birth defect — and it starts a reporting clock. A severe headache is not serious; a mild reaction that puts someone in hospital overnight is. |
-| **MedDRA** | The standard dictionary of medical terms. It turns "loose motions", "the runs" and "diarrhoea" into one agreed code, so events can be counted. |
-| **Protocol deviation** | Anything that departed from the written plan — a visit two weeks late, a missed blood test. The rule is to record it, never to hide it. |
-| **Prakriti / dosha** | An Ayurvedic constitutional type (vata / pitta / kapha) — roughly, a baseline body-type classification recorded per participant. |
-| **Audit trail** | An append-only log of who changed what, when and why. Like a bank statement: a mistake is fixed by adding a correcting entry, never by erasing the original. Required by **21 CFR Part 11**, the regulation for electronic records. |
-| **Migration** (Alembic) | A numbered script that changes the database's shape — version control for table structure. Running them in order builds the schema from empty, the same way on every machine. |
-| **RBAC** (role-based access control) | Permissions attached to job titles, not people — a hotel keycard opens your floor, the manager's opens all of them. |
-| **JWT** (JSON Web Token) | The access token you get at login: a note saying "this is Kavita, a coordinator at site 1", stamped with a signature only the server can forge. It is *signed, not sealed* — anyone holding it can read it, so it carries no secrets, and the server trusts it because tampering breaks the signature. |
-| **Hashing** (bcrypt) | A one-way scramble. The database stores the scramble of your password, never the password, so a stolen database still cannot log anyone in. Deliberately slow, to make guessing expensive. |
-| **WebSocket** | A phone line held open between browser and server, so the server can push updates instantly instead of the page asking "any news?" on a timer. |
-| **Pub/sub** (publish–subscribe) | A radio station. The API *publishes* "an enrolment happened at site 2" once; every dashboard that *subscribed* hears it. The publisher never needs to know who is listening, so one event reaches five screens without addressing any of them. |
-
----
-
-## Architecture
-
-```
-Browser ──▶ Vite dev server (:5173) ──/api──▶ FastAPI (:8000) ──▶ PostgreSQL (:5432)
-   ▲                                              │
-   └────────────── /ws ───────────────────────────┤
-        (live KPI push)                           └──▶ Redis (:6379)
-                                                       (pub/sub fan-out)
+```powershell
+docker compose exec backend python scripts/seed.py --passwords
 ```
 
-The Vite dev server proxies `/api` and `/ws` to the backend, so the browser only ever
-talks to one origin — no CORS configuration needed for the demo.
+This intentionally replaces seeded data and requires explicit approval:
 
-A write and a broadcast are two separate steps. A `POST` inserts the row, writes the audit
-entry, and *then* publishes a one-line event. Each open socket recomputes that viewer's own
-dashboard from the database and pushes the result — so what arrives at the browser has already
-been through the same permission and site-scope rules as `GET /api/dashboard`. The event says
-*that* something changed; it never carries someone else's numbers.
-
-If Redis is unreachable, `EventBus` falls back to an in-process fan-out and the app keeps
-working — one backend container behaves identically either way. Redis is what makes it still
-work with several containers behind a load balancer.
-
-## Layout
-
-```
-.
-├── docker-compose.yml     # the whole system, one command
-├── backend/               # FastAPI
-│   ├── alembic/
-│   │   └── versions/      # numbered migration scripts - the real schema
-│   ├── app/
-│   │   ├── main.py        # app setup, health, info
-│   │   ├── config.py      # settings from environment variables
-│   │   ├── db.py          # engine, sessions, health check
-│   │   ├── enums.py       # the controlled vocabularies (statuses, severities...)
-│   │   ├── security.py    # password hashing, token issue/verify, logout deny-list
-│   │   ├── rbac.py        # who may do what, and whose rows they see
-│   │   ├── audit.py       # append-only "who did what, when" writer
-│   │   ├── kpi.py         # every dashboard number, computed in one place
-│   │   ├── events.py      # the Redis pub/sub bus, with an in-process fallback
-│   │   ├── models/        # the seven tables, as SQLModel classes
-│   │   ├── routers/       # the API, one file per area
-│   │   │   ├── auth.py    #   login, logout, me, demo-users
-│   │   │   ├── dashboard.py  # the five role screens
-│   │   │   ├── live.py    #   the /ws/dashboard WebSocket
-│   │   │   ├── simulate.py   # write a row and broadcast it
-│   │   │   └── ...        #   trials, subjects, safety, compliance, stats
-│   │   └── synthetic.py   # the data generator - pure Python, no database
-│   ├── entrypoint.sh      # wait for Postgres, migrate, then start uvicorn
-│   └── tests/             # 321 tests: auth, rbac, api, dashboards, live, migrations
-├── frontend/              # React + Vite + Tailwind
-│   └── src/
-│       ├── auth.jsx       # who is signed in; the token lives here
-│       ├── api.js         # fetch wrapper that attaches the token
-│       ├── Login.jsx      # the six one-click demo personas
-│       ├── Shell.jsx      # header, live badge, navigation
-│       ├── useLiveDashboard.js  # opens the WebSocket, reconnects, flags changes
-│       ├── blocks.jsx     # the four panel renderers (table/breakdown/series/checklist)
-│       ├── dashboards/    # one file per persona
-│       ├── RbacMatrix.jsx # the access-rules table, straight from the API
-│       └── Simulate.jsx   # the "make something happen" buttons
-└── scripts/
-    ├── seed.py            # inserts the generated data, sets the demo passwords
-    └── simulate.py        # fire events from a terminal instead of the UI
+```powershell
+docker compose exec backend python scripts/seed.py --reset
 ```
 
-### Where the schema lives
+The synthetic multi-site Ashwagandha trial contains a Jaipur site 02 exact-term `Loose stools` cluster for the PRR demonstration. No real Patient data is supported.
 
-Two files describe every table, and they must never disagree:
+## Tests and API documentation
 
-- `backend/app/models/` — what the Python code believes the tables look like.
-- `backend/alembic/versions/` — what actually gets built in a real database.
+Backend full suite:
 
-`backend/tests/test_migrations.py` runs the migrations into a throwaway SQLite file and
-compares the result against the models column by column, so a model change with no
-migration fails the tests instead of failing in production. `alembic check` is the same
-check from the other direction.
+```powershell
+docker compose run --rm backend pytest -q
+```
 
-The app itself never creates tables. `entrypoint.sh` runs `alembic upgrade head` before
-uvicorn starts, so the schema has exactly one owner.
+Focused safety and migration checks:
 
-## Tech stack
+```powershell
+docker compose run --rm backend pytest -q tests/test_safety_signals.py tests/test_safety_report_export.py
+```
 
-- **Backend** — FastAPI, SQLModel/SQLAlchemy, PostgreSQL, Redis, Celery/RQ for async AI jobs
-- **Interop** — `fhir.resources` for FHIR; a custom CDISC SDTM mapping layer
-- **AI/ML** — scikit-learn (dropout & recruitment prediction); spaCy + medspaCy for
-  adverse-event NLP and MedDRA coding
-- **Frontend** — React, Vite, Tailwind, Recharts
-- **Infra** — Docker Compose
+```powershell
+docker compose run --rm backend pytest -q tests/test_migrations.py
+```
 
-## Build phases
+The frontend defines no automated `test` script. Its available verification is:
 
-- [x] **Phase 0** — Scaffold: Docker Compose + Postgres + FastAPI + React, wired and running
-- [x] **Phase 1** — Data model (Trial, Site, Subject, Visit, AdverseEvent, User/Role,
-      AuditLog) + Alembic migrations + synthetic seed + read-only API
-- [x] **Phase 2** — Auth + RBAC + 5 role dashboards with live KPIs over WebSocket
-- [ ] **Phase 3** — Feature 1: AI Data-Harmonization Engine
-- [ ] **Phase 4** — Feature 2: Pharmacovigilance NLP + signal alerts
-- [ ] **Phase 5** — Feature 3: Compliance module (CTRI export, NDCT gates, audit trail,
-      e-signatures, compliance score)
-- [ ] **Phase 6** — Feature 5: Ayurveda data model + Feature 4 polish + demo seed
+```powershell
+docker compose run --rm frontend npm run build
+```
+
+Do not invoke/document `npm test` until a runner/script exists. With the API running, use Swagger at `http://localhost:8000/docs`, ReDoc at `/redoc`, and OpenAPI JSON at `/openapi.json`. Generated OpenAPI is authoritative. Some static metadata in `backend/app/main.py` still describes proposed capabilities as delivered; it is not evidence of compliance or AI/interoperability implementation.
+
+## Privacy and security properties
+
+- Synthetic data only; real patient data is unsupported.
+- Bcrypt password hashes, signed JWTs, database User rechecks, and logout revocation.
+- Server-side permissions and site scope.
+- Patients lack Subject/AE/audit/user/export permission.
+- Sponsor PDF output has a narrow de-identified data boundary excluding Patient account, consent/signature, ABHA, message, IP, and user-agent data.
+- Supported mutations and audit rows commit together; rollback paths are tested.
+- Generated PDF tests parse output and assert protected fields are absent.
+
+These are implementation properties, not certifications. TLS, external secrets, backup/restore, encryption, monitoring, retention, incident response, penetration testing, and deployment hardening are not established here.
+
+## Warnings, limitations, and compliance disclaimer
+
+- Demonstration CTMS, not a validated production clinical system.
+- No formal GCP, CDSCO, CIOMS, NPvCC, CDISC SDTM, FHIR, 21 CFR Part 11, or other compliance is claimed.
+- No AI/ML medical-coding engine, MedDRA population, CDISC export, or FHIR representation exists.
+- AE production routes are read-only; synthetic simulation creates demo events.
+- No automatic production visit schedule, rescheduling/cancellation/amendment workflow, database row-level security, or database audit trigger.
+- Production Subject/Visit writes do not publish simulation events; Redis fallback cannot cross backend processes.
+- Frontend has no automated tests. Verified build may show Vite's bundle warning.
+- ReportLab tests may show a third-party `ast.NameConstant` deprecation warning.
+
+Domain references describe context, fields, gates, or future direction only; they do not mean certification, validation, acceptance, or compliance. Clinical, privacy, legal, regulatory, and security specialists must evaluate any real-world use.
 
 ## Troubleshooting
 
-**Database light is red.** Postgres takes a few seconds on first boot; the page re-checks
-every 5 seconds and turns green on its own. If it stays red:
-`docker compose logs backend`.
+- **Backend problem:** inspect backend output with `docker compose logs backend`.
+- **Empty synthetic database:** first confirm that the backend points to the intended database. Run `docker compose exec backend python scripts/seed.py` only after receiving approval; seeding writes persistent synthetic data.
+- **Existing users have no demo passwords:** after confirming the database and approval, use `docker compose exec backend python scripts/seed.py --passwords`; this updates demo passwords without replacing trial rows.
+- **Demo buttons are absent:** the demo-user endpoints and buttons are development-only. Confirm `APP_ENV=development`; their absence outside development is expected.
+- **Expired-token `401`:** sign in again through the correct staff or Patient portal and use the new bearer token.
+- **Permission or site-scope `403`:** verify the signed-in role, required permission, assigned site, and target record. Client filters cannot widen server-enforced scope.
+- **Redis fallback is active:** a single backend can continue with in-process fan-out, but updates will not cross multiple backend processes. Inspect health and backend logs for the Redis connection detail.
+- **WebSocket does not connect:** verify the backend and frontend are running, inspect backend logs, confirm the Vite `/ws` proxy target, and check whether a proxy or VPN blocks WebSocket upgrade requests. Ordinary dashboard refresh remains available.
 
-**"Synthetic trial data" light is red, or every number is zero.** The database is empty —
-the schema exists but nothing has been loaded into it. Run
-`docker compose exec backend python scripts/seed.py`.
+## Recommended future work (not implemented)
 
-**Seed script says "already seeded; nothing to do".** That is deliberate: running it twice
-must not double the data. Use `--reset` to wipe and reload.
+1. Build one narrow de-identified interoperability output based only on present fields: CDISC-inspired DM/SV/AE CSV **or** FHIR-aligned ResearchStudy JSON. Require export authorization, privacy/linkage/schema/empty-data/determinism tests, and demonstration labeling.
+2. Add frontend automated tests for authentication, Patient flows, role actions, and downloads.
+3. Add controlled production AE creation/review and protocol-specific visit/correction workflows.
+4. Add deployment hardening, secret management, backups, monitoring, retention, security review, and suitable database controls.
+5. Correct stale runtime metadata/comments that overstate GCP, AI, interoperability, or regulatory capability.
+6. Address bundle size only as a separately approved performance task.
 
-**Login says "incorrect email or password".** The users exist but have no password — this
-happens on a database seeded before passwords were added. Run
-`docker compose exec backend python scripts/seed.py --passwords`. It sets them without
-touching the trial data.
-
-**The login screen shows no demo buttons.** They come from `/api/auth/demo-users`, which only
-answers while `APP_ENV=development`. Type the email and password from the table above instead.
-
-**A page suddenly returns 401 and bounces me to the login screen.** The token expired. It
-lasts 12 hours by default; sign in again, or set `ACCESS_TOKEN_TTL_MINUTES` in `.env` for a
-long demo day. Logging out in one tab also invalidates that tab's token only, so a second tab
-signed in as the same person keeps working.
-
-**403 with "Missing permission: ...".** Working as designed — see
-[Who can do what](#who-can-do-what). A site role asking for another site's record gets a 403
-too, and that is the same rule.
-
-**The badge next to the live dot says `in-process` instead of `redis`.** The backend could not
-reach Redis and fell back, which is why the demo still works. With one backend container the
-behaviour is identical — Redis is what makes it work across several. To get it back:
-`docker compose up -d redis`, then `docker compose restart backend`.
-
-**The dot says "Not live" (red) and numbers only change when I click refresh.** The WebSocket
-did not connect. Running the frontend outside Docker, check `VITE_PROXY_TARGET`; a corporate
-proxy or VPN that strips `Upgrade` headers will also block it. The dashboard still works —
-the **refresh** link beside the dot fetches the same numbers over ordinary HTTP.
-
-**Simulating changed the numbers and I want the demo figures back.**
-`docker compose exec backend python scripts/seed.py --reset`. The simulated rows were real
-rows, which is why they persist.
-
-**`scripts/simulate.py` says "nothing to do (409)".** The database is empty, so there is
-nobody to enrol or report against. Seed it first.
-
-**"column does not exist" or the schema light is red.** The container is running against a
-database at the wrong migration. Run `docker compose exec backend alembic upgrade head`,
-or `docker compose down -v && docker compose up --build` to rebuild from empty.
-
-**Port already in use.** Something else holds 5432, 8000, 5173 or 6379. Either stop it, or
-change the left-hand number in the relevant `ports:` entry in `docker-compose.yml`.
-
-**Frontend won't start after adding a dependency.** The container's `node_modules` lives in
-a Docker volume, so a new entry in `package.json` needs a rebuild:
-`docker compose up --build frontend`.
+An AI/ML medical-coding engine remains explicitly out of scope.

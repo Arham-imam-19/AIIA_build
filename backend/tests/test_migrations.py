@@ -107,8 +107,8 @@ def test_migrations_create_every_model_table(migrated_engine: sa.Engine) -> None
     assert built - expected == set(), "tables created by migrations with no model"
 
 
-def test_seven_core_tables_exist(migrated_engine: sa.Engine) -> None:
-    """The Phase 1 data model, spelled out so a rename cannot pass silently."""
+def test_all_model_tables_exist(migrated_engine: sa.Engine) -> None:
+    """The CTMS data model tables, spelled out so a rename cannot pass silently."""
     built = set(sa.inspect(migrated_engine).get_table_names())
     assert built == {
         "trials",
@@ -117,6 +117,8 @@ def test_seven_core_tables_exist(migrated_engine: sa.Engine) -> None:
         "subjects",
         "visits",
         "adverse_events",
+        "patient_requests",
+        "econsents",
         "audit_logs",
     }
 
@@ -137,6 +139,32 @@ def test_migrations_create_every_model_column(migrated_engine: sa.Engine) -> Non
             problems.append(f"{table_name}.{extra} is in the migration, not the model")
 
     assert not problems, "model/migration column drift:\n  " + "\n  ".join(problems)
+
+
+def test_trial_activation_fields_are_migrated(migrated_engine: sa.Engine) -> None:
+    inspector = sa.inspect(migrated_engine)
+    columns = {column["name"]: column for column in inspector.get_columns("trials")}
+    expected = {
+        "ethics_approval_status",
+        "ethics_approval_valid_until",
+        "activated_at",
+        "activated_by_user_id",
+    }
+
+    assert expected <= columns.keys()
+    assert all(columns[name]["nullable"] for name in expected)
+
+    foreign_keys = {
+        (tuple(fk["constrained_columns"]), fk["referred_table"])
+        for fk in inspector.get_foreign_keys("trials")
+    }
+    assert (("activated_by_user_id",), "users") in foreign_keys
+
+    indexes = {
+        tuple(index["column_names"])
+        for index in inspector.get_indexes("trials")
+    }
+    assert ("activated_by_user_id",) in indexes
 
 
 def test_column_nullability_matches_the_models(migrated_engine: sa.Engine) -> None:
@@ -177,8 +205,10 @@ def _type_family(type_: object) -> str:
         ("date", sa.Date),
         ("string", sa.String),
     ):
-        if isinstance(type_, klass):
+        if isinstance(type_, klass) or (isinstance(type_, type) and issubclass(type_, klass)):
             return family
+    if type(type_).__name__ == "AutoString":
+        return "string"
     return type(type_).__name__.lower()
 
 
@@ -276,6 +306,21 @@ def test_unique_columns_are_unique_in_the_migration(
         assert (column_name,) in unique_columns, (
             f"{table_name}.{column_name} should be unique in the migration"
         )
+
+
+def test_visit_number_is_unique_per_subject_in_migration(
+    migrated_engine: sa.Engine,
+) -> None:
+    inspector = sa.inspect(migrated_engine)
+    unique_columns = {
+        tuple(index["column_names"])
+        for index in inspector.get_indexes("visits")
+        if index["unique"]
+    } | {
+        tuple(constraint["column_names"])
+        for constraint in inspector.get_unique_constraints("visits")
+    }
+    assert ("subject_id", "visit_number") in unique_columns
 
 
 # ----------------------------------------------------------------- downgrade

@@ -35,14 +35,15 @@ test ran first.
 from __future__ import annotations
 
 import contextlib
+from datetime import date, datetime, timedelta
 
 import pytest
 from sqlmodel import Session, select
 from starlette.websockets import WebSocketDisconnect
 
-from app.enums import UserRole
+from app.enums import TrialPhase, TrialStatus, UserRole, VisitStatus
 from app.main import app
-from app.models import AuditLog, Subject, User
+from app.models import AuditLog, Subject, Trial, User, Visit
 from tests.conftest import client_for, token_for, token_for_user, users_by_role
 
 # 1008 is "policy violation". A WebSocket handshake has already succeeded by the
@@ -294,7 +295,7 @@ def test_an_enrolment_moves_the_investigators_numbers_with_no_refresh(
     assert event["site_id"] == person.site_id
     # Who did it, shown in the UI's notification. An anonymous change is not a
     # change anybody can act on.
-    assert event["actor"]["role_label"] == "Administrator"
+    assert event["actor"]["role_label"] in ("Administrator", "Primary Administrator")
     assert created["subject"]["subject_code"] in event["message"]
 
 
@@ -343,9 +344,30 @@ def test_a_serious_event_reaches_the_ethics_committee_and_the_regulator(
     assert regulator_message["event"]["type"] == "adverse_event.serious"
 
 
-def test_a_deviation_moves_the_deviation_counters(live, investigators):
+def test_a_deviation_moves_the_deviation_counters(
+    live, seeded_engine, investigators
+):
     """Recording a deviation is not an admission of failure; hiding one is."""
     person = investigators[0]
+    with Session(seeded_engine) as session:
+        subject_ids = select(Subject.id).where(Subject.site_id == person.site_id)
+        visit = session.exec(
+            select(Visit)
+            .where(
+                Visit.status == VisitStatus.SCHEDULED.value,
+                Visit.subject_id.in_(subject_ids),  # type: ignore[union-attr]
+            )
+            .order_by(Visit.scheduled_date)
+        ).first()
+        assert visit is not None
+        visit.scheduled_date = date.today() - timedelta(days=7)
+        visit.updated_at = datetime(2020, 1, 1)
+        session.add(visit)
+        session.commit()
+        visit_id = visit.id
+        assert visit_id is not None
+        previous_updated_at = visit.updated_at
+
     with open_dashboard(live, token_for_user(person)) as socket:
         before = tiles(socket.receive_json())
         created = log_deviation(live, person.site_id)
@@ -355,7 +377,88 @@ def test_a_deviation_moves_the_deviation_counters(live, investigators):
     assert pushed["event"]["type"] == "visit.deviation"
     assert after["deviations"] == before["deviations"] + 1
     assert created["visit"]["days_late"] > 0
+    assert date.fromisoformat(created["visit"]["actual_date"]) <= date.today()
     assert "outside the protocol window" in created["visit"]["deviation_description"]
+    with Session(seeded_engine) as session:
+        changed = session.get(Visit, visit_id)
+        assert changed is not None
+        assert changed.updated_at > previous_updated_at
+
+
+def test_a_future_visit_is_rejected_without_side_effects(
+    live, seeded_engine, investigators, monkeypatch
+):
+    person = investigators[1]
+    with Session(seeded_engine) as session:
+        subject_ids = select(Subject.id).where(Subject.site_id == person.site_id)
+        scheduled = list(
+            session.exec(
+                select(Visit).where(
+                    Visit.status == VisitStatus.SCHEDULED.value,
+                    Visit.subject_id.in_(subject_ids),  # type: ignore[union-attr]
+                )
+            ).all()
+        )
+        assert scheduled
+        for offset, visit in enumerate(scheduled, start=1):
+            visit.scheduled_date = date.today() + timedelta(days=offset)
+            session.add(visit)
+        session.commit()
+
+        before_visits = {
+            visit.id: (
+                visit.status,
+                visit.scheduled_date,
+                visit.actual_date,
+                visit.is_protocol_deviation,
+                visit.deviation_description,
+                visit.performed_by_user_id,
+                visit.updated_at,
+            )
+            for visit in scheduled
+        }
+        before_audits = len(session.exec(select(AuditLog)).all())
+
+    commit_calls = 0
+    original_commit = Session.commit
+
+    def tracked_commit(session):
+        nonlocal commit_calls
+        commit_calls += 1
+        return original_commit(session)
+
+    monkeypatch.setattr(Session, "commit", tracked_commit)
+
+    with open_dashboard(live, token_for_user(person)) as socket:
+        socket.receive_json()
+        response = live.post(
+            "/api/simulate/deviation",
+            headers={"Authorization": f"Bearer {token_for_user(person)}"},
+        )
+        after_rejection = refresh(socket)
+
+    assert response.status_code == 409
+    assert "without a future actual date" in response.json()["detail"]
+    assert commit_calls == 0
+    assert after_rejection["reason"] == "refresh"
+
+    with Session(seeded_engine) as session:
+        after_visits = {
+            visit.id: (
+                visit.status,
+                visit.scheduled_date,
+                visit.actual_date,
+                visit.is_protocol_deviation,
+                visit.deviation_description,
+                visit.performed_by_user_id,
+                visit.updated_at,
+            )
+            for visit in session.exec(
+                select(Visit).where(Visit.id.in_(before_visits))  # type: ignore[union-attr]
+            ).all()
+        }
+        assert after_visits == before_visits
+        assert len(session.exec(select(AuditLog)).all()) == before_audits
 
 
 # ------------------------------------------------- who is told, and how much
@@ -485,6 +588,47 @@ def test_a_site_scoped_writer_cannot_choose_someone_elses_site(
     )
     assert response.status_code == 201
     assert response.json()["event"]["site_id"] == mine.site_id
+
+
+def test_a_site_scoped_writer_cannot_enrol_into_another_sites_trial(
+    live, seeded_engine, investigators
+):
+    writer = investigators[0]
+    with Session(seeded_engine) as session:
+        other_trial = Trial(
+            protocol_number="SYNTHETIC-SIMULATION-OTHER-TRIAL",
+            title="Synthetic simulation ownership regression trial",
+            short_title="Synthetic ownership regression",
+            phase=TrialPhase.PHASE_1.value,
+            status=TrialStatus.PLANNING.value,
+            indication="Synthetic indication",
+            intervention="Synthetic intervention",
+            design="Synthetic design",
+            sponsor_name="Synthetic sponsor",
+        )
+        session.add(other_trial)
+        session.commit()
+        session.refresh(other_trial)
+        other_trial_id = other_trial.id
+        assert other_trial_id is not None
+        before_subjects = len(session.exec(select(Subject)).all())
+        before_visits = len(session.exec(select(Visit)).all())
+        before_audits = len(session.exec(select(AuditLog)).all())
+
+    response = live.post(
+        "/api/simulate/enrollment",
+        json={"trial_id": other_trial_id},
+        headers={"Authorization": f"Bearer {token_for_user(writer)}"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == (
+        f"no site with id {writer.site_id} in this trial"
+    )
+    with Session(seeded_engine) as session:
+        assert len(session.exec(select(Subject)).all()) == before_subjects
+        assert len(session.exec(select(Visit)).all()) == before_visits
+        assert len(session.exec(select(AuditLog)).all()) == before_audits
 
 
 def test_simulating_against_an_empty_database_says_what_to_run(empty_client):

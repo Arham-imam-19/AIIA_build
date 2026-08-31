@@ -71,6 +71,14 @@ class Trial(SQLModel, table=True):
     # acceptable before it may run.
     ethics_approval_number: str | None = Field(default=None, max_length=120)
     ethics_approval_date: date | None = Field(default=None)
+    ethics_approval_status: str | None = Field(default=None, max_length=30)
+    ethics_approval_valid_until: date | None = Field(default=None)
+
+    # Populated when the trial is activated and records who performed it.
+    activated_at: datetime | None = Field(default=None)
+    activated_by_user_id: int | None = Field(
+        default=None, foreign_key="users.id", index=True
+    )
 
     # Regulatory approval under India's New Drugs and Clinical Trials Rules 2019
     # (the legal gates a trial passes through, in order). Phase 5 turns these

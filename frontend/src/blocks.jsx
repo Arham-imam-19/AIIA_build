@@ -10,6 +10,9 @@
 //     series     points over time, drawn as a line chart
 //     checklist  pass/fail items, for the compliance gates
 
+import { useState } from 'react'
+import { downloadSafetyReport } from './api'
+
 import {
   CartesianGrid,
   Legend,
@@ -80,6 +83,47 @@ function Cell({ value }) {
   return <>{String(value)}</>
 }
 
+function RowAction({ action, row }) {
+  const [status, setStatus] = useState('idle')
+  const [error, setError] = useState('')
+  const eventId = row[action.id_key]
+
+  async function download() {
+    setStatus('loading')
+    setError('')
+    try {
+      await downloadSafetyReport(eventId)
+      setStatus('done')
+    } catch (err) {
+      setError(err?.message || 'Download failed')
+      setStatus('error')
+    }
+  }
+
+  if (action.kind !== 'safety_report' || eventId === null || eventId === undefined) {
+    return null
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <button
+        type="button"
+        onClick={download}
+        disabled={status === 'loading'}
+        className="whitespace-nowrap rounded-md border border-aiia-200 bg-aiia-50 px-2 py-1 text-xs font-medium text-aiia-700 hover:bg-aiia-100 disabled:cursor-wait disabled:opacity-60"
+        aria-label={`Download safety report for event ${eventId}`}
+      >
+        {status === 'loading' ? 'Preparing...' : action.label || 'Download'}
+      </button>
+      {error && (
+        <span className="max-w-32 text-xs text-red-600" title={error}>
+          Download failed
+        </span>
+      )}
+    </div>
+  )
+}
+
 function Table({ block, wide }) {
   const rows = block.rows || []
   return (
@@ -96,6 +140,11 @@ function Table({ block, wide }) {
                     {col.label}
                   </th>
                 ))}
+                {block.row_action && (
+                  <th className="whitespace-nowrap px-1 pb-2 font-medium">
+                    {block.row_action.label || 'Action'}
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -112,6 +161,11 @@ function Table({ block, wide }) {
                       <Cell value={row[col.key]} />
                     </td>
                   ))}
+                  {block.row_action && (
+                    <td className="px-1 py-2">
+                      <RowAction action={block.row_action} row={row} />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

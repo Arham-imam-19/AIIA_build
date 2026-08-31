@@ -3,19 +3,21 @@
 
 import Coordinator from './Coordinator'
 import Ethics from './Ethics'
+import InstitutionAdmin from './InstitutionAdmin'
 import Investigator from './Investigator'
+import Patient from './Patient'
 import Regulator from './Regulator'
 import Sponsor from './Sponsor'
 
 export const DASHBOARDS = {
+  admin: Regulator,
+  institution_admin: InstitutionAdmin,
   principal_investigator: Investigator,
   coordinator: Coordinator,
+  patient: Patient,
   sponsor: Sponsor,
   ethics_committee: Ethics,
   regulator: Regulator,
-  // An admin exists to run the system, not the study. They get the regulator's
-  // all-seeing read-only view, which is the closest honest match.
-  admin: Regulator,
 }
 
 export const FALLBACK = Sponsor

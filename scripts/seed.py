@@ -1,29 +1,16 @@
-"""Load a realistic SYNTHETIC Ayurveda clinical trial into the database.
+"""Fill the database with realistic synthetic trial data.
 
-Run with:
-    docker compose exec backend python scripts/seed.py
-    docker compose exec backend python scripts/seed.py --reset      # wipe first
-    docker compose exec backend python scripts/seed.py --passwords  # logins only
-    docker compose exec backend python scripts/seed.py --date 2026-08-25
+Run this against an empty database or use --reset to wipe and reseed:
 
-NEVER put real patient data in here. Everything loaded must be synthetic.
+    python scripts/seed.py --reset
 
-What this script is, and is not
--------------------------------
-It is a thin translator. All the interesting decisions - how many people
-enrolled, when their visits fell, which adverse events happened - live in
-`app/synthetic.py`, which is pure Python and unit-tested without a database.
+The generator lives in `app/synthetic.py` so the same deterministic dataset can
+be built anywhere (unit tests, migrations, local dev). This script is the thin
+CLI wrapper that opens the session, runs the inserts, and prints the summary.
 
-This file does exactly two things that module cannot:
-
-1. Insert the dictionaries as rows, parents before children.
-2. Turn natural keys into integer ids. The generator says "this visit belongs to
-   subject AIIA-ASH-02-014" because it cannot know that subject will end up as
-   id 137. Every key starting with an underscore is one of these references.
-
-Phase 2 added a third: give every seeded user a password hash so the five personas
-can actually log in, and print those logins at the end so a demo needs no
-guesswork.
+Passwords: every user in the seed dataset gets the same shared password, set in
+`app/config.py` as DEMO_PASSWORD ("aiia2026"). The seed prints the five persona
+logins at the end so a developer can copy-paste straight into the UI.
 """
 
 from __future__ import annotations
@@ -40,6 +27,8 @@ from app.enums import UserRole
 from app.models import (
     AdverseEvent,
     AuditLog,
+    EConsent,
+    PatientRequest,
     Site,
     Subject,
     Trial,
@@ -48,14 +37,26 @@ from app.models import (
 )
 
 # Children first: a table can only be emptied once nothing points into it.
-TABLES_IN_DELETE_ORDER = (AuditLog, AdverseEvent, Visit, Subject, User, Site, Trial)
+TABLES_IN_DELETE_ORDER = (
+    AuditLog,
+    EConsent,
+    PatientRequest,
+    AdverseEvent,
+    Visit,
+    Subject,
+    User,
+    Site,
+    Trial,
+)
 
-# The order the demo logins are printed in, which is also the order to walk them
-# in a presentation: from the person entering the data outwards to the person
-# inspecting it.
+# The order the demo logins are printed in, matching the full hierarchy:
+# Primary Admin -> Institution Admin -> Researcher (PI & CRC) -> Patient -> Oversight (Sponsor, Ethics, Regulator).
 DEMO_ROLE_ORDER = (
+    UserRole.ADMIN.value,
+    UserRole.INSTITUTION_ADMIN.value,
     UserRole.PRINCIPAL_INVESTIGATOR.value,
     UserRole.COORDINATOR.value,
+    UserRole.PATIENT.value,
     UserRole.SPONSOR.value,
     UserRole.ETHICS_COMMITTEE.value,
     UserRole.REGULATOR.value,
@@ -63,112 +64,41 @@ DEMO_ROLE_ORDER = (
 
 
 def _strip_references(row: dict) -> dict:
-    """Drop the underscore-prefixed natural keys, keeping only real columns."""
-    return {key: value for key, value in row.items() if not key.startswith("_")}
-
-
-def already_seeded(session: Session) -> Trial | None:
-    """Return the existing trial, if this database has been seeded before."""
-    return session.exec(select(Trial)).first()
-
-
-def wipe(session: Session) -> None:
-    """Empty every table.
-
-    Note this deletes the audit trail, which a real regulated system must never
-    allow. It is acceptable here only because the whole database is synthetic
-    demonstration data that gets rebuilt from scratch.
-    """
-    for model in TABLES_IN_DELETE_ORDER:
-        session.exec(delete(model))
-    session.commit()
+    """Drop keys prefixed with `_` that the generator uses for foreign-key
+    resolution before passing the dict straight to a SQLModel constructor."""
+    return {k: v for k, v in row.items() if not k.startswith("_")}
 
 
 def _demo_hash() -> str:
-    """One bcrypt hash of the shared demo password, computed once.
-
-    bcrypt is deliberately slow - that is the whole point of it - so hashing the
-    same string twelve times would add three seconds to every seed for no benefit.
-    Every demo user shares one password, so they share one hash.
-
-    In a real system each user's password gets its own random salt and therefore
-    its own hash. Here the twelve rows are identical, and that is fine precisely
-    because none of these people exist.
-    """
+    """One shared hash used for every synthetic account."""
     return security.hash_password(config.DEMO_PASSWORD)
 
 
-def set_demo_passwords(session: Session) -> int:
-    """Give every user without a password the shared demo one. Returns how many.
+from sqlalchemy import text
 
-    Separate from `seed()` so an already-seeded database can be brought up to
-    Phase 2 without throwing away its data - which matters if you seeded before
-    authentication existed.
-    """
-    users = session.exec(select(User).where(User.hashed_password.is_(None))).all()  # type: ignore[union-attr]
-    if not users:
-        return 0
-    shared = _demo_hash()
-    for user in users:
-        user.hashed_password = shared
-        session.add(user)
+
+def wipe(session: Session) -> None:
+    """Empty every application table in dependency order."""
+    session.exec(text("UPDATE users SET subject_id = NULL"))
+    session.exec(text("UPDATE subjects SET assigned_researcher_id = NULL, user_id = NULL"))
     session.commit()
-    return len(users)
+    for model in TABLES_IN_DELETE_ORDER:
+        session.exec(delete(model))  # type: ignore[call-overload]
+    session.commit()
 
 
-def demo_logins(session: Session) -> list[User]:
-    """One user per persona, in presentation order.
+def seed(
+    session: Session,
+    reference_date: date | None = None,
+    random_seed: int = synthetic.DEFAULT_SEED,
+) -> dict:
+    """Run the synthetic generator and commit the rows.
 
-    Picks the lowest id for each role, so the same person turns up every run and a
-    rehearsed demo does not change under you.
+    Returns the summary dict with entity counts.
     """
-    chosen: list[User] = []
-    for role in DEMO_ROLE_ORDER:
-        user = session.exec(
-            select(User)
-            .where(User.role == role, User.hashed_password.is_not(None))  # type: ignore[union-attr]
-            .order_by(User.id)
-        ).first()
-        if user is not None:
-            chosen.append(user)
-    return chosen
-
-
-def print_demo_logins(session: Session) -> None:
-    """Print the five personas' credentials - the whole point of the exercise."""
-    users = demo_logins(session)
-    if not users:
-        print("\n  no users with passwords yet; run: python scripts/seed.py --passwords")
-        return
-
-    sites = {
-        site.id: f"{site.site_code} {site.city}"
-        for site in session.exec(select(Site)).all()
-    }
-
-    print("\n  demo logins - password is the same for everyone")
-    print("  " + "-" * 74)
-    print(f"  {'role':<26} {'email':<38} {'site'}")
-    print("  " + "-" * 74)
-    for user in users:
-        scope = sites.get(user.site_id, "all sites") if user.site_id else "all sites"
-        print(f"  {user.role.replace('_', ' '):<26} {user.email:<38} {scope}")
-    print("  " + "-" * 74)
-    print(f"  password: {config.DEMO_PASSWORD}")
-    print("  Set a different one with DEMO_PASSWORD in .env before seeding.")
-    print("  There is one more account, role 'admin', which sees everything:")
-    admin = session.exec(
-        select(User).where(User.role == UserRole.ADMIN.value).order_by(User.id)
-    ).first()
-    if admin is not None:
-        print(f"    {admin.email}")
-
-
-def seed(session: Session, reference_date: date | None, random_seed: int) -> dict:
-    """Insert a whole synthetic trial and return the counts that were written."""
     data = synthetic.generate(reference_date=reference_date, random_seed=random_seed)
 
-    # ---------------------------------------------------------------- trial
+    # ----------------------------------------------------------------- trial
     trial = Trial(**_strip_references(data["trial"]))
     session.add(trial)
     # flush sends the INSERT so the database assigns an id, without ending the
@@ -190,6 +120,7 @@ def seed(session: Session, reference_date: date | None, random_seed: int) -> dic
     shared_password_hash = _demo_hash()
     user_id_by_email: dict[str, int] = {}
     user_role_by_email: dict[str, str] = {}
+    user_obj_by_email: dict[str, User] = {}
     for row in data["users"]:
         user = User(
             site_id=site_id_by_code.get(row["_site_code"]),
@@ -200,17 +131,48 @@ def seed(session: Session, reference_date: date | None, random_seed: int) -> dic
         session.flush()
         user_id_by_email[user.email] = user.id  # type: ignore[index]
         user_role_by_email[user.email] = user.role
+        user_obj_by_email[user.email] = user
+
+    trial.activated_by_user_id = user_id_by_email[
+        data["trial"]["_activated_by_email"]
+    ]
+    session.add(trial)
+    session.flush()
 
     # ------------------------------------------------------------- subjects
     subject_id_by_code: dict[str, int] = {}
     subject_site_by_code: dict[str, int] = {}
     for row in data["subjects"]:
-        site_id = site_id_by_code[row["_site_code"]]
-        subject = Subject(trial_id=trial_id, site_id=site_id, **_strip_references(row))
+        site_code = row["_site_code"]
+        site_id = site_id_by_code[site_code]
+        # Lead researcher for this site (the PI)
+        pi_spec = next((s for s in data["sites"] if s["site_code"] == site_code), None)
+        pi_user_id = user_id_by_email.get(pi_spec["pi_email"]) if pi_spec else None
+
+        subject = Subject(
+            trial_id=trial_id,
+            site_id=site_id,
+            assigned_researcher_id=pi_user_id,
+            **_strip_references(row),
+        )
         session.add(subject)
         session.flush()
         subject_id_by_code[subject.subject_code] = subject.id  # type: ignore[index]
         subject_site_by_code[subject.subject_code] = site_id
+
+    # Link demo patient accounts to their respective Subject records
+    for row in data["users"]:
+        if row.get("_subject_code") and row["_subject_code"] in subject_id_by_code:
+            subj_id = subject_id_by_code[row["_subject_code"]]
+            user_obj = user_obj_by_email[row["email"]]
+            user_obj.subject_id = subj_id
+            session.add(user_obj)
+            # Also update subject.user_id
+            subj_obj = session.get(Subject, subj_id)
+            if subj_obj:
+                subj_obj.user_id = user_obj.id
+                session.add(subj_obj)
+    session.flush()
 
     # --------------------------------------------------------------- visits
     for row in data["visits"]:
@@ -233,6 +195,40 @@ def seed(session: Session, reference_date: date | None, random_seed: int) -> dic
             **_strip_references(row),
         )
         session.add(event)
+
+    # ----------------------------------------------------- patient requests
+    for row in data.get("patient_requests", []):
+        patient_uid = user_id_by_email.get(row["_patient_email"])
+        admin_uid = user_id_by_email.get(row.get("_assigned_admin_email"))
+        site_id = site_id_by_code.get(row["_site_code"], 1)
+        subj_id = subject_id_by_code.get(row.get("_subject_code"))
+        if patient_uid:
+            req = PatientRequest(
+                site_id=site_id,
+                trial_id=trial_id,
+                patient_user_id=patient_uid,
+                subject_id=subj_id,
+                assigned_admin_id=admin_uid,
+                **_strip_references(row),
+            )
+            session.add(req)
+
+    # ----------------------------------------------------------- e-consents
+    for row in data.get("econsents", []):
+        subj_code = row["_subject_code"]
+        subj_id = subject_id_by_code.get(subj_code)
+        site_id = site_id_by_code.get(row["_site_code"], 1)
+        subj_obj = session.get(Subject, subj_id) if subj_id else None
+        user_uid = subj_obj.user_id if (subj_obj and subj_obj.user_id) else user_id_by_email.get("patient.01.014@demo.aiia-ctms.in", 1)
+        if subj_id:
+            econsent = EConsent(
+                trial_id=trial_id,
+                site_id=site_id,
+                subject_id=subj_id,
+                user_id=user_uid,
+                **_strip_references(row),
+            )
+            session.add(econsent)
 
     # Flush so the audit entries below can look up the ids just assigned.
     session.flush()
@@ -267,7 +263,7 @@ def seed(session: Session, reference_date: date | None, random_seed: int) -> dic
         )
 
     session.commit()
-    return data["summary"] | {"reference_date": data["reference_date"]}
+    return data["summary"] | {"reference_date": data["reference_date"], "trial": data["trial"]}
 
 
 def report(session: Session) -> None:
@@ -285,6 +281,8 @@ def report(session: Session) -> None:
         ("subjects", Subject),
         ("visits", Visit),
         ("adverse events", AdverseEvent),
+        ("patient requests", PatientRequest),
+        ("e-consents", EConsent),
         ("audit entries", AuditLog),
     ):
         print(f"  {label:<20} {count(model):>6}")
@@ -298,109 +296,126 @@ def report(session: Session) -> None:
     deviations = session.exec(
         select(Visit.id).where(Visit.is_protocol_deviation == True)  # noqa: E712
     ).all()
+
     print("  " + "-" * 46)
-    print(f"  {'enrolled participants':<20} {len(enrolled):>6}")
+    print(f"  {'subjects enrolled':<20} {len(enrolled):>6}")
     print(f"  {'serious AEs':<20} {len(serious):>6}")
     print(f"  {'protocol deviations':<20} {len(deviations):>6}")
+    print()
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+def print_demo_logins(session: Session) -> None:
+    """Print one working login for each of the five personas.
+
+    The password is the same for all of them, so a presenter only has to remember
+    one string during a demo.
+    """
+    users = session.exec(select(User).order_by(User.id)).all()
+    if not users:
+        print("  no users in database; run seed first\n")
+        return
+
+    # One login per role: the first user found for each, which matches what
+    # DEMO_ROLE_ORDER defines.
+    by_role: dict[str, User] = {}
+    for user in users:
+        if user.role in DEMO_ROLE_ORDER and user.role not in by_role:
+            by_role[user.role] = user
+
+    print("\n  demo persona logins  (password for all: %s)" % config.DEMO_PASSWORD)
+    print("  " + "-" * 62)
+    for role in DEMO_ROLE_ORDER:
+        user = by_role.get(role)
+        if not user:
+            continue
+        role_label = user.role.replace("_", " ").title()
+        site_note = (
+            "site %02d" % user.site_id
+            if user.site_id
+            else "all sites"
+        )
+        print(f"  {role_label:<25} {user.email:<36} ({site_note})")
+    print("  " + "-" * 62)
+    print("  every account is synthetic; none contains real patient data.\n")
+
+
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Seed the AIIA CTMS database with synthetic trial data."
+        description="Seed the AIIA CTMS database with synthetic Phase 1 data."
     )
     parser.add_argument(
         "--reset",
         action="store_true",
-        help="delete all existing rows before seeding (synthetic data only)",
+        help="Wipe all existing data before seeding.",
+    )
+    parser.add_argument(
+        "--report-only",
+        action="store_true",
+        help="Do not insert anything; just print row counts.",
     )
     parser.add_argument(
         "--passwords",
         action="store_true",
-        help="only fill in missing login passwords and print the demo logins; "
-        "does not touch trial data",
+        help="Do not insert anything; just print the demo login credentials.",
     )
     parser.add_argument(
         "--date",
-        dest="reference_date",
-        metavar="YYYY-MM-DD",
-        help="the date to treat as today; data is generated backwards from it "
-        "(default: the real today)",
+        type=lambda s: datetime.strptime(s, "%Y-%m-%d").date(),
+        default=None,
+        help="Reference date for synthetic generation (YYYY-MM-DD, default today).",
     )
     parser.add_argument(
         "--seed",
-        dest="random_seed",
         type=int,
         default=synthetic.DEFAULT_SEED,
-        help=f"random seed, for a reproducible demo (default: {synthetic.DEFAULT_SEED})",
+        help=f"PRNG seed (default {synthetic.DEFAULT_SEED}).",
     )
-    return parser.parse_args(argv)
+    return parser.parse_args()
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
+def main() -> None:
+    args = parse_args()
 
-    reference_date: date | None = None
-    if args.reference_date:
-        try:
-            reference_date = datetime.strptime(args.reference_date, "%Y-%m-%d").date()
-        except ValueError:
-            print(f"✗ --date must look like 2026-08-25, got {args.reference_date!r}")
-            return 2
-
-    ok, detail = check_database()
+    engine = get_engine()
+    ok, error = check_database()
     if not ok:
-        print(f"✗ cannot reach the database: {detail}")
-        print("  Is the stack up? Try: docker compose up -d")
-        return 1
-    print(f"✓ database reachable ({detail})")
+        print(f"Database error: {error}")
+        sys.exit(1)
 
-    with Session(get_engine()) as session:
-        try:
-            existing = already_seeded(session)
-        except Exception as exc:  # noqa: BLE001
-            print(f"✗ cannot read the trials table: {type(exc).__name__}: {exc}")
-            print("  Have the migrations run? Try: docker compose exec backend "
-                  "alembic upgrade head")
-            return 1
+    with Session(engine) as session:
+        if args.report_only:
+            report(session)
+            return
 
-        if existing is not None:
-            if args.passwords:
-                filled = set_demo_passwords(session)
-                if filled:
-                    print(f"✓ set the demo password on {filled} user(s)")
-                else:
-                    print("• every user already has a password; nothing to change")
-                print_demo_logins(session)
-                return 0
+        if args.passwords:
+            print_demo_logins(session)
+            return
 
-            if not args.reset:
-                print(f"• already seeded with {existing.protocol_number}; nothing to do")
-                print("  To rebuild from scratch: python scripts/seed.py --reset")
-                report(session)
-                print_demo_logins(session)
-                return 0
-            print(f"• --reset given: clearing existing data ({existing.protocol_number})")
+        has_trials = session.exec(select(Trial.id)).first() is not None
+
+        if has_trials and not args.reset:
+            print(
+                "\n  database already contains data. Use --reset to wipe and re-seed, "
+                "or --report-only to inspect.\n"
+            )
+            report(session)
+            print_demo_logins(session)
+            return
+
+        if args.reset:
+            print("\n  wiping existing data...")
             wipe(session)
-        elif args.passwords:
-            print("• nothing is seeded yet, so there are no users to give passwords to")
-            print("  Run without --passwords first: python scripts/seed.py")
-            return 1
 
-        print("• generating synthetic trial data...")
-        summary = seed(session, reference_date, args.random_seed)
+        print(f"\n  generating synthetic dataset (seed={args.seed})...")
+        summary = seed(session, reference_date=args.date, random_seed=args.seed)
 
-        print(f"✓ seeded, treating {summary['reference_date']} as today")
+        print(f"  seeded trial: {summary['trial']['protocol_number']}")
         report(session)
         print_demo_logins(session)
 
-    print("\n  All data above is synthetic. No real patient data.")
-    print("  Log in at:  http://localhost:5173")
-    print("  Or by hand: curl -s -X POST http://localhost:8000/api/auth/login \\")
-    print("                -H 'Content-Type: application/json' \\")
-    print("                -d '{\"email\":\"vikram.desai@demo.aiia-ctms.in\","
-          f"\"password\":\"{config.DEMO_PASSWORD}\"}}'")
-    return 0
-
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(1)

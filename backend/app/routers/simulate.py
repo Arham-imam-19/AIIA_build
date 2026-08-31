@@ -43,6 +43,7 @@ from app.enums import (
 )
 from app.events import bus, now_iso
 from app.models import AdverseEvent, Site, Subject, Trial, Visit
+from app.models.base import utcnow
 from app.rbac import CurrentUser, Permission, get_current_user, require
 from app.routers.stats import resolve_trial
 
@@ -250,6 +251,13 @@ def options(user: CurrentUser = Depends(get_current_user)) -> dict:
             {
                 **action,
                 "allowed": user.can(Permission(action["permission"])),
+                "reason": (
+                    None
+                    if user.can(Permission(action["permission"]))
+                    else f"A {user.role_label} does not enter trial data. Log in as the "
+                    "Principal Investigator or Coordinator to do this - this screen "
+                    "will update on its own when they do."
+                ),
                 "why_not": (
                     None
                     if user.can(Permission(action["permission"]))
@@ -278,6 +286,10 @@ async def simulate_enrollment(
     body = body or SimulateRequest()
     trial = _trial(session, body.trial_id)
     site = _site(session, trial, user, body.site_id)
+    if site.trial_id != trial.id:
+        raise HTTPException(
+            status_code=404, detail=f"no site with id {site.id} in this trial"
+        )
 
     today = date.today()
     rng = random.Random()
@@ -483,12 +495,16 @@ async def simulate_deviation(
     body = body or SimulateRequest()
     trial = _trial(session, body.trial_id)
     site = _site(session, trial, user, body.site_id)
+    today = date.today()
+    latest_eligible_date = today - timedelta(days=4)
 
     visit = session.exec(
         select(Visit)
         .where(
             Visit.trial_id == trial.id,
             Visit.status == VisitStatus.SCHEDULED.value,
+            Visit.scheduled_date.is_not(None),  # type: ignore[union-attr]
+            Visit.scheduled_date <= latest_eligible_date,
             Visit.subject_id.in_(  # type: ignore[union-attr]
                 select(Subject.id).where(Subject.site_id == site.id)
             ),
@@ -499,14 +515,15 @@ async def simulate_deviation(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"there are no scheduled visits left at site {site.site_code} to "
-                "record a deviation against."
+                f"there are no scheduled visits due at site {site.site_code} that "
+                "can be recorded as a deviation without a future actual date."
             ),
         )
 
     subject = session.get(Subject, visit.subject_id)
-    late_by = random.randint(4, 11)
-    actual = (visit.scheduled_date or date.today()) + timedelta(days=late_by)
+    days_overdue = (today - visit.scheduled_date).days
+    late_by = random.randint(4, min(11, days_overdue))
+    actual = visit.scheduled_date + timedelta(days=late_by)
 
     previous_status = visit.status
     visit.status = VisitStatus.COMPLETED.value
@@ -518,6 +535,7 @@ async def simulate_deviation(
         "completed in full at the later visit. Reported as a deviation."
     )
     visit.performed_by_user_id = user.id
+    visit.updated_at = utcnow()
     session.add(visit)
 
     audit.record(
