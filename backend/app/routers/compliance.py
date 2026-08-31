@@ -22,6 +22,7 @@ router = APIRouter(prefix="/api", tags=["compliance"])
 class AuditLogPublic(SQLModel):
     id: int
     timestamp: datetime
+    timestamp_ist: str | None = None
     user_id: int | None = None
     user_email: str | None
     user_role: str | None
@@ -64,10 +65,10 @@ def list_audit_log(
     limit: int = limit_param(),
     offset: int = offset_param(),
 ) -> Page[AuditLogPublic]:
-    """The 21 CFR Part 11 ALCOA+ audit trail.
+    """The 21 CFR Part 11 & CERT-In ALCOA+ audit trail.
 
     Append-only. Visible only to oversight roles (Ethics Committee, Regulator, Admin).
-    It is never filtered by site: a regulator inspecting the trial needs the complete timeline.
+    Preserves records with dual UTC and Indian Standard Time (IST / UTC+05:30) stamps.
     """
     statement = select(AuditLog).order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
     if entity_type:
@@ -94,11 +95,20 @@ def list_audit_log(
         )
 
     total, items = paginate(session, statement, limit, offset)
+    from datetime import timedelta
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+    sanitized_items = []
+    for item in items:
+        dto = AuditLogPublic.model_validate(item, from_attributes=True)
+        dt = item.timestamp if item.timestamp.tzinfo else item.timestamp.replace(tzinfo=timezone.utc)
+        dto.timestamp_ist = dt.astimezone(ist_tz).strftime("%Y-%m-%d %H:%M:%S IST")
+        sanitized_items.append(dto)
+
     return Page(
         total=total,
         limit=limit,
         offset=offset,
-        items=[AuditLogPublic.model_validate(item, from_attributes=True) for item in items],
+        items=sanitized_items,
     )
 
 

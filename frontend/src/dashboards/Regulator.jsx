@@ -27,7 +27,7 @@ function AuditDiffViewer({ entry }) {
           ALCOA+ Audit Record #{entry.id} &mdash; {entry.action.toUpperCase()} on {entry.entity_type}
         </span>
         <span className="text-slate-500">
-          IP: {entry.ip_address || '127.0.0.1'} | Agent: {entry.user_agent ? entry.user_agent.slice(0, 45) + '...' : 'Browser'}
+          {entry.timestamp_ist || (entry.timestamp ? new Date(entry.timestamp).toISOString() : '-')} | IP: {entry.ip_address || '127.0.0.1'} | CERT-In 180-Day Retention
         </span>
       </div>
 
@@ -194,7 +194,7 @@ function InteractiveAuditExplorer() {
         <table className="min-w-full divide-y divide-slate-200 text-left text-xs">
           <thead>
             <tr className="bg-slate-50 text-slate-600 font-medium">
-              <th className="py-2.5 pl-3 pr-2">Timestamp (UTC)</th>
+              <th className="py-2.5 pl-3 pr-2">Timestamp (IST / UTC)</th>
               <th className="px-2 py-2.5">User</th>
               <th className="px-2 py-2.5">Role</th>
               <th className="px-2 py-2.5">Action</th>
@@ -215,10 +215,12 @@ function InteractiveAuditExplorer() {
             ) : (
               logs.map((entry) => {
                 const isExpanded = expandedId === entry.id
+                const utcStr = entry.timestamp ? new Date(entry.timestamp).toISOString().replace('T', ' ').slice(0, 19) + ' UTC' : '-'
                 return (
                   <tr key={entry.id} className={`hover:bg-slate-50/75 transition-colors ${isExpanded ? 'bg-slate-50/60' : ''}`}>
-                    <td className="py-2.5 pl-3 pr-2 whitespace-nowrap font-mono text-[11px] text-slate-500">
-                      {entry.timestamp ? new Date(entry.timestamp).toISOString().replace('T', ' ').slice(0, 19) : '-'}
+                    <td className="py-2.5 pl-3 pr-2 whitespace-nowrap font-mono text-[11px] text-slate-700">
+                      <div>{entry.timestamp_ist || utcStr}</div>
+                      <div className="text-[10px] text-slate-400 font-sans">{utcStr}</div>
                     </td>
                     <td className="px-2 py-2.5 font-medium text-slate-900 truncate max-w-[140px]" title={entry.user_email || 'System'}>
                       {entry.user_email || 'System'}
