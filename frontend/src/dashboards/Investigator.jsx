@@ -2,17 +2,52 @@
 // hospital. Everything on this screen is their own site - asking for another
 // site's participant returns 403, by design.
 
+import { useEffect, useState } from 'react'
+import { fetchTrials } from '../api'
 import DashboardLayout from './layout'
+
+function SiteIECStatusBanner() {
+  const [trial, setTrial] = useState(null)
+
+  useEffect(() => {
+    fetchTrials()
+      .then((res) => {
+        if (res.items?.[0]) setTrial(res.items[0])
+      })
+      .catch(() => {})
+  }, [])
+
+  const isApproved = trial?.ethics_approval_status === 'approved'
+
+  return (
+    <div className={`flex items-center justify-between rounded-lg border px-4 py-2.5 text-xs ${
+      isApproved
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+        : 'border-amber-200 bg-amber-50 text-amber-900'
+    }`}>
+      <span className="flex items-center gap-2 font-medium">
+        <span className={`flex h-2 w-2 rounded-full ${isApproved ? 'bg-emerald-600' : 'bg-amber-600'}`}></span>
+        {isApproved
+          ? `✅ IEC Clearance Active (${trial.ethics_approval_number || 'Approved'}): Site authorized to screen & enroll participants.`
+          : `⚠️ Enrollment On Hold: Trial ethics approval is ${trial?.ethics_approval_status || 'Pending'}. Software blocks enrollment until IEC approves.`}
+      </span>
+      <span className="hidden sm:inline font-mono text-[11px]">
+        NDCT Rules 2019 Rule 22
+      </span>
+    </div>
+  )
+}
 
 export default function Investigator(props) {
   return (
-    <DashboardLayout
-      {...props}
-      // The adverse-event table is the clinically important one, so it gets the
-      // full width rather than being squeezed next to a chart.
-      wide={['recent_aes']}
-      simulateFirst
-      note="Scoped to your site only. Safety first: an open adverse event is one that has not resolved yet, and a serious one has to reach the ethics committee within days."
-    />
+    <div className="space-y-4">
+      <SiteIECStatusBanner />
+      <DashboardLayout
+        {...props}
+        wide={['recent_aes']}
+        simulateFirst
+        note="Scoped to your site only. Safety first: an open adverse event is one that has not resolved yet, and a serious one has to reach the ethics committee within days."
+      />
+    </div>
   )
 }

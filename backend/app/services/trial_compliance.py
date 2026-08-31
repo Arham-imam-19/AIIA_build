@@ -203,6 +203,11 @@ def check_ethics_clearance_for_enrollment(
             False,
             "IEC approval number is missing from the trial record.",
         )
+    if trial.ethics_approval_date is not None and trial.ethics_approval_date > evaluation_date:
+        return (
+            False,
+            f"IEC approval date ({trial.ethics_approval_date.isoformat()}) is in the future; screening and enrollment are blocked.",
+        )
     if trial.ethics_approval_valid_until is not None and trial.ethics_approval_valid_until < evaluation_date:
         return (
             False,
