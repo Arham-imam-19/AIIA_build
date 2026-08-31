@@ -387,6 +387,15 @@ function CertificateModal({ consent, onClose }) {
             </div>
           </div>
 
+          <div className="rounded-lg border border-blue-200 bg-blue-50/70 p-2.5 dark:border-blue-900 dark:bg-blue-950/40">
+            <span className="text-[10px] font-semibold text-blue-900 dark:text-blue-300 block mb-0.5">
+              21 CFR PART 11 & GCP-ASU SIGNATURE ATTESTATION
+            </span>
+            <p className="text-[11px] italic text-blue-800 dark:text-blue-200">
+              "{consent.meaning_of_signature || 'I confirm my informed voluntary consent to participate in protocol AIIA-ASH-2026-01 under GCP-ASU and ICMR ethical guidelines.'}"
+            </p>
+          </div>
+
           <div>
             <span className="text-slate-400 block text-[10px] mb-1">DIGITAL SIGNATURE CAPTURE</span>
             <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white flex justify-center h-20 items-center">
@@ -397,6 +406,25 @@ function CertificateModal({ consent, onClose }) {
           <div className="bg-slate-100 dark:bg-slate-800 p-2.5 rounded-lg font-mono text-[11px] break-all">
             <span className="text-slate-400 block text-[9px] font-sans">SHA-256 CRYPTOGRAPHIC INTEGRITY HASH</span>
             <span className="text-slate-700 dark:text-slate-300">{consent.sha256_hash}</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <a
+              href={`/api/econsent/subjects/${consent.subject_id}/fhir`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+            >
+              📄 HL7 FHIR R4 JSON
+            </a>
+            <a
+              href={`/api/econsent/subjects/${consent.subject_id}/abdm-artefact`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-medium text-indigo-700 hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-300"
+            >
+              🇮🇳 ABDM Consent Artefact
+            </a>
           </div>
         </div>
 

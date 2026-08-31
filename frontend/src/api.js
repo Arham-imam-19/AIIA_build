@@ -120,6 +120,12 @@ export const signEConsent = (body) =>
 export const getSubjectEConsent = (subjectId) =>
   api(`/api/econsent/subjects/${subjectId}`)
 
+export const getSubjectFhirConsent = (subjectId) =>
+  api(`/api/econsent/subjects/${subjectId}/fhir`)
+
+export const getSubjectAbdmConsent = (subjectId) =>
+  api(`/api/econsent/subjects/${subjectId}/abdm-artefact`)
+
 export const fetchAuditLogs = (params = {}) => {
   const query = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) {

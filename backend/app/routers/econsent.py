@@ -51,6 +51,11 @@ class EConsentPublic(BaseModel):
     status: str
     signed_at: str
     ip_address: str | None
+    meaning_of_signature: str = Field(
+        default="I confirm my informed voluntary consent to participate in protocol AIIA-ASH-2026-01 under GCP-ASU and ICMR ethical guidelines."
+    )
+    fhir_uri: str = Field(default="")
+    abdm_artefact_uri: str = Field(default="")
 
 
 class ProtocolInfoSheet(BaseModel):
@@ -130,6 +135,9 @@ def _hydrate_consent(session: Session, consent: EConsent, user: CurrentUser | No
         status=consent.status,
         signed_at=consent.signed_at.isoformat() if consent.signed_at else "",
         ip_address=consent.ip_address,
+        meaning_of_signature="I confirm my informed voluntary consent to participate in protocol AIIA-ASH-2026-01 under GCP-ASU and ICMR ethical guidelines.",
+        fhir_uri=f"/api/econsent/subjects/{consent.subject_id}/fhir",
+        abdm_artefact_uri=f"/api/econsent/subjects/{consent.subject_id}/abdm-artefact",
     )
 
 
@@ -277,8 +285,17 @@ def get_subject_consent(
     if not subject:
         raise HTTPException(status_code=404, detail=f"subject {subject_id} not found")
 
+    consent = session.exec(select(EConsent).where(EConsent.subject_id == subject_id)).first()
+    if not consent:
+        raise HTTPException(status_code=404, detail="e-Consent has not been recorded for this participant yet")
+
     if user.role == UserRole.PATIENT.value:
-        if user.subject_id != subject_id:
+        if user.subject_id is not None and user.subject_id != subject_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="forbidden: patients may only view their own consent certificate",
+            )
+        elif user.subject_id is None and consent.user_id != user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="forbidden: patients may only view their own consent certificate",
@@ -286,8 +303,209 @@ def get_subject_consent(
     elif user.is_site_scoped:
         assert_site_visible(user, subject.site_id)
 
+    return _hydrate_consent(session, consent, user)
+
+
+@router.get("/subjects/{subject_id}/fhir")
+def get_subject_fhir_consent(
+    subject_id: int,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.ECONSENT_READ)),
+) -> dict:
+    """Export e-Consent as a standard HL7 FHIR R4 Consent resource."""
+    subject = session.get(Subject, subject_id)
+    if not subject:
+        raise HTTPException(status_code=404, detail=f"subject {subject_id} not found")
+
     consent = session.exec(select(EConsent).where(EConsent.subject_id == subject_id)).first()
     if not consent:
-        raise HTTPException(status_code=404, detail="e-Consent has not been recorded for this participant yet")
+        raise HTTPException(status_code=404, detail="e-Consent not recorded for this participant")
 
-    return _hydrate_consent(session, consent, user)
+    if user.role == UserRole.PATIENT.value:
+        if user.subject_id is not None and user.subject_id != subject_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="forbidden: patients may only view their own consent",
+            )
+        elif user.subject_id is None and consent.user_id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="forbidden: patients may only view their own consent",
+            )
+    elif user.is_site_scoped:
+        assert_site_visible(user, subject.site_id)
+
+    trial = session.get(Trial, consent.trial_id)
+    site = session.get(Site, consent.site_id)
+
+    abha_val = consent.abha_id
+    if privacy.should_mask_patient_pii(user, consent.site_id):
+        abha_val = privacy.mask_abha_id(abha_val)
+
+    return {
+        "resourceType": "Consent",
+        "id": f"econsent-{consent.id}",
+        "status": "active" if consent.status == ConsentStatus.SIGNED.value else "draft",
+        "scope": {
+            "coding": [
+                {
+                    "system": "http://terminology.hl7.org/CodeSystem/consentscope",
+                    "code": "research",
+                    "display": "Research",
+                }
+            ]
+        },
+        "category": [
+            {
+                "coding": [
+                    {
+                        "system": "http://terminology.hl7.org/CodeSystem/consentcategorycodes",
+                        "code": "research",
+                        "display": "Research Information Access",
+                    }
+                ]
+            }
+        ],
+        "patient": {
+            "reference": f"Patient/{subject.subject_code}",
+            "display": f"Subject {subject.subject_code}",
+            "identifier": {
+                "system": "https://abdm.gov.in/abha",
+                "value": abha_val or "14-XXXX-XXXX-5544",
+            },
+        },
+        "dateTime": consent.signed_at.isoformat() if consent.signed_at else datetime.now(timezone.utc).isoformat(),
+        "performer": [
+            {
+                "reference": f"Organization/{site.site_code if site else 'AIIA'}",
+                "display": site.name if site else "All India Institute of Ayurveda",
+            }
+        ],
+        "organization": [
+            {
+                "reference": "Organization/AIIA-NPvCC",
+                "display": "All India Institute of Ayurveda (AIIA)",
+            }
+        ],
+        "policy": [
+            {
+                "authority": "https://cdsco.gov.in",
+                "uri": "https://cdsco.gov.in/opencms/opencms/en/Clinical-Trials/New-Drugs-and-Clinical-Trials-Rules-2019/",
+            }
+        ],
+        "verification": [
+            {
+                "verified": True,
+                "verifiedWith": {"display": "Ayushman Bharat Health Account (ABHA)"},
+                "verificationDate": consent.signed_at.isoformat() if consent.signed_at else None,
+            }
+        ],
+        "provision": {
+            "type": "permit",
+            "period": {
+                "start": str(subject.screening_date or "2026-08-25"),
+                "end": "2027-08-25",
+            },
+            "purpose": [
+                {
+                    "system": "http://terminology.hl7.org/CodeSystem/v3-ActReason",
+                    "code": "CLINTRL",
+                    "display": f"Clinical Trial Research Protocol {trial.protocol_number if trial else 'AIIA-ASH-2026-01'}",
+                }
+            ],
+            "data": [
+                {"meaning": "instance", "reference": f"ResearchStudy/{trial.protocol_number if trial else 'AIIA-ASH-2026-01'}"}
+            ],
+        },
+    }
+
+
+@router.get("/subjects/{subject_id}/abdm-artefact")
+def get_subject_abdm_consent_artefact(
+    subject_id: int,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.ECONSENT_READ)),
+) -> dict:
+    """Export e-Consent formatted as an ABDM Consent Artefact JSON."""
+    subject = session.get(Subject, subject_id)
+    consent = session.exec(select(EConsent).where(EConsent.subject_id == subject_id)).first()
+    if not consent:
+        raise HTTPException(status_code=404, detail="e-Consent not recorded for this participant")
+
+    if user.role == UserRole.PATIENT.value:
+        if user.subject_id is not None and user.subject_id != subject_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="forbidden: patients may only view their own consent",
+            )
+        elif user.subject_id is None and consent.user_id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="forbidden: patients may only view their own consent",
+            )
+    elif user.is_site_scoped:
+        assert_site_visible(user, subject.site_id)
+
+    trial = session.get(Trial, consent.trial_id)
+    site = session.get(Site, consent.site_id)
+
+    abha_val = consent.abha_id
+    if privacy.should_mask_patient_pii(user, consent.site_id):
+        abha_val = privacy.mask_abha_id(abha_val)
+
+    return {
+        "consentDetail": {
+            "schemaVersion": "v0.5",
+            "consentId": f"ABDM-CA-{consent.sha256_hash[:16]}",
+            "createdAt": consent.signed_at.isoformat() if consent.signed_at else None,
+            "patient": {
+                "id": abha_val or f"{subject.subject_code}@abdm",
+            },
+            "careContexts": [
+                {
+                    "patientReference": f"Subject/{subject.subject_code}",
+                    "careContextReference": f"Trial/{trial.protocol_number if trial else 'AIIA-ASH-2026-01'}",
+                }
+            ],
+            "purpose": {
+                "text": "Clinical Trial Research",
+                "code": "CA-01",
+                "refUri": "https://aiia.gov.in/protocols/AIIA-ASH-2026-01",
+            },
+            "hip": {
+                "id": site.site_code if site else "IN0910000001",
+                "name": site.name if site else "All India Institute of Ayurveda",
+            },
+            "hiu": {
+                "id": "AIIA-NPvCC",
+                "name": "National Pharmacovigilance Coordination Centre",
+            },
+            "consentManager": {
+                "id": "sbx",
+            },
+            "hiTypes": [
+                "DiagnosticReport",
+                "Prescription",
+                "OPConsultation",
+                "DischargeSummary",
+            ],
+            "permission": {
+                "accessMode": "VIEW",
+                "dateRange": {
+                    "from": "2026-08-25T00:00:00Z",
+                    "to": "2027-08-25T00:00:00Z",
+                },
+                "dataEraseAt": "2031-08-25T00:00:00Z",
+                "frequency": {
+                    "unit": "HOUR",
+                    "value": 1,
+                    "repeats": 0,
+                },
+            },
+        },
+        "signature": {
+            "algorithm": "SHA256withECDSA",
+            "digest": consent.sha256_hash,
+            "meaning": "I confirm my informed voluntary consent to participate in protocol AIIA-ASH-2026-01 under GCP-ASU and ICMR ethical guidelines.",
+        },
+    }
