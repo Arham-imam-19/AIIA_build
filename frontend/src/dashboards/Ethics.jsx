@@ -117,7 +117,7 @@ function IECDecisionPanel({ onUpdated }) {
             className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-900 focus:border-aiia-500 focus:outline-none"
           >
             <option value="approved">Approved (Clear for Recruitment)</option>
-            <option value="pending_ethics">Pending Review (Block Enrollment)</option>
+            <option value="pending">Pending Review (Block Enrollment)</option>
             <option value="rejected">Rejected (Halt Trial)</option>
             <option value="expired">Expired (Requires Renewal)</option>
           </select>
