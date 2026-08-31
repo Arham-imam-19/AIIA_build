@@ -187,7 +187,7 @@ def _hydrate_adverse_event(
     detailed_deadline = None
     urgency = None
 
-    if event.is_serious:
+    if event.is_serious and event.onset_date:
         expedited_deadline = event.onset_date + timedelta(days=1)
         detailed_deadline = event.onset_date + timedelta(days=14)
 
@@ -199,6 +199,8 @@ def _hydrate_adverse_event(
             urgency = "EXPEDITED_DUE_SOON"
         else:
             urgency = "EXPEDITED_PENDING"
+    elif event.is_serious:
+        urgency = "EXPEDITED_PENDING"
     else:
         urgency = "NON_SERIOUS"
 

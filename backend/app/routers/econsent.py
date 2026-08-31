@@ -428,6 +428,9 @@ def get_subject_abdm_consent_artefact(
 ) -> dict:
     """Export e-Consent formatted as an ABDM Consent Artefact JSON."""
     subject = session.get(Subject, subject_id)
+    if not subject:
+        raise HTTPException(status_code=404, detail=f"subject {subject_id} not found")
+
     consent = session.exec(select(EConsent).where(EConsent.subject_id == subject_id)).first()
     if not consent:
         raise HTTPException(status_code=404, detail="e-Consent not recorded for this participant")

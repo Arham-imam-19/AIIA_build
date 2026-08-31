@@ -224,11 +224,14 @@ def _sae_reporting(session: Session, trial_id: int, user: CurrentUser) -> dict:
             verdict = f"on time ({delay} days)" if delay is not None else "on time"
 
         # NDCT Rules 2019 24h expedited reporting check
-        expedited_due = event.onset_date + timedelta(days=1)
         if event.reported_to_ec:
             urgency = "COMPLIANT_SUBMITTED"
-        elif today_eval > expedited_due:
-            urgency = "EXPEDITED_OVERDUE"
+        elif event.onset_date:
+            expedited_due = event.onset_date + timedelta(days=1)
+            if today_eval > expedited_due:
+                urgency = "EXPEDITED_OVERDUE"
+            else:
+                urgency = "EXPEDITED_DUE_SOON"
         else:
             urgency = "EXPEDITED_DUE_SOON"
 
