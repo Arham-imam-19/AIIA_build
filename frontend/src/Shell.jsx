@@ -15,12 +15,12 @@ function LivePill({ status, backend, updatedAt, onRefresh }) {
   const [label, dot] = LIVE_LABEL[status] || LIVE_LABEL.connecting
   const time = updatedAt ? new Date(updatedAt).toLocaleTimeString() : null
   return (
-    <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1">
-      <span className={`inline-block h-2 w-2 rounded-full ${dot}`} />
-      <span className="text-xs font-medium text-slate-600">{label}</span>
+    <div className="flex items-center gap-2 border border-slate-300 bg-white px-2.5 py-1 text-xs">
+      <span className={`inline-block h-2 w-2 ${dot}`} />
+      <span className="font-medium text-slate-700">{label}</span>
       {backend && (
         <span
-          className="font-mono text-xs text-slate-400"
+          className="font-mono text-slate-500"
           title={
             backend === 'redis'
               ? 'Redis pub/sub: updates cross every backend container.'
@@ -30,11 +30,11 @@ function LivePill({ status, backend, updatedAt, onRefresh }) {
           {backend}
         </span>
       )}
-      {time && <span className="text-xs text-slate-400">· {time}</span>}
+      {time && <span className="text-slate-400">· {time}</span>}
       <button
         onClick={onRefresh}
         title="Ask the server to resend the numbers"
-        className="ml-0.5 text-xs text-slate-400 underline hover:text-slate-600"
+        className="ml-0.5 text-slate-500 underline hover:text-slate-800"
       >
         refresh
       </button>
@@ -53,21 +53,30 @@ export default function Shell({ view, setView, live, children }) {
   }, [])
 
   const scope = user.site_scoped
-    ? `site ${user.site_id ?? '—'} only`
-    : 'all sites'
+    ? `Site ${user.site_id ?? '—'} only`
+    : 'All participating sites'
+
+  const navItems = [
+    ['dashboard', 'Dashboard'],
+    ...(user.role === 'admin' ? [['create_account', '+ Create New Account']] : []),
+    ['access', 'Access Rules'],
+  ]
 
   return (
-    <div className="min-h-full bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-4">
+    <div className="min-h-full bg-slate-100 text-slate-900 font-sans">
+      <header className="border-b border-slate-300 bg-white shadow-sm">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-6 py-3.5">
           <div className="min-w-0">
-            <h1 className="truncate text-base font-semibold tracking-tight">
-              AIIA Clinical Trials Dashboard
+            <div className="text-[10px] font-bold tracking-wider uppercase text-slate-500">
+              Ministry of Ayush &middot; Government of India
+            </div>
+            <h1 className="truncate text-base font-bold text-slate-900 tracking-tight">
+              All India Institute of Ayurveda &mdash; Clinical Trials Portal (CTMS)
             </h1>
-            <p className="truncate text-xs text-slate-500">
-              {user.full_name} &middot;{' '}
-              <span className="font-medium text-aiia-700">{user.role_label}</span> &middot;{' '}
-              {scope}
+            <p className="truncate text-xs text-slate-600">
+              User: <span className="font-semibold text-slate-900">{user.full_name}</span> &middot;{' '}
+              Role: <span className="font-semibold text-slate-900">{user.role_label}</span> &middot;{' '}
+              Jurisdiction: <span className="font-medium text-slate-700">{scope}</span>
               {user.organization ? ` · ${user.organization}` : ''}
             </p>
           </div>
@@ -79,18 +88,15 @@ export default function Shell({ view, setView, live, children }) {
               updatedAt={live.updatedAt}
               onRefresh={live.refresh}
             />
-            <nav className="flex overflow-hidden rounded-lg border border-slate-200">
-              {[
-                ['dashboard', 'Dashboard'],
-                ['access', 'Access rules'],
-              ].map(([key, label]) => (
+            <nav className="flex border border-slate-300 bg-white">
+              {navItems.map(([key, label]) => (
                 <button
                   key={key}
                   onClick={() => setView(key)}
-                  className={`px-3 py-1.5 text-xs font-medium transition ${
+                  className={`border-r border-slate-300 last:border-r-0 px-3.5 py-1.5 text-xs font-semibold transition ${
                     view === key
-                      ? 'bg-aiia-600 text-white'
-                      : 'bg-white text-slate-600 hover:bg-slate-50'
+                      ? 'bg-slate-800 text-white'
+                      : 'bg-white text-slate-700 hover:bg-slate-100'
                   }`}
                 >
                   {label}
@@ -99,15 +105,15 @@ export default function Shell({ view, setView, live, children }) {
             </nav>
             <button
               onClick={signOut}
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+              className="border border-slate-300 bg-slate-50 px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition"
             >
-              Sign out
+              Sign Out
             </button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-6">{children}</main>
+      <main className="mx-auto max-w-7xl px-6 py-6">{children}</main>
 
       <footer className="mx-auto max-w-6xl px-6 pb-8 text-center text-xs text-slate-400">
         {live.dashboard?.data_notice || 'All data is synthetic. No real patient data.'}

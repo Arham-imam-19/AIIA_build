@@ -1,31 +1,19 @@
 import { useEffect, useState } from 'react'
 import { fetchSites, fetchUsers, resetTrialData, updateUser } from '../api'
-import CreateUserModal from '../components/CreateUserModal'
 import CreateTrialModal from '../components/CreateTrialModal'
 import CreateSiteModal from '../components/CreateSiteModal'
 import DataExportCenter from '../components/DataExportCenter'
 import DashboardLayout from './layout'
 
-const ROLE_BADGE_STYLES = {
-  admin: 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300',
-  institution_admin: 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300',
-  principal_investigator: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300',
-  coordinator: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
-  ethics_committee: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
-  sponsor: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300',
-  regulator: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300',
-  patient: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300',
-}
-
 const ROLE_DISPLAY_NAMES = {
-  admin: 'Primary Admin',
-  institution_admin: 'Institution Admin',
+  admin: 'Primary Administrator',
+  institution_admin: 'Institution Site Admin',
   principal_investigator: 'Principal Investigator',
-  coordinator: 'Clinical Coordinator',
-  ethics_committee: 'Ethics Committee',
-  sponsor: 'Sponsor / Monitor',
-  regulator: 'CDSCO Regulator',
-  patient: 'Patient Subject',
+  coordinator: 'Clinical Research Coordinator',
+  ethics_committee: 'Ethics Committee Member',
+  sponsor: 'Trial Sponsor / Monitor',
+  regulator: 'CDSCO Regulatory Inspector',
+  patient: 'Subject / Patient',
 }
 
 export default function Admin(props) {
@@ -35,7 +23,6 @@ export default function Admin(props) {
   const [roleFilter, setRoleFilter] = useState('')
   const [siteFilter, setSiteFilter] = useState('')
   const [loading, setLoading] = useState(false)
-  const [showCreateModal, setShowCreateModal] = useState(false)
   const [showTrialModal, setShowTrialModal] = useState(false)
   const [showSiteModal, setShowSiteModal] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
@@ -107,7 +94,7 @@ export default function Admin(props) {
     setResetMsg(null)
     try {
       await updateUser(resettingUser.id, { password: newPassword })
-      setResetMsg('Password successfully updated!')
+      setResetMsg('Password successfully updated.')
       setTimeout(() => {
         setResettingUser(null)
         setNewPassword('')
@@ -123,217 +110,215 @@ export default function Admin(props) {
   const siteMap = Object.fromEntries(sites.map((s) => [s.id, s.name]))
 
   return (
-    <div className="space-y-5">
-      {/* Primary Admin Banner */}
-      <div className="flex items-center justify-between rounded-xl border border-purple-200 bg-purple-50/70 px-4 py-3 text-xs text-purple-900 dark:border-purple-900/50 dark:bg-purple-950/40 dark:text-purple-200">
-        <span className="flex items-center gap-2 font-medium">
-          <span className="flex h-2.5 w-2.5 rounded-full bg-purple-600"></span>
-          👑 Primary System Administrator: Master User Provisioning & Global Trial Control Plane
-        </span>
-        <span className="hidden sm:inline font-mono text-[11px]">
-          Global Scope &middot; Unrestricted Access
-        </span>
-      </div>
-
-      {/* Trial & Site Provisioning Action Center */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="space-y-6">
+      {/* Official Government Banner */}
+      <div className="border border-slate-300 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              🏛️ Trial Protocol & Institutional Infrastructure Center
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              Government of India &middot; Ministry of Ayush &middot; Central CTMS Unit
+            </div>
+            <h2 className="text-sm font-bold text-slate-900 mt-0.5">
+              Primary Administrator &mdash; Central Oversight &amp; User Provisioning Control Plane
+            </h2>
+          </div>
+          <div className="text-right text-[11px] font-mono text-slate-500">
+            Jurisdiction: Global / All Sites &middot; 21 CFR Part 11 Active
+          </div>
+        </div>
+      </div>
+
+      {/* Official Infrastructure & Provisioning Actions */}
+      <div className="border border-slate-300 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
+          <div>
+            <h3 className="text-sm font-bold uppercase tracking-wide text-slate-900">
+              Clinical Infrastructure &amp; Administrative Actions
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Provision new clinical studies, onboard participating hospitals, and control data states.
+            <p className="text-xs text-slate-600 mt-0.5">
+              Register trial protocols, onboard participating hospital centers, and provision authorized personnel.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={() => setShowTrialModal(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition"
+              onClick={() => props.onNavigateCreateUser?.()}
+              className="border border-slate-800 bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-black transition"
             >
-              📜 New Trial Protocol
+              + Create New Account
             </button>
             <button
               onClick={() => setShowSiteModal(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-teal-700 transition"
+              className="border border-slate-400 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-200 transition"
             >
-              🏥 Register Study Site
+              + Register Study Site
             </button>
             <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-aiia-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-aiia-700 transition"
+              onClick={() => setShowTrialModal(true)}
+              className="border border-slate-400 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-200 transition"
             >
-              👤 Provision User Account
+              + Define Trial Protocol
             </button>
             <button
               onClick={() => setShowResetConfirm(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300 transition"
+              className="border border-red-400 bg-red-50 px-4 py-2 text-xs font-semibold text-red-800 hover:bg-red-100 transition"
             >
-              🧹 Clean Slate (Zero Mock Data)
+              Reset Test Data (Clean Slate)
             </button>
           </div>
         </div>
-      </div>
 
-      {/* User Management & Account Provisioning Panel */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
-          <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              👥 System User Accounts & Access Control
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Live roster of verified personnel across all 7 clinical trial roles.
-            </p>
+        {/* User Account Management Directory */}
+        <div className="mt-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                Authorized Personnel Roster ({users.length} Registered Accounts)
+              </h4>
+              <p className="text-[11px] text-slate-500">
+                Live registry of clinicians, coordinators, ethicists, sponsors, and statutory monitors.
+              </p>
+            </div>
+            <button
+              onClick={() => props.onNavigateCreateUser?.()}
+              className="border border-slate-400 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+            >
+              + Add User
+            </button>
           </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-aiia-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-aiia-700 transition"
-          >
-            ➕ Create New Account
-          </button>
-        </div>
 
-        {/* Filters */}
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <input
-            type="text"
-            placeholder="🔍 Search name or email..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-          />
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            className="rounded-lg border border-slate-200 p-2 text-xs font-medium text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-          >
-            <option value="">All Roles (Total: {users.length})</option>
-            {Object.entries(ROLE_DISPLAY_NAMES).map(([r, label]) => (
-              <option key={r} value={r}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={siteFilter}
-            onChange={(e) => setSiteFilter(e.target.value)}
-            className="rounded-lg border border-slate-200 p-2 text-xs font-medium text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-          >
-            <option value="">All Hospital Sites</option>
-            {sites.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({s.site_code})
-              </option>
-            ))}
-          </select>
-        </div>
+          {/* Filters */}
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Search User</label>
+              <input
+                type="text"
+                placeholder="Search by name or email..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Filter by Role</label>
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="w-full border border-slate-300 bg-white p-2 text-xs font-medium text-slate-900 focus:border-slate-800 focus:outline-none"
+              >
+                <option value="">All Roles (Total: {users.length})</option>
+                {Object.entries(ROLE_DISPLAY_NAMES).map(([r, label]) => (
+                  <option key={r} value={r}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Filter by Study Site</label>
+              <select
+                value={siteFilter}
+                onChange={(e) => setSiteFilter(e.target.value)}
+                className="w-full border border-slate-300 bg-white p-2 text-xs font-medium text-slate-900 focus:border-slate-800 focus:outline-none"
+              >
+                <option value="">All Participating Sites</option>
+                {sites.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.site_code})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
-        {/* Users Table */}
-        <div className="mt-4 overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
-              <tr>
-                <th className="px-4 py-3">User & Contact</th>
-                <th className="px-4 py-3">Role</th>
-                <th className="px-4 py-3">Assigned Site</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Last Login</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {loading ? (
+          {/* User Table */}
+          <div className="mt-4 border border-slate-300 overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-slate-100 border-b border-slate-300 text-[11px] font-bold uppercase tracking-wider text-slate-700">
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                    Loading accounts...
-                  </td>
+                  <th className="border-r border-slate-300 px-3.5 py-2.5">Name &amp; Official Email</th>
+                  <th className="border-r border-slate-300 px-3.5 py-2.5">Statutory Role</th>
+                  <th className="border-r border-slate-300 px-3.5 py-2.5">Designated Center</th>
+                  <th className="border-r border-slate-300 px-3.5 py-2.5">Account Status</th>
+                  <th className="border-r border-slate-300 px-3.5 py-2.5">Last Authentication</th>
+                  <th className="px-3.5 py-2.5 text-right">Actions</th>
                 </tr>
-              ) : users.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                    No user accounts match the selected filters.
-                  </td>
-                </tr>
-              ) : (
-                users.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                    <td className="px-4 py-3">
-                      <div className="font-bold text-slate-900 dark:text-white">
-                        {u.full_name}
-                      </div>
-                      <div className="font-mono text-[11px] text-slate-500">
-                        {u.email}
-                      </div>
-                      {u.organization && (
-                        <div className="text-[10px] text-slate-400">
-                          {u.organization}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-block rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                          ROLE_BADGE_STYLES[u.role] || 'bg-slate-100 text-slate-700'
-                        }`}
-                      >
-                        {ROLE_DISPLAY_NAMES[u.role] || u.role}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
-                      {u.site_id ? siteMap[u.site_id] || `Site #${u.site_id}` : 'Global (Multi-site)'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => handleToggleActive(u)}
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                          u.is_active
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                            : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
-                        }`}
-                      >
-                        {u.is_active ? 'Active' : 'Deactivated'}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-slate-500">
-                      {u.last_login_at
-                        ? new Date(u.last_login_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
-                        : 'Never'}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => setResettingUser(u)}
-                        className="rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                      >
-                        🔑 Reset Password
-                      </button>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                      Loading user directory from database...
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : users.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                      No registered user accounts match the selected criteria.
+                    </td>
+                  </tr>
+                ) : (
+                  users.map((u) => (
+                    <tr key={u.id} className="hover:bg-slate-50">
+                      <td className="border-r border-slate-200 px-3.5 py-2.5">
+                        <div className="font-bold text-slate-900">
+                          {u.full_name}
+                        </div>
+                        <div className="font-mono text-[11px] text-slate-600">
+                          {u.email}
+                        </div>
+                        {u.organization && (
+                          <div className="text-[10px] text-slate-500">
+                            {u.organization}
+                          </div>
+                        )}
+                      </td>
+                      <td className="border-r border-slate-200 px-3.5 py-2.5 font-semibold text-slate-800">
+                        {ROLE_DISPLAY_NAMES[u.role] || u.role}
+                      </td>
+                      <td className="border-r border-slate-200 px-3.5 py-2.5 text-slate-700">
+                        {u.site_id ? siteMap[u.site_id] || `Site #${u.site_id}` : 'Global (Multi-Centric)'}
+                      </td>
+                      <td className="border-r border-slate-200 px-3.5 py-2.5">
+                        <button
+                          onClick={() => handleToggleActive(u)}
+                          className={`border px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+                            u.is_active
+                              ? 'border-emerald-600 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                              : 'border-red-600 bg-red-50 text-red-800 hover:bg-red-100'
+                          }`}
+                        >
+                          {u.is_active ? 'Active' : 'Suspended'}
+                        </button>
+                      </td>
+                      <td className="border-r border-slate-200 px-3.5 py-2.5 font-mono text-[11px] text-slate-600">
+                        {u.last_login_at
+                          ? new Date(u.last_login_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+                          : 'Never'}
+                      </td>
+                      <td className="px-3.5 py-2.5 text-right">
+                        <button
+                          onClick={() => setResettingUser(u)}
+                          className="border border-slate-400 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-800 hover:bg-slate-100"
+                        >
+                          Reset Password
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
       <DashboardLayout
         {...props}
         wide={['recent_aes', 'upcoming']}
-        note="Global Oversight: As Primary Administrator, you have full audit and operational access across all trial sites."
+        note="Central Regulatory Oversight: The Primary Administrator has statutory administrative access across all participating sites under 21 CFR Part 11 and NDCT Rules 2019."
       />
 
       <DataExportCenter />
-
-      {/* Create User Modal */}
-      {showCreateModal && (
-        <CreateUserModal
-          onClose={() => setShowCreateModal(false)}
-          onSuccess={() => {
-            loadUsers()
-            props.onRefresh?.()
-          }}
-        />
-      )}
 
       {/* Create Trial Modal */}
       {showTrialModal && (
@@ -359,56 +344,44 @@ export default function Admin(props) {
 
       {/* Clean Slate Confirmation Modal */}
       {showResetConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-red-200 bg-white p-6 shadow-2xl dark:border-red-900 dark:bg-slate-900">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 text-red-700 text-xl font-bold dark:bg-red-950 dark:text-red-300">
-                🧹
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Production Clean Slate Data Reset
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Erase synthetic demo patients to start fresh with 100% real clinical trial intake.
-                </p>
-              </div>
-            </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
+          <div className="w-full max-w-lg border border-slate-400 bg-white p-6 shadow-xl">
+            <h3 className="text-base font-bold text-slate-900 border-b border-slate-200 pb-2">
+              Confirm Production Clean Slate Reset
+            </h3>
+            <p className="text-xs text-slate-600 mt-2">
+              This administrative action clears all synthetic participant records and simulated clinical visits to prepare the CTMS portal for 100% real subject intake.
+            </p>
 
             {cleanSlateResult ? (
-              <div className="mt-4 rounded-xl bg-emerald-50 p-4 text-xs text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200 space-y-2">
-                <p className="font-bold">✅ Clean Slate Successfully Executed!</p>
-                <p>• Cleared {cleanSlateResult.cleared_subjects} synthetic participant dossiers.</p>
-                <p>• Cleared {cleanSlateResult.cleared_visits} study visit records.</p>
-                <p>• Cleared {cleanSlateResult.cleared_adverse_events} adverse events.</p>
-                <p>• Preserved all registered study sites, user accounts, and 21 CFR Part 11 audit trails.</p>
+              <div className="mt-4 border border-emerald-600 bg-emerald-50 p-4 text-xs text-emerald-900 space-y-2">
+                <p className="font-bold">RESET COMPLETED SUCCESSFULLY</p>
+                <p>&bull; Cleared {cleanSlateResult.cleared_subjects} synthetic participant dossiers.</p>
+                <p>&bull; Cleared {cleanSlateResult.cleared_visits} study visit records.</p>
+                <p>&bull; Cleared {cleanSlateResult.cleared_adverse_events} adverse events.</p>
+                <p>&bull; Preserved all registered hospital sites, user accounts, and 21 CFR Part 11 audit trails.</p>
                 <div className="pt-2">
                   <button
                     onClick={() => {
                       setShowResetConfirm(false)
                       setCleanSlateResult(null)
                     }}
-                    className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
+                    className="border border-emerald-700 bg-emerald-700 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-800"
                   >
-                    Done
+                    Close
                   </button>
                 </div>
               </div>
             ) : (
               <div className="mt-4 space-y-3 text-xs">
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
-                  ⚠️ <strong>What this does:</strong>
-                  <ul className="mt-1 list-disc pl-4 space-y-1 text-[11px]">
-                    <li>Deletes all synthetic participant records, visits, adverse events, and e-consents.</li>
-                    <li>Resets all recruitment and screening counters to <strong>0</strong>.</li>
-                    <li><strong>Preserves:</strong> Core trial definitions, registered hospital sites, user login accounts, and immutable audit logs.</li>
-                  </ul>
+                <div className="border border-amber-300 bg-amber-50 p-3 text-amber-900 text-[11px]">
+                  <strong>Notice:</strong> All synthetic participant records, visits, adverse events, and e-consents will be permanently purged. Core trial definitions, registered hospital sites, user login accounts, and statutory audit logs will be preserved.
                 </div>
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
                   <button
                     type="button"
                     onClick={() => setShowResetConfirm(false)}
-                    className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"
+                    className="border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                   >
                     Cancel
                   </button>
@@ -416,9 +389,9 @@ export default function Admin(props) {
                     type="button"
                     disabled={cleanSlateBusy}
                     onClick={handleCleanSlateReset}
-                    className="rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-red-700 disabled:opacity-50"
+                    className="border border-red-700 bg-red-700 px-4 py-2 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-50"
                   >
-                    {cleanSlateBusy ? 'Executing Reset...' : 'Confirm Clean Slate Reset'}
+                    {cleanSlateBusy ? 'Executing Reset...' : 'Execute Clean Slate Reset'}
                   </button>
                 </div>
               </div>
@@ -429,25 +402,25 @@ export default function Admin(props) {
 
       {/* Password Reset Modal */}
       {resettingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
+          <div className="w-full max-w-md border border-slate-400 bg-white p-6 shadow-xl">
+            <h3 className="text-base font-bold text-slate-900 border-b border-slate-200 pb-2">
               Reset Password: {resettingUser.full_name}
             </h3>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-slate-600 mt-2">
               Enter a new secure password for {resettingUser.email}.
             </p>
 
             {resetMsg && (
-              <div className="mt-3 rounded-lg bg-blue-50 p-2.5 text-xs text-blue-800 dark:bg-blue-950 dark:text-blue-200">
+              <div className="mt-3 border border-blue-400 bg-blue-50 p-2.5 text-xs text-blue-900">
                 {resetMsg}
               </div>
             )}
 
             <form onSubmit={handleResetPassword} className="mt-4 space-y-4 text-xs">
               <div>
-                <label className="block font-medium text-slate-700 dark:text-slate-300">
-                  New Password
+                <label className="block font-semibold text-slate-800">
+                  New Password <span className="text-red-600">*</span>
                 </label>
                 <input
                   type="password"
@@ -455,22 +428,22 @@ export default function Admin(props) {
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="Enter new password"
-                  className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs font-mono text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  className="mt-1 w-full border border-slate-300 bg-white p-2 font-mono text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setResettingUser(null)}
-                  className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"
+                  className="border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={resetBusy}
-                  className="rounded-lg bg-aiia-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-aiia-700 disabled:opacity-50"
+                  className="border border-slate-800 bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-black disabled:opacity-50"
                 >
                   {resetBusy ? 'Updating...' : 'Update Password'}
                 </button>

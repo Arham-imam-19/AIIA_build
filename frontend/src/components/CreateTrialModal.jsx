@@ -44,27 +44,30 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
+      <div className="w-full max-w-2xl border border-slate-400 bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              📜 Define & Provision Clinical Trial Protocol
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              Government of India &middot; Ministry of Ayush
+            </div>
+            <h3 className="text-sm font-bold uppercase tracking-wide text-slate-900 mt-0.5">
+              Define &amp; Register Clinical Trial Protocol
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              ICH GCP E6(R2), CDISC TS Domain & Indian CTRI Compliant Setup
+            <p className="text-xs text-slate-600">
+              ICH GCP E6(R2), CDISC TS Domain &amp; Indian CTRI Compliant Setup
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            className="border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-200"
           >
             ✕
           </button>
         </div>
 
         {error && (
-          <div className="mt-3 rounded-lg bg-red-50 p-3 text-xs font-medium text-red-700 dark:bg-red-950 dark:text-red-300">
+          <div className="mt-3 border border-red-600 bg-red-50 p-3 text-xs font-medium text-red-900">
             {typeof error === 'string' ? error : JSON.stringify(error)}
           </div>
         )}
@@ -72,8 +75,8 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
         <form onSubmit={handleSubmit} className="mt-4 space-y-4 text-xs">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300">
-                Protocol Number
+              <label className="block font-semibold text-slate-800">
+                Protocol Number <span className="text-red-600">*</span>
               </label>
               <input
                 type="text"
@@ -81,19 +84,19 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
                 value={protocolNumber}
                 onChange={(e) => setProtocolNumber(e.target.value)}
                 placeholder="e.g. AIIA-ASH-2026-02"
-                className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs font-mono font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full border border-slate-300 bg-white p-2 font-mono font-bold text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
               />
             </div>
             <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300">
-                Trial Phase
+              <label className="block font-semibold text-slate-800">
+                Trial Phase <span className="text-red-600">*</span>
               </label>
               <select
                 value={phase}
                 onChange={(e) => setPhase(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs font-medium text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs font-medium text-slate-900 focus:border-slate-800 focus:outline-none"
               >
-                <option value="phase_1">Phase I (Safety & Pharmacokinetics)</option>
+                <option value="phase_1">Phase I (Safety &amp; Pharmacokinetics)</option>
                 <option value="phase_2">Phase II (Therapeutic Exploratory / Dose-Ranging)</option>
                 <option value="phase_3">Phase III (Confirmatory Multi-Centric Efficacy)</option>
                 <option value="phase_4">Phase IV (Post-Marketing Surveillance / Real-World)</option>
@@ -102,8 +105,8 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
           </div>
 
           <div>
-            <label className="block font-medium text-slate-700 dark:text-slate-300">
-              Full Scientific Study Title
+            <label className="block font-semibold text-slate-800">
+              Full Scientific Study Title <span className="text-red-600">*</span>
             </label>
             <textarea
               required
@@ -111,14 +114,14 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. A Multi-Centric, Randomized, Double-Blind Active-Controlled Clinical Trial Evaluating Efficacy and Safety of..."
-              className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300">
-                Biomedical Indication
+              <label className="block font-semibold text-slate-800">
+                Biomedical Indication <span className="text-red-600">*</span>
               </label>
               <input
                 type="text"
@@ -126,11 +129,11 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
                 value={indication}
                 onChange={(e) => setIndication(e.target.value)}
                 placeholder="e.g. Type 2 Diabetes Mellitus"
-                className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
               />
             </div>
             <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300">
+              <label className="block font-semibold text-slate-800">
                 Ayurvedic Indication (NAMASTE / ICD-11 TM2)
               </label>
               <input
@@ -138,15 +141,15 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
                 value={indicationAyurveda}
                 onChange={(e) => setIndicationAyurveda(e.target.value)}
                 placeholder="e.g. Madhumeha / Prameha"
-                className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300">
-                Investigational Product (IP) / Formulation
+              <label className="block font-semibold text-slate-800">
+                Investigational Product (IP) / Formulation <span className="text-red-600">*</span>
               </label>
               <input
                 type="text"
@@ -154,11 +157,11 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
                 value={intervention}
                 onChange={(e) => setIntervention(e.target.value)}
                 placeholder="e.g. Nisha-Amalaki Ghanavati 500mg TID"
-                className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
               />
             </div>
             <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300">
+              <label className="block font-semibold text-slate-800">
                 Comparator / Control Arm
               </label>
               <input
@@ -166,15 +169,15 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
                 value={comparator}
                 onChange={(e) => setComparator(e.target.value)}
                 placeholder="e.g. Standard Care Metformin 500mg"
-                className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300">
-                Target Sample Size
+              <label className="block font-semibold text-slate-800">
+                Target Sample Size <span className="text-red-600">*</span>
               </label>
               <input
                 type="number"
@@ -183,41 +186,41 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
                 max={5000}
                 value={targetEnrollment}
                 onChange={(e) => setTargetEnrollment(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
               />
             </div>
             <div className="col-span-2">
-              <label className="block font-medium text-slate-700 dark:text-slate-300">
-                Sponsor / Lead Institution
+              <label className="block font-semibold text-slate-800">
+                Sponsor / Lead Institution <span className="text-red-600">*</span>
               </label>
               <input
                 type="text"
                 required
                 value={sponsorName}
                 onChange={(e) => setSponsorName(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
               />
             </div>
           </div>
 
-          <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3 text-[11px] text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
-            ⚖️ <strong>Regulatory Sequence Gate Notice:</strong> Upon creation, trial will sit in <code>PLANNING</code> status. It will require Institutional Ethics Committee (IEC) approval and prospective CTRI registration before site recruitment can activate.
+          <div className="border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-700">
+            <strong>Regulatory Sequence Gate:</strong> Upon protocol creation, the trial will reside in <code>PLANNING</code> status. Institutional Ethics Committee (IEC) review and prospective CTRI registration are required before patient recruitment can be activated.
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"
+              className="border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={busy}
-              className="rounded-lg bg-aiia-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-aiia-700 disabled:opacity-50"
+              className="border border-slate-800 bg-slate-900 px-5 py-2 text-xs font-semibold text-white hover:bg-black disabled:opacity-50"
             >
-              {busy ? 'Creating Protocol...' : 'Create Trial Protocol'}
+              {busy ? 'Registering Protocol...' : 'Register Protocol'}
             </button>
           </div>
         </form>

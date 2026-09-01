@@ -55,27 +55,30 @@ export default function CreateSiteModal({ onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
+      <div className="w-full max-w-xl border border-slate-400 bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              🏥 Register Participating Study Site / Hospital
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              Government of India &middot; Ministry of Ayush
+            </div>
+            <h3 className="text-sm font-bold uppercase tracking-wide text-slate-900 mt-0.5">
+              Register Participating Hospital / Research Site
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              GCP-ASU Hospital Site Onboarding & Principal Investigator Assignment
+            <p className="text-xs text-slate-600">
+              GCP-ASU Hospital Site Onboarding &amp; Principal Investigator Assignment
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            className="border border-slate-300 bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-200"
           >
             ✕
           </button>
         </div>
 
         {error && (
-          <div className="mt-3 rounded-lg bg-red-50 p-3 text-xs font-medium text-red-700 dark:bg-red-950 dark:text-red-300">
+          <div className="mt-3 border border-red-600 bg-red-50 p-3 text-xs font-medium text-red-900">
             {typeof error === 'string' ? error : JSON.stringify(error)}
           </div>
         )}
@@ -83,13 +86,13 @@ export default function CreateSiteModal({ onClose, onSuccess }) {
         <form onSubmit={handleSubmit} className="mt-4 space-y-4 text-xs">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300">
-                Associated Trial Protocol
+              <label className="block font-semibold text-slate-800">
+                Associated Trial Protocol <span className="text-red-600">*</span>
               </label>
               <select
                 value={trialId}
                 onChange={(e) => setTrialId(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs font-medium text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs font-medium text-slate-900 focus:border-slate-800 focus:outline-none"
                 required
               >
                 {trials.map((t) => (
@@ -100,8 +103,8 @@ export default function CreateSiteModal({ onClose, onSuccess }) {
               </select>
             </div>
             <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300">
-                Site Code (2-Digits)
+              <label className="block font-semibold text-slate-800">
+                Site Code (2-Digits) <span className="text-red-600">*</span>
               </label>
               <input
                 type="text"
@@ -109,14 +112,14 @@ export default function CreateSiteModal({ onClose, onSuccess }) {
                 value={siteCode}
                 onChange={(e) => setSiteCode(e.target.value)}
                 placeholder="e.g. 02"
-                className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs font-mono font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full border border-slate-300 bg-white p-2 font-mono font-bold text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
               />
             </div>
           </div>
 
           <div>
-            <label className="block font-medium text-slate-700 dark:text-slate-300">
-              Hospital / Institute Full Name
+            <label className="block font-semibold text-slate-800">
+              Hospital / Institute Full Official Name <span className="text-red-600">*</span>
             </label>
             <input
               type="text"
@@ -124,14 +127,14 @@ export default function CreateSiteModal({ onClose, onSuccess }) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. National Institute of Ayurveda (NIA), Jaipur"
-              className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300">
-                City
+              <label className="block font-semibold text-slate-800">
+                City <span className="text-red-600">*</span>
               </label>
               <input
                 type="text"
@@ -139,12 +142,12 @@ export default function CreateSiteModal({ onClose, onSuccess }) {
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
                 placeholder="e.g. Jaipur"
-                className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
               />
             </div>
             <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300">
-                State
+              <label className="block font-semibold text-slate-800">
+                State <span className="text-red-600">*</span>
               </label>
               <input
                 type="text"
@@ -152,15 +155,15 @@ export default function CreateSiteModal({ onClose, onSuccess }) {
                 value={state}
                 onChange={(e) => setState(e.target.value)}
                 placeholder="e.g. Rajasthan"
-                className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300">
-                Principal Investigator (PI) Full Name
+              <label className="block font-semibold text-slate-800">
+                Principal Investigator (PI) Full Name <span className="text-red-600">*</span>
               </label>
               <input
                 type="text"
@@ -168,39 +171,39 @@ export default function CreateSiteModal({ onClose, onSuccess }) {
                 value={piName}
                 onChange={(e) => setPiName(e.target.value)}
                 placeholder="e.g. Prof. Sanjeev Sharma"
-                className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
               />
             </div>
             <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300">
-                PI Email Address
+              <label className="block font-semibold text-slate-800">
+                PI Official Email Address
               </label>
               <input
                 type="email"
                 value={piEmail}
                 onChange={(e) => setPiEmail(e.target.value)}
                 placeholder="pi.nia@aiia-ctms.in"
-                className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300">
-                Contact Phone
+              <label className="block font-semibold text-slate-800">
+                Contact Phone Number
               </label>
               <input
                 type="tel"
                 value={contactPhone}
                 onChange={(e) => setContactPhone(e.target.value)}
                 placeholder="+91 141 2635816"
-                className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
               />
             </div>
             <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300">
-                Target Recruitment Quota
+              <label className="block font-semibold text-slate-800">
+                Target Recruitment Quota <span className="text-red-600">*</span>
               </label>
               <input
                 type="number"
@@ -208,23 +211,23 @@ export default function CreateSiteModal({ onClose, onSuccess }) {
                 max={1000}
                 value={targetEnrollment}
                 onChange={(e) => setTargetEnrollment(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
               />
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"
+              className="border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={busy}
-              className="rounded-lg bg-teal-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-50"
+              className="border border-slate-800 bg-slate-900 px-5 py-2 text-xs font-semibold text-white hover:bg-black disabled:opacity-50"
             >
               {busy ? 'Registering...' : 'Register Study Site'}
             </button>
