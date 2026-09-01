@@ -140,6 +140,29 @@ export const fetchAuditLogs = (params = {}) => {
 export const updateEthicsApproval = (trialId, body) =>
   api(`/api/trials/${trialId}/ethics-approval`, { method: 'PATCH', body })
 
+export const fetchSubjectDossier = (subjectId) =>
+  api(`/api/subjects/${subjectId}/dossier`)
+
+export const createStructuredSubject = (body) =>
+  api('/api/subjects/screening', { method: 'POST', body })
+
+export const createAdverseEvent = (body) =>
+  api('/api/adverse-events', { method: 'POST', body })
+
+export const logProtocolDeviation = (body) =>
+  api('/api/protocol-deviations', { method: 'POST', body })
+
+export const fetchSubjects = (params = {}) => {
+  const query = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') {
+      query.append(k, v)
+    }
+  }
+  const qStr = query.toString()
+  return api(`/api/subjects${qStr ? `?${qStr}` : ''}`)
+}
+
 export const fetchTrialCdiscJson = (trialId) =>
   api(`/api/trials/${trialId}/export/cdisc-json`)
 

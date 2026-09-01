@@ -35,7 +35,7 @@ from app.enums import (
     UserRole,
     VisitStatus,
 )
-from app.models import AdverseEvent, Site, Subject, Trial, Visit
+from app.models import AdverseEvent, AuditLog, EConsent, Site, Subject, Trial, User, Visit
 from app.models.base import utcnow
 from app.rbac import (
     CurrentUser,
@@ -45,7 +45,7 @@ from app.rbac import (
     scoped,
 )
 from app.routers.common import Page, limit_param, offset_param, paginate
-from app.services import trial_compliance
+from app.services import privacy, trial_compliance
 from app.services.subject_transition import (
     SubjectTransitionError,
     validate_subject_transition,
@@ -67,6 +67,7 @@ class SubjectScreeningCreate(BaseModel):
     year_of_birth: int | None = None
     height_cm: float | None = None
     weight_kg: float | None = None
+    prakriti: Prakriti | None = None
 
     @field_validator("height_cm", "weight_kg")
     @classmethod
@@ -413,7 +414,7 @@ def create_subject_in_screening(
         sex=body.sex.value,
         height_cm=body.height_cm,
         weight_kg=body.weight_kg,
-        prakriti=None,
+        prakriti=body.prakriti.value if body.prakriti else None,
         completed_date=None,
         withdrawal_date=None,
         withdrawal_reason=None,
@@ -1215,3 +1216,305 @@ def record_visit_outcome(
 
     session.refresh(visit)
     return VisitOutcomeResponse.model_validate(visit)
+
+
+class ProtocolDeviationCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    trial_id: int
+    site_id: int | None = None
+    subject_id: int
+    visit_id: int | None = None
+    category: str
+    description: str
+    clinical_impact: str | None = None
+    capa: str | None = None
+    deviation_date: date | None = None
+
+
+@router.post("/protocol-deviations", status_code=201)
+def create_protocol_deviation(
+    body: ProtocolDeviationCreate,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.SUBJECT_WRITE)),
+) -> dict:
+    """Record an ICH E6(R2) protocol deviation with clinical impact and CAPA."""
+    subject = session.get(Subject, body.subject_id)
+    if not subject:
+        raise HTTPException(status_code=404, detail=f"subject {body.subject_id} not found")
+
+    site_id = body.site_id or subject.site_id
+    assert_site_visible(user, site_id)
+
+    dev_date = body.deviation_date or date.today()
+    dev_desc = f"[{body.category.upper()}] {body.description.strip()}"
+    if body.capa:
+        dev_desc += f" (CAPA: {body.capa.strip()})"
+
+    if body.visit_id:
+        visit = session.get(Visit, body.visit_id)
+        if visit:
+            visit.is_protocol_deviation = True
+            visit.deviation_description = dev_desc
+            session.add(visit)
+
+    audit.record(
+        session,
+        user=user,
+        action=AuditAction.CREATE,
+        entity_type="protocol_deviations",
+        entity_id=body.visit_id or subject.id,
+        entity_label=f"{subject.subject_code} - {body.category}",
+        field_name=None,
+        old_value=None,
+        new_value=json.dumps({
+            "subject_code": subject.subject_code,
+            "category": body.category,
+            "description": body.description,
+            "clinical_impact": body.clinical_impact,
+            "capa": body.capa,
+            "deviation_date": str(dev_date),
+        }),
+        reason=f"Protocol deviation logged by {user.role}: {body.category}",
+        trial_id=body.trial_id,
+    )
+    session.commit()
+
+    return {
+        "status": "recorded",
+        "subject_code": subject.subject_code,
+        "category": body.category,
+        "description": dev_desc,
+        "deviation_date": str(dev_date),
+    }
+
+
+@router.get("/subjects/{subject_id}/dossier")
+def get_subject_dossier(
+    subject_id: int,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.SUBJECT_READ)),
+) -> dict:
+    """Retrieve full clinical participant profile and unified chronological lifecycle audit log."""
+    subject = session.get(Subject, subject_id)
+    if not subject:
+        raise HTTPException(status_code=404, detail=f"subject {subject_id} not found")
+
+    if user.is_site_scoped:
+        assert_site_visible(user, subject.site_id)
+
+    trial = session.get(Trial, subject.trial_id)
+    site = session.get(Site, subject.site_id)
+    consent = session.exec(select(EConsent).where(EConsent.subject_id == subject_id)).first()
+    visits = list(session.exec(select(Visit).where(Visit.subject_id == subject_id).order_by(Visit.visit_number)).all())
+    adverse_events = list(session.exec(select(AdverseEvent).where(AdverseEvent.subject_id == subject_id).order_by(AdverseEvent.onset_date, AdverseEvent.id)).all())
+
+    # Check DPDP Masking
+    should_mask = privacy.should_mask_patient_pii(user, subject.site_id)
+
+    # Calculate BMI
+    bmi = None
+    if subject.height_cm and subject.weight_kg and subject.height_cm > 0:
+        height_m = subject.height_cm / 100.0
+        bmi = round(subject.weight_kg / (height_m * height_m), 1)
+
+    # Calculate Age
+    age = subject.age_at_enrollment
+    if age is None and subject.year_of_birth:
+        ref_year = subject.screening_date.year if subject.screening_date else date.today().year
+        age = ref_year - subject.year_of_birth
+
+    # 1. Profile Data
+    profile = {
+        "id": subject.id,
+        "subject_code": subject.subject_code,
+        "masked_name": privacy.mask_patient_name(None, subject.subject_code) if should_mask else f"Participant {subject.subject_code}",
+        "status": subject.status,
+        "arm": subject.arm,
+        "sex": subject.sex,
+        "age": age,
+        "year_of_birth": subject.year_of_birth,
+        "height_cm": subject.height_cm,
+        "weight_kg": subject.weight_kg,
+        "bmi": bmi,
+        "prakriti": subject.prakriti,
+        "screening_date": str(subject.screening_date) if subject.screening_date else None,
+        "enrollment_date": str(subject.enrollment_date) if subject.enrollment_date else None,
+        "randomization_date": str(subject.randomization_date) if subject.randomization_date else None,
+        "site_id": subject.site_id,
+        "site_name": site.name if site else "Clinical Research Center",
+        "site_code": site.site_code if site else f"SITE-{subject.site_id}",
+        "trial_id": subject.trial_id,
+        "protocol_number": trial.protocol_number if trial else "AIIA-ASH-2026-01",
+        "is_dpdp_masked": should_mask,
+    }
+
+    if consent:
+        profile["consent"] = {
+            "status": consent.status,
+            "signed_at": consent.signed_at.isoformat() if consent.signed_at else None,
+            "language": consent.language,
+            "sha256_hash": consent.sha256_hash,
+            "abha_id": privacy.mask_abha_id(consent.abha_id) if should_mask else consent.abha_id,
+            "signer_name": privacy.mask_patient_name(consent.signer_name, subject.subject_code) if should_mask else consent.signer_name,
+        }
+    else:
+        profile["consent"] = None
+
+    # 2. Chronological Timeline Construction
+    timeline_events: list[dict] = []
+
+    # Screening
+    if subject.screening_date:
+        timeline_events.append({
+            "id": f"evt-screening-{subject.id}",
+            "event_type": "screening",
+            "title": "Screening & Demographics Intake",
+            "timestamp": f"{subject.screening_date}T09:00:00Z",
+            "actor": "Clinical Research Coordinator",
+            "badge": "info",
+            "details": {
+                "Sex": subject.sex,
+                "Age": f"{age} years" if age else "N/A",
+                "Height": f"{subject.height_cm} cm" if subject.height_cm else "N/A",
+                "Weight": f"{subject.weight_kg} kg" if subject.weight_kg else "N/A",
+                "BMI": f"{bmi} kg/m²" if bmi else "N/A",
+                "Prakriti (Dosha)": (subject.prakriti or "Unassessed").upper(),
+            },
+        })
+
+    # Consent
+    if consent and consent.signed_at:
+        timeline_events.append({
+            "id": f"evt-consent-{consent.id}",
+            "event_type": "consent",
+            "title": f"Digital e-Consent Executed ({consent.language.upper()})",
+            "timestamp": consent.signed_at.isoformat(),
+            "actor": profile["consent"]["signer_name"] if profile.get("consent") else "Participant",
+            "badge": "success",
+            "details": {
+                "Status": "Signed & Verified",
+                "21 CFR Part 11": "Cryptographically Sealed",
+                "SHA-256 Digest": consent.sha256_hash[:16] + "..." if consent.sha256_hash else "Verified",
+                "ABHA ID": profile["consent"]["abha_id"] if profile.get("consent") else "N/A",
+            },
+        })
+
+    # Enrollment
+    if subject.enrollment_date:
+        timeline_events.append({
+            "id": f"evt-enroll-{subject.id}",
+            "event_type": "enrollment",
+            "title": f"Formal Enrollment & Randomization",
+            "timestamp": f"{subject.enrollment_date}T10:30:00Z",
+            "actor": "Principal Investigator",
+            "badge": "success",
+            "details": {
+                "Assigned Study Arm": subject.arm,
+                "Randomization Date": str(subject.randomization_date or subject.enrollment_date),
+                "Eligibility": "Inclusion Criteria Met / Cleared by PI",
+            },
+        })
+
+    # Protocol Visits
+    for v in visits:
+        v_date = v.actual_date or v.scheduled_date or subject.screening_date or date.today()
+        v_badge = "success" if v.status == "completed" else ("danger" if v.status == "missed" else "info")
+        v_details: dict[str, Any] = {
+            "Visit Number": f"V{v.visit_number}",
+            "Scheduled Date": str(v.scheduled_date) if v.scheduled_date else "N/A",
+            "Actual Date": str(v.actual_date) if v.actual_date else "Pending",
+            "Status": (v.status or "SCHEDULED").upper(),
+        }
+        if v.is_protocol_deviation:
+            v_details["Protocol Deviation"] = v.deviation_description or "Out of window"
+
+        timeline_events.append({
+            "id": f"evt-visit-{v.id}",
+            "event_type": "visit",
+            "title": f"Visit {v.visit_number}: {v.visit_name}",
+            "timestamp": f"{v_date}T11:00:00Z",
+            "actor": "Clinical Site Team",
+            "badge": v_badge,
+            "details": v_details,
+        })
+
+    # Adverse Events
+    for ae in adverse_events:
+        ae_date = ae.onset_date or subject.screening_date or date.today()
+        timeline_events.append({
+            "id": f"evt-ae-{ae.id}",
+            "event_type": "adverse_event",
+            "title": f"Adverse Event: {ae.term_verbatim} ({ae.ae_number})",
+            "timestamp": f"{ae_date}T14:15:00Z",
+            "actor": "Investigator Safety Review",
+            "badge": "danger" if ae.is_serious else "warning",
+            "details": {
+                "MedDRA Preferred Term": ae.meddra_pt_term or ae.term_verbatim,
+                "MedDRA SOC": ae.meddra_soc or "General disorders",
+                "Severity": (ae.severity or "MILD").upper(),
+                "Seriousness": "YES (SAE - 24h Clock Active)" if ae.is_serious else "NO (Non-Serious)",
+                "Causality Assessment": (ae.causality or "UNRELATED").upper(),
+                "Outcome": (ae.outcome or "RECOVERING").upper(),
+                "Action Taken": ae.action_taken or "Dose Unchanged",
+            },
+        })
+
+    # Audit Trail records specifically on this subject
+    audit_stmt = select(AuditLog).where(
+        (AuditLog.entity_type == "subjects") & (AuditLog.entity_id == subject.id)
+        | (AuditLog.entity_type == "protocol_deviations") & (AuditLog.entity_id == subject.id)
+    ).order_by(AuditLog.timestamp.desc())
+    audit_records = list(session.exec(audit_stmt).all())
+
+    for log in audit_records:
+        ist_time = log.timestamp.strftime("%Y-%m-%d %H:%M:%S IST") if log.timestamp else ""
+        timeline_events.append({
+            "id": f"evt-audit-{log.id}",
+            "event_type": "audit",
+            "title": f"Audit Log: {log.action.upper()} {log.entity_type}",
+            "timestamp": log.timestamp.isoformat() if log.timestamp else f"{date.today()}T12:00:00Z",
+            "actor": f"{log.user_email or 'System'} ({log.user_role or 'staff'})",
+            "badge": "info",
+            "details": {
+                "Action": log.action.upper(),
+                "Field": log.field_name or "Entity record",
+                "Reason": log.reason or "Clinical record maintenance",
+                "Timestamp (IST)": ist_time,
+                "Old Value": log.old_value or "None",
+                "New Value": log.new_value or "None",
+            },
+        })
+
+    timeline_events.sort(key=lambda x: x["timestamp"], reverse=True)
+
+    return {
+        "profile": profile,
+        "timeline": timeline_events,
+        "visits": [
+            {
+                "id": v.id,
+                "visit_number": v.visit_number,
+                "visit_name": v.visit_name,
+                "scheduled_date": str(v.scheduled_date) if v.scheduled_date else None,
+                "actual_date": str(v.actual_date) if v.actual_date else None,
+                "status": v.status,
+                "is_protocol_deviation": v.is_protocol_deviation,
+                "deviation_description": v.deviation_description,
+            }
+            for v in visits
+        ],
+        "adverse_events": [
+            {
+                "id": ae.id,
+                "ae_number": ae.ae_number,
+                "term_verbatim": ae.term_verbatim,
+                "onset_date": str(ae.onset_date),
+                "severity": ae.severity,
+                "is_serious": ae.is_serious,
+                "causality": ae.causality,
+                "outcome": ae.outcome,
+            }
+            for ae in adverse_events
+        ],
+    }

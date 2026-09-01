@@ -1,10 +1,10 @@
-// Principal Investigator: the doctor legally responsible for the trial at one
-// hospital. Everything on this screen is their own site - asking for another
-// site's participant returns 403, by design.
-
 import { useEffect, useState } from 'react'
 import { fetchTrials } from '../api'
 import DashboardLayout from './layout'
+import ParticipantIntakeModal from '../components/ParticipantIntakeModal'
+import ReportAdverseEventModal from '../components/ReportAdverseEventModal'
+import LogProtocolDeviationModal from '../components/LogProtocolDeviationModal'
+import ParticipantDossierModal from '../components/ParticipantDossierModal'
 
 function SiteComplianceStatusBanner() {
   const [trial, setTrial] = useState(null)
@@ -43,15 +43,91 @@ function SiteComplianceStatusBanner() {
 }
 
 export default function Investigator(props) {
+  const [showIntakeModal, setShowIntakeModal] = useState(false)
+  const [showAeModal, setShowAeModal] = useState(false)
+  const [showDeviationModal, setShowDeviationModal] = useState(false)
+  const [selectedSubjectId, setSelectedSubjectId] = useState(null)
+
   return (
     <div className="space-y-4">
       <SiteComplianceStatusBanner />
+
+      {/* Clinical Site Actions Center */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-aiia-600"></span>
+              Principal Investigator Clinical & Safety Actions
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Execute structured CDASH screening intake, evaluate & report MedDRA adverse events, and log deviations.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowIntakeModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-aiia-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-aiia-700 transition"
+            >
+              📝 Screen New Participant
+            </button>
+            <button
+              onClick={() => setShowAeModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-700 transition"
+            >
+              🚨 Report Adverse Event
+            </button>
+            <button
+              onClick={() => setShowDeviationModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-700 transition"
+            >
+              ⚠️ Log Protocol Deviation
+            </button>
+            <button
+              onClick={() => setSelectedSubjectId(1)}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 transition"
+            >
+              🔍 Inspect Participant Dossier
+            </button>
+          </div>
+        </div>
+      </div>
+
       <DashboardLayout
         {...props}
         wide={['recent_aes']}
         simulateFirst
         note="Scoped to your site only. Safety first: an open adverse event is one that has not resolved yet, and a serious one has to reach the ethics committee within days."
       />
+
+      {/* Modals */}
+      {showIntakeModal && (
+        <ParticipantIntakeModal
+          trialId={1}
+          onClose={() => setShowIntakeModal(false)}
+          onSuccess={props.onRefresh}
+        />
+      )}
+      {showAeModal && (
+        <ReportAdverseEventModal
+          trialId={1}
+          onClose={() => setShowAeModal(false)}
+          onSuccess={props.onRefresh}
+        />
+      )}
+      {showDeviationModal && (
+        <LogProtocolDeviationModal
+          trialId={1}
+          onClose={() => setShowDeviationModal(false)}
+          onSuccess={props.onRefresh}
+        />
+      )}
+      {selectedSubjectId && (
+        <ParticipantDossierModal
+          subjectId={selectedSubjectId}
+          onClose={() => setSelectedSubjectId(null)}
+        />
+      )}
     </div>
   )
 }

@@ -254,6 +254,95 @@ def list_adverse_events(
     return Page(total=total, limit=limit, offset=offset, items=hydrated)
 
 
+from app import audit
+from app.enums import AuditAction
+from app.models.base import utcnow
+import json
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class AdverseEventCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    trial_id: int
+    site_id: int | None = None
+    subject_id: int
+    term_verbatim: str
+    description: str | None = None
+    onset_date: date
+    resolution_date: date | None = None
+    severity: str = "mild"
+    is_serious: bool = False
+    seriousness_criteria: str | None = None
+    causality: str = "unrelated"
+    outcome: str = "recovering"
+    action_taken: str | None = None
+    meddra_pt_code: str | None = None
+    meddra_pt_term: str | None = None
+    meddra_soc: str | None = None
+
+
+@router.post("/adverse-events", response_model=AdverseEventPublic, status_code=201)
+def create_adverse_event(
+    body: AdverseEventCreate,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.AE_WRITE)),
+) -> AdverseEventPublic:
+    """Report a new clinical adverse event with MedDRA coding and seriousness criteria."""
+    subject = session.get(Subject, body.subject_id)
+    if not subject:
+        raise HTTPException(status_code=404, detail=f"subject {body.subject_id} not found")
+
+    site_id = body.site_id or subject.site_id
+    assert_site_visible(user, site_id)
+
+    count = list(session.exec(select(AdverseEvent).where(AdverseEvent.subject_id == body.subject_id)).all())
+    seq = len(count) + 1
+    sub_code_suffix = subject.subject_code.split("-")[-1] if "-" in subject.subject_code else str(subject.id)
+    ae_num = f"AE-{sub_code_suffix}-{seq:02d}"
+
+    now = utcnow()
+    event = AdverseEvent(
+        trial_id=body.trial_id,
+        site_id=site_id,
+        subject_id=body.subject_id,
+        ae_number=ae_num,
+        term_verbatim=body.term_verbatim.strip(),
+        description=body.description.strip() if body.description else None,
+        onset_date=body.onset_date,
+        resolution_date=body.resolution_date,
+        severity=body.severity.lower(),
+        is_serious=body.is_serious,
+        seriousness_criteria=body.seriousness_criteria.strip() if body.seriousness_criteria else None,
+        causality=body.causality.lower(),
+        outcome=body.outcome.lower(),
+        action_taken=body.action_taken.strip() if body.action_taken else None,
+        meddra_pt_code=body.meddra_pt_code,
+        meddra_pt_term=body.meddra_pt_term,
+        meddra_soc=body.meddra_soc,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(event)
+    session.commit()
+    session.refresh(event)
+
+    audit.record(
+        session,
+        user=user,
+        action=AuditAction.CREATE,
+        entity_type="adverse_events",
+        entity_id=event.id,
+        entity_label=event.ae_number,
+        field_name=None,
+        old_value=None,
+        new_value=json.dumps({"ae_number": event.ae_number, "term": event.term_verbatim, "is_serious": event.is_serious, "severity": event.severity}),
+        reason=f"Adverse event reported for participant {subject.subject_code}",
+    )
+
+    return _hydrate_adverse_event(event)
+
+
 @router.get("/adverse-events/{event_id}", response_model=AdverseEventPublic)
 def get_adverse_event(
     event_id: int,
