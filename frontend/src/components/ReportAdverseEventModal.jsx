@@ -45,12 +45,13 @@ export default function ReportAdverseEventModal({ trialId = 1, onClose, onSucces
     if (!subjectId) return
     setBusy(true)
     setError(null)
-
+    const selectedSub = subjects.find((s) => String(s.id) === String(subjectId))
     const selectedMeddra = COMMON_MEDDRA_TERMS[meddraIndex]
 
     try {
       await createAdverseEvent({
-        trial_id: Number(trialId),
+        trial_id: selectedSub?.trial_id,
+        site_id: selectedSub?.site_id,
         subject_id: Number(subjectId),
         term_verbatim: termVerbatim.trim() || selectedMeddra.term,
         description: description.trim() || undefined,

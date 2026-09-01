@@ -102,21 +102,18 @@ export default function Coordinator(props) {
       {/* Modals */}
       {showIntakeModal && (
         <ParticipantIntakeModal
-          trialId={1}
           onClose={() => setShowIntakeModal(false)}
           onSuccess={props.onRefresh}
         />
       )}
       {showAeModal && (
         <ReportAdverseEventModal
-          trialId={1}
           onClose={() => setShowAeModal(false)}
           onSuccess={props.onRefresh}
         />
       )}
       {showDeviationModal && (
         <LogProtocolDeviationModal
-          trialId={1}
           onClose={() => setShowDeviationModal(false)}
           onSuccess={props.onRefresh}
         />

@@ -264,7 +264,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class AdverseEventCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    trial_id: int
+    trial_id: int | None = None
     site_id: int | None = None
     subject_id: int
     term_verbatim: str
@@ -293,7 +293,8 @@ def create_adverse_event(
     if not subject:
         raise HTTPException(status_code=404, detail=f"subject {body.subject_id} not found")
 
-    site_id = body.site_id or subject.site_id
+    trial_id = subject.trial_id
+    site_id = subject.site_id
     assert_site_visible(user, site_id)
 
     count = list(session.exec(select(AdverseEvent).where(AdverseEvent.subject_id == body.subject_id)).all())
@@ -303,7 +304,7 @@ def create_adverse_event(
 
     now = utcnow()
     event = AdverseEvent(
-        trial_id=body.trial_id,
+        trial_id=trial_id,
         site_id=site_id,
         subject_id=body.subject_id,
         ae_number=ae_num,
@@ -324,8 +325,7 @@ def create_adverse_event(
         updated_at=now,
     )
     session.add(event)
-    session.commit()
-    session.refresh(event)
+    session.flush()
 
     audit.record(
         session,
@@ -338,7 +338,10 @@ def create_adverse_event(
         old_value=None,
         new_value=json.dumps({"ae_number": event.ae_number, "term": event.term_verbatim, "is_serious": event.is_serious, "severity": event.severity}),
         reason=f"Adverse event reported for participant {subject.subject_code}",
+        trial_id=trial_id,
     )
+    session.commit()
+    session.refresh(event)
 
     return _hydrate_adverse_event(event)
 

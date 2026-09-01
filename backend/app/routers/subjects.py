@@ -1226,7 +1226,7 @@ def record_visit_outcome(
 class ProtocolDeviationCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    trial_id: int
+    trial_id: int | None = None
     site_id: int | None = None
     subject_id: int
     visit_id: int | None = None
@@ -1248,7 +1248,8 @@ def create_protocol_deviation(
     if not subject:
         raise HTTPException(status_code=404, detail=f"subject {body.subject_id} not found")
 
-    site_id = body.site_id or subject.site_id
+    trial_id = subject.trial_id
+    site_id = subject.site_id
     assert_site_visible(user, site_id)
 
     dev_date = body.deviation_date or date.today()
@@ -1281,7 +1282,7 @@ def create_protocol_deviation(
             "deviation_date": str(dev_date),
         }),
         reason=f"Protocol deviation logged by {user.role}: {body.category}",
-        trial_id=body.trial_id,
+        trial_id=trial_id,
     )
     session.commit()
 

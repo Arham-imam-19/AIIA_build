@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import { createStructuredSubject } from '../api'
+import { useEffect, useState } from 'react'
+import { createStructuredSubject, fetchTrials } from '../api'
 
-export default function ParticipantIntakeModal({ trialId = 1, siteId, onClose, onSuccess }) {
+export default function ParticipantIntakeModal({ trialId, siteId, onClose, onSuccess }) {
+  const [activeTrialId, setActiveTrialId] = useState(trialId || null)
   const [sex, setSex] = useState('female')
   const [yearOfBirth, setYearOfBirth] = useState(1992)
   const [heightCm, setHeightCm] = useState(165)
@@ -10,6 +11,16 @@ export default function ParticipantIntakeModal({ trialId = 1, siteId, onClose, o
   const [screeningDate, setScreeningDate] = useState(new Date().toISOString().split('T')[0])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+
+  useEffect(() => {
+    fetchTrials()
+      .then((res) => {
+        if (res.items?.[0]?.id) {
+          setActiveTrialId(res.items[0].id)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const currentYear = new Date().getFullYear()
   const age = yearOfBirth ? currentYear - Number(yearOfBirth) : ''
@@ -21,7 +32,7 @@ export default function ParticipantIntakeModal({ trialId = 1, siteId, onClose, o
     setError(null)
     try {
       await createStructuredSubject({
-        trial_id: Number(trialId),
+        trial_id: Number(activeTrialId || trialId || 1),
         site_id: siteId ? Number(siteId) : undefined,
         screening_date: screeningDate,
         sex,

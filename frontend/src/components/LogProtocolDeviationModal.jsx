@@ -37,11 +37,12 @@ export default function LogProtocolDeviationModal({ trialId = 1, onClose, onSucc
     e.preventDefault()
     if (!subjectId) return
     setBusy(true)
-    setError(null)
+    const selectedSub = subjects.find((s) => String(s.id) === String(subjectId))
 
     try {
       await logProtocolDeviation({
-        trial_id: Number(trialId),
+        trial_id: selectedSub?.trial_id,
+        site_id: selectedSub?.site_id,
         subject_id: Number(subjectId),
         category,
         description: description.trim(),
