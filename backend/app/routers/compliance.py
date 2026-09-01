@@ -8,8 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_
 from sqlmodel import Session, SQLModel, select
 
+from app import audit
 from app.db import get_session
-from app.enums import UserRole
+from app.enums import AuditAction, UserRole
 from app.models import AuditLog, User
 from app.rbac import CurrentUser, Permission, require, scoped
 from app.routers.common import Page, limit_param, offset_param, paginate
@@ -118,6 +119,7 @@ def list_users(
     caller: CurrentUser = Depends(require(Permission.USER_READ)),
     role: str | None = Query(None, description="filter by role"),
     site_id: int | None = Query(None, description="filter by site"),
+    search: str | None = Query(None, description="search by name or email"),
     limit: int = limit_param(),
     offset: int = offset_param(),
 ) -> Page[UserPublic]:
@@ -131,6 +133,14 @@ def list_users(
         statement = statement.where(User.role == role)
     if site_id is not None:
         statement = statement.where(User.site_id == site_id)
+    if search and search.strip():
+        term = f"%{search.strip().lower()}%"
+        statement = statement.where(
+            or_(
+                User.full_name.ilike(term),  # type: ignore[union-attr]
+                User.email.ilike(term),  # type: ignore[union-attr]
+            )
+        )
     statement = scoped(statement, User.site_id, caller)
     total, items = paginate(session, statement, limit, offset)
 
@@ -209,13 +219,22 @@ class CreateUserRequest(SQLModel):
     phone: str | None = None
 
 
+class UpdateUserRequest(SQLModel):
+    full_name: str | None = None
+    phone: str | None = None
+    organization: str | None = None
+    is_active: bool | None = None
+    password: str | None = None
+    site_id: int | None = None
+
+
 @router.post("/users", response_model=UserPublic, status_code=201)
 def create_user(
     body: CreateUserRequest,
     session: Session = Depends(get_session),
     caller: CurrentUser = Depends(require(Permission.USER_MANAGE)),
 ) -> UserPublic:
-    """Add a new user (Primary Admin adds Institution Admins; Institution Admin adds Researchers)."""
+    """Add a new user (Primary Admin adds all roles; Institution Admin adds site researchers)."""
     from app import security
 
     email = body.email.strip().lower()
@@ -228,15 +247,89 @@ def create_user(
 
     new_user = User(
         email=email,
-        full_name=body.full_name,
+        full_name=body.full_name.strip(),
         role=body.role,
         hashed_password=security.hash_password(body.password),
         site_id=target_site_id,
-        organization=body.organization,
-        phone=body.phone,
+        organization=body.organization.strip() if body.organization else None,
+        phone=body.phone.strip() if body.phone else None,
         is_active=True,
     )
     session.add(new_user)
+    session.flush()
+
+    audit.record(
+        session,
+        user=caller,
+        action=AuditAction.CREATE,
+        entity_type="users",
+        entity_id=new_user.id,
+        entity_label=new_user.email,
+        reason=f"Account created for {new_user.full_name} with role {new_user.role}",
+    )
     session.commit()
     session.refresh(new_user)
     return UserPublic.model_validate(new_user, from_attributes=True)
+
+
+@router.patch("/users/{user_id}", response_model=UserPublic)
+def update_user(
+    user_id: int,
+    body: UpdateUserRequest,
+    session: Session = Depends(get_session),
+    caller: CurrentUser = Depends(require(Permission.USER_MANAGE)),
+) -> UserPublic:
+    """Update user account status, credentials, or profile information."""
+    from app import security
+
+    target_user = session.get(User, user_id)
+    if target_user is None:
+        raise HTTPException(status_code=404, detail=f"no user with id {user_id}")
+
+    scope = caller.scope_site_id
+    if scope is not None and target_user.site_id is not None and target_user.site_id != scope:
+        raise HTTPException(
+            status_code=403,
+            detail=f"forbidden: caller site {scope} cannot modify user at site {target_user.site_id}",
+        )
+
+    if body.full_name is not None:
+        target_user.full_name = body.full_name.strip()
+    if body.phone is not None:
+        target_user.phone = body.phone.strip() if body.phone else None
+    if body.organization is not None:
+        target_user.organization = body.organization.strip() if body.organization else None
+    if body.is_active is not None:
+        old_active = target_user.is_active
+        target_user.is_active = body.is_active
+        audit.record(
+            session,
+            user=caller,
+            action=AuditAction.UPDATE,
+            entity_type="users",
+            entity_id=target_user.id,
+            entity_label=target_user.email,
+            field_name="is_active",
+            old_value=str(old_active),
+            new_value=str(body.is_active),
+            reason=f"Account {'activated' if body.is_active else 'deactivated'} by {caller.role_label}",
+        )
+    if body.password:
+        target_user.hashed_password = security.hash_password(body.password)
+        audit.record(
+            session,
+            user=caller,
+            action=AuditAction.UPDATE,
+            entity_type="users",
+            entity_id=target_user.id,
+            entity_label=target_user.email,
+            field_name="password",
+            reason=f"Password reset by {caller.role_label}",
+        )
+    if body.site_id is not None and not caller.is_site_scoped:
+        target_user.site_id = body.site_id
+
+    session.add(target_user)
+    session.commit()
+    session.refresh(target_user)
+    return UserPublic.model_validate(target_user, from_attributes=True)

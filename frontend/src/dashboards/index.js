@@ -1,6 +1,7 @@
 // Role -> screen. The token decides which one renders; there is no way to ask
 // for another role's dashboard, because the role is not a parameter anywhere.
 
+import Admin from './Admin'
 import Coordinator from './Coordinator'
 import Ethics from './Ethics'
 import InstitutionAdmin from './InstitutionAdmin'
@@ -10,7 +11,7 @@ import Regulator from './Regulator'
 import Sponsor from './Sponsor'
 
 export const DASHBOARDS = {
-  admin: Regulator,
+  admin: Admin,
   institution_admin: InstitutionAdmin,
   principal_investigator: Investigator,
   coordinator: Coordinator,

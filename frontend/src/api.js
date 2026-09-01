@@ -109,8 +109,33 @@ export const respondPatientRequest = (id, body) =>
 export const createSite = (body) =>
   api('/api/sites', { method: 'POST', body })
 
+export const fetchSites = (params = {}) => {
+  const query = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') {
+      query.append(k, v)
+    }
+  }
+  const qStr = query.toString()
+  return api(`/api/sites${qStr ? `?${qStr}` : ''}`)
+}
+
 export const createUser = (body) =>
   api('/api/users', { method: 'POST', body })
+
+export const fetchUsers = (params = {}) => {
+  const query = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') {
+      query.append(k, v)
+    }
+  }
+  const qStr = query.toString()
+  return api(`/api/users${qStr ? `?${qStr}` : ''}`)
+}
+
+export const updateUser = (userId, body) =>
+  api(`/api/users/${userId}`, { method: 'PATCH', body })
 
 export const getMyEConsent = () => api('/api/econsent/my')
 
