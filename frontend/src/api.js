@@ -106,6 +106,12 @@ export const createPatientRequest = (body) =>
 export const respondPatientRequest = (id, body) =>
   api(`/api/patient-requests/${id}/respond`, { method: 'PATCH', body })
 
+export const createTrial = (body) =>
+  api('/api/trials', { method: 'POST', body })
+
+export const resetTrialData = (trialId) =>
+  api(`/api/admin/reset-trial-data${trialId ? `?trial_id=${trialId}` : ''}`, { method: 'POST' })
+
 export const createSite = (body) =>
   api('/api/sites', { method: 'POST', body })
 

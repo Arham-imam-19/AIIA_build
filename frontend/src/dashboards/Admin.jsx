@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
-import { fetchSites, fetchUsers, updateUser } from '../api'
+import { fetchSites, fetchUsers, resetTrialData, updateUser } from '../api'
 import CreateUserModal from '../components/CreateUserModal'
+import CreateTrialModal from '../components/CreateTrialModal'
+import CreateSiteModal from '../components/CreateSiteModal'
 import DataExportCenter from '../components/DataExportCenter'
 import DashboardLayout from './layout'
 
@@ -34,10 +36,15 @@ export default function Admin(props) {
   const [siteFilter, setSiteFilter] = useState('')
   const [loading, setLoading] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showTrialModal, setShowTrialModal] = useState(false)
+  const [showSiteModal, setShowSiteModal] = useState(false)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [resettingUser, setResettingUser] = useState(null)
   const [newPassword, setNewPassword] = useState('')
   const [resetBusy, setResetBusy] = useState(false)
   const [resetMsg, setResetMsg] = useState(null)
+  const [cleanSlateBusy, setCleanSlateBusy] = useState(false)
+  const [cleanSlateResult, setCleanSlateResult] = useState(null)
 
   function loadUsers() {
     setLoading(true)
@@ -54,15 +61,34 @@ export default function Admin(props) {
       .catch(() => setLoading(false))
   }
 
+  function loadSites() {
+    fetchSites()
+      .then((res) => setSites(res.items || []))
+      .catch(() => {})
+  }
+
   useEffect(() => {
     loadUsers()
   }, [search, roleFilter, siteFilter])
 
   useEffect(() => {
-    fetchSites()
-      .then((res) => setSites(res.items || []))
-      .catch(() => {})
+    loadSites()
   }, [])
+
+  async function handleCleanSlateReset() {
+    setCleanSlateBusy(true)
+    setCleanSlateResult(null)
+    try {
+      const res = await resetTrialData()
+      setCleanSlateResult(res)
+      loadUsers()
+      props.onRefresh?.()
+    } catch (err) {
+      alert(`Clean slate reset failed: ${err.message}`)
+    } finally {
+      setCleanSlateBusy(false)
+    }
+  }
 
   async function handleToggleActive(user) {
     try {
@@ -102,11 +128,51 @@ export default function Admin(props) {
       <div className="flex items-center justify-between rounded-xl border border-purple-200 bg-purple-50/70 px-4 py-3 text-xs text-purple-900 dark:border-purple-900/50 dark:bg-purple-950/40 dark:text-purple-200">
         <span className="flex items-center gap-2 font-medium">
           <span className="flex h-2.5 w-2.5 rounded-full bg-purple-600"></span>
-          👑 Primary System Administrator: Master User Provisioning & 21 CFR Part 11 Audit Control
+          👑 Primary System Administrator: Master User Provisioning & Global Trial Control Plane
         </span>
         <span className="hidden sm:inline font-mono text-[11px]">
           Global Scope &middot; Unrestricted Access
         </span>
+      </div>
+
+      {/* Trial & Site Provisioning Action Center */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              🏛️ Trial Protocol & Institutional Infrastructure Center
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Provision new clinical studies, onboard participating hospitals, and control data states.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowTrialModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition"
+            >
+              📜 New Trial Protocol
+            </button>
+            <button
+              onClick={() => setShowSiteModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-teal-700 transition"
+            >
+              🏥 Register Study Site
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-aiia-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-aiia-700 transition"
+            >
+              👤 Provision User Account
+            </button>
+            <button
+              onClick={() => setShowResetConfirm(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300 transition"
+            >
+              🧹 Clean Slate (Zero Mock Data)
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* User Management & Account Provisioning Panel */}
@@ -117,14 +183,14 @@ export default function Admin(props) {
               👥 System User Accounts & Access Control
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Create, configure, and manage user accounts across all clinical trial roles.
+              Live roster of verified personnel across all 7 clinical trial roles.
             </p>
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-aiia-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-aiia-700 transition"
+            className="flex items-center gap-1.5 rounded-lg bg-aiia-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-aiia-700 transition"
           >
-            ➕ Create New User Account
+            ➕ Create New Account
           </button>
         </div>
 
@@ -267,6 +333,98 @@ export default function Admin(props) {
             props.onRefresh?.()
           }}
         />
+      )}
+
+      {/* Create Trial Modal */}
+      {showTrialModal && (
+        <CreateTrialModal
+          onClose={() => setShowTrialModal(false)}
+          onSuccess={() => {
+            loadSites()
+            props.onRefresh?.()
+          }}
+        />
+      )}
+
+      {/* Create Site Modal */}
+      {showSiteModal && (
+        <CreateSiteModal
+          onClose={() => setShowSiteModal(false)}
+          onSuccess={() => {
+            loadSites()
+            props.onRefresh?.()
+          }}
+        />
+      )}
+
+      {/* Clean Slate Confirmation Modal */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-red-200 bg-white p-6 shadow-2xl dark:border-red-900 dark:bg-slate-900">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 text-red-700 text-xl font-bold dark:bg-red-950 dark:text-red-300">
+                🧹
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Production Clean Slate Data Reset
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Erase synthetic demo patients to start fresh with 100% real clinical trial intake.
+                </p>
+              </div>
+            </div>
+
+            {cleanSlateResult ? (
+              <div className="mt-4 rounded-xl bg-emerald-50 p-4 text-xs text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200 space-y-2">
+                <p className="font-bold">✅ Clean Slate Successfully Executed!</p>
+                <p>• Cleared {cleanSlateResult.cleared_subjects} synthetic participant dossiers.</p>
+                <p>• Cleared {cleanSlateResult.cleared_visits} study visit records.</p>
+                <p>• Cleared {cleanSlateResult.cleared_adverse_events} adverse events.</p>
+                <p>• Preserved all registered study sites, user accounts, and 21 CFR Part 11 audit trails.</p>
+                <div className="pt-2">
+                  <button
+                    onClick={() => {
+                      setShowResetConfirm(false)
+                      setCleanSlateResult(null)
+                    }}
+                    className="w-full rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3 text-xs">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
+                  ⚠️ <strong>What this does:</strong>
+                  <ul className="mt-1 list-disc pl-4 space-y-1 text-[11px]">
+                    <li>Deletes all synthetic participant records, visits, adverse events, and e-consents.</li>
+                    <li>Resets all recruitment and screening counters to <strong>0</strong>.</li>
+                    <li><strong>Preserves:</strong> Core trial definitions, registered hospital sites, user login accounts, and immutable audit logs.</li>
+                  </ul>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowResetConfirm(false)}
+                    className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={cleanSlateBusy}
+                    onClick={handleCleanSlateReset}
+                    className="rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {cleanSlateBusy ? 'Executing Reset...' : 'Confirm Clean Slate Reset'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Password Reset Modal */}
