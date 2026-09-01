@@ -1,0 +1,45 @@
+# Backend dependencies. Each phase appends to this file.
+
+# Web framework + server
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# ORM. SQLModel = SQLAlchemy tables defined as Pydantic models,
+# so one class serves as both the DB table and the API schema.
+sqlmodel==0.0.22
+
+# Schema migrations (Phase 1). Alembic keeps an ordered list of scripts that
+# build the database up step by step - version control for table structure.
+alembic==1.14.0
+
+# PostgreSQL driver (psycopg 3). The [binary] extra ships precompiled wheels,
+# so no C compiler is needed in the image.
+psycopg[binary]==3.2.3
+
+# --- Phase 2: authentication -------------------------------------------------
+
+# JWT = JSON Web Token: a signed ID card the server hands you when you log in.
+# It carries your user id and role, and the signature means the server can trust
+# it without looking anything up in the database on every request.
+pyjwt==2.10.1
+
+# Password hashing. bcrypt turns "demo1234" into a one-way scramble that is
+# deliberately slow to compute, so a stolen database of hashes is not a database
+# of passwords. Storing the hash and never the password is the whole point.
+bcrypt==5.0.0
+
+# Redis client, used for two things in Phase 2:
+#   pub/sub    - a radio station: the API broadcasts "enrolment changed" on a
+#                channel, and every open WebSocket connection hears it.
+#   token deny - logged-out tokens are listed here until they expire.
+# The app degrades to an in-process fallback if Redis is unreachable, so a
+# missing Redis slows nothing down and breaks nothing in a single-container demo.
+redis==5.2.1
+
+# Tests
+pytest==8.3.4
+httpx==0.28.1
+
+# Feature 18: de-identified demo safety-case PDF generation and verification
+reportlab==4.2.5
+pypdf==5.1.0
