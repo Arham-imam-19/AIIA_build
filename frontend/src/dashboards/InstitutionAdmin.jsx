@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { respondPatientRequest } from '../api'
 import DashboardLayout from './layout'
+import DataExportCenter from '../components/DataExportCenter'
 
 function RespondModal({ requestId, onClose, onSuccess }) {
   const [response, setResponse] = useState('')
@@ -134,6 +135,8 @@ export default function InstitutionAdmin(props) {
           </button>
         </div>
       </div>
+
+      <DataExportCenter />
 
       {selectedRequest && (
         <RespondModal

@@ -2,6 +2,7 @@
 // is always the same - is this trial on track, across every site?
 
 import DashboardLayout from './layout'
+import DataExportCenter from '../components/DataExportCenter'
 
 export default function Sponsor(props) {
   return (
@@ -15,6 +16,8 @@ export default function Sponsor(props) {
           Individual participant PII is masked to prevent observer bias and protect patient privacy.
         </span>
       </div>
+
+      <DataExportCenter />
 
       <DashboardLayout
         {...props}

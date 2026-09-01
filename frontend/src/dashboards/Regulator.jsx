@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import { fetchAuditLogs } from '../api'
 import DashboardLayout from './layout'
+import DataExportCenter from '../components/DataExportCenter'
 
 function AuditDiffViewer({ entry }) {
   let parsedOld = null
@@ -313,6 +314,8 @@ export default function Regulator(props) {
           Direct patient PII is redacted under statutory purpose limitation.
         </span>
       </div>
+
+      <DataExportCenter />
 
       <DashboardLayout
         {...props}

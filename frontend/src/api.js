@@ -140,6 +140,38 @@ export const fetchAuditLogs = (params = {}) => {
 export const updateEthicsApproval = (trialId, body) =>
   api(`/api/trials/${trialId}/ethics-approval`, { method: 'PATCH', body })
 
+export const fetchTrialCdiscJson = (trialId) =>
+  api(`/api/trials/${trialId}/export/cdisc-json`)
+
+export const fetchTrialFhirBundle = (trialId) =>
+  api(`/api/trials/${trialId}/export/fhir-bundle`)
+
+export const fetchSubjectFhirBundle = (subjectId) =>
+  api(`/api/subjects/${subjectId}/export/fhir`)
+
+export async function downloadTrialCdiscSdtmZip(trialId, token = savedToken()) {
+  const res = await fetch(
+    `/api/trials/${encodeURIComponent(trialId)}/export/cdisc-sdtm.zip`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    },
+  )
+  if (!res.ok) throw new ApiError(res.status, await readDetail(res))
+
+  const disposition = res.headers.get('Content-Disposition') || ''
+  const match = disposition.match(/filename="?([^";]+)"?/i)
+  const filename = match?.[1] || `CDISC_SDTM_Trial_${trialId}.zip`
+  const url = URL.createObjectURL(await res.blob())
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  return filename
+}
+
 export const fetchTrials = () => api('/api/trials')
 
 export async function downloadSafetyReport(eventId, token = savedToken()) {
