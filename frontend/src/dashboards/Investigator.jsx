@@ -96,7 +96,6 @@ export default function Investigator(props) {
       <DashboardLayout
         {...props}
         wide={['recent_aes']}
-        simulateFirst
         note="Scoped to your site only. Safety first: an open adverse event is one that has not resolved yet, and a serious one has to reach the ethics committee within days."
       />
 

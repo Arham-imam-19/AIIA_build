@@ -96,7 +96,6 @@ export default function Coordinator(props) {
       <DashboardLayout
         {...props}
         wide={['upcoming', 'screening']}
-        simulateFirst
         note="Your worklist for the next two weeks. An overdue visit becomes a protocol deviation if it slips outside its window, so these dates are the ones that matter."
       />
 

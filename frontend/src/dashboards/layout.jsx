@@ -6,7 +6,6 @@
 // without five copies of the same table code.
 
 import { Block, Tile } from '../blocks'
-import Simulate from '../Simulate'
 
 function EventBanner({ event }) {
   if (!event) return null
@@ -35,11 +34,8 @@ export default function DashboardLayout({
   lastEvent,
   wide = [],
   note,
-  simulateFirst = false,
-  onExpired,
 }) {
   const wideSet = new Set(wide)
-  const simulate = <Simulate onExpired={onExpired} />
 
   return (
     <div className="space-y-5">
@@ -59,15 +55,11 @@ export default function DashboardLayout({
         ))}
       </div>
 
-      {simulateFirst && simulate}
-
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {dashboard.blocks.map((block) => (
           <Block key={block.key} block={block} wide={wideSet.has(block.key)} />
         ))}
       </div>
-
-      {!simulateFirst && simulate}
     </div>
   )
 }

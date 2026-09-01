@@ -144,7 +144,7 @@ export const fetchSubjectDossier = (subjectId) =>
   api(`/api/subjects/${subjectId}/dossier`)
 
 export const createStructuredSubject = (body) =>
-  api('/api/subjects/screening', { method: 'POST', body })
+  api('/api/subjects', { method: 'POST', body })
 
 export const createAdverseEvent = (body) =>
   api('/api/adverse-events', { method: 'POST', body })

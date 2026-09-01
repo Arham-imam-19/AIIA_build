@@ -335,6 +335,11 @@ def _visible_subject(session: Session, subject_id: int, user: CurrentUser) -> Su
 
 
 @router.post(
+    "/subjects/screening",
+    response_model=SubjectScreeningResponse,
+    status_code=201,
+)
+@router.post(
     "/subjects",
     response_model=SubjectScreeningResponse,
     status_code=201,
