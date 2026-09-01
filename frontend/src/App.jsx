@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AuthProvider, useAuth } from './auth'
 import CreateUserPage from './pages/CreateUserPage'
+import InfrastructurePage from './pages/InfrastructurePage'
 import Login from './Login'
 import RbacMatrix from './RbacMatrix'
 import Shell from './Shell'
@@ -56,7 +57,9 @@ function SignedIn() {
 
   return (
     <Shell view={view} setView={setView} live={live}>
-      {view === 'create_account' ? (
+      {view === 'infrastructure' ? (
+        <InfrastructurePage onNavigateDashboard={() => setView('dashboard')} />
+      ) : view === 'create_account' ? (
         <CreateUserPage onNavigateDashboard={() => setView('dashboard')} />
       ) : view === 'access' ? (
         <RbacMatrix highlightRole={user.role} />
@@ -79,6 +82,7 @@ function SignedIn() {
           onExpired={expire}
           onRefresh={live.refresh}
           onNavigateCreateUser={() => setView('create_account')}
+          onNavigateInfrastructure={() => setView('infrastructure')}
         />
       )}
     </Shell>

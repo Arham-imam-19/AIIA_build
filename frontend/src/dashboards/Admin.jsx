@@ -128,15 +128,15 @@ export default function Admin(props) {
         </div>
       </div>
 
-      {/* Official Infrastructure & Provisioning Actions */}
+      {/* Official Quick Action Bar */}
       <div className="border border-slate-300 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
           <div>
             <h3 className="text-sm font-bold uppercase tracking-wide text-slate-900">
-              Clinical Infrastructure &amp; Administrative Actions
+              Primary Administrator Operations Center
             </h3>
             <p className="text-xs text-slate-600 mt-0.5">
-              Register trial protocols, onboard participating hospital centers, and provision authorized personnel.
+              Manage authorized personnel accounts, inspect trial sites, and coordinate clinical infrastructure.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -147,22 +147,10 @@ export default function Admin(props) {
               + Create New Account
             </button>
             <button
-              onClick={() => setShowSiteModal(true)}
+              onClick={() => props.onNavigateInfrastructure?.()}
               className="border border-slate-400 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-200 transition"
             >
-              + Register Study Site
-            </button>
-            <button
-              onClick={() => setShowTrialModal(true)}
-              className="border border-slate-400 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-200 transition"
-            >
-              + Define Trial Protocol
-            </button>
-            <button
-              onClick={() => setShowResetConfirm(true)}
-              className="border border-red-400 bg-red-50 px-4 py-2 text-xs font-semibold text-red-800 hover:bg-red-100 transition"
-            >
-              Reset Test Data (Clean Slate)
+              Clinical Infrastructure &amp; Actions &rarr;
             </button>
           </div>
         </div>
