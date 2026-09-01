@@ -303,13 +303,14 @@ def create_adverse_event(
     ae_num = f"AE-{sub_code_suffix}-{seq:02d}"
 
     now = utcnow()
+    event_desc = body.description.strip() if body.description and body.description.strip() else body.term_verbatim.strip()
     event = AdverseEvent(
         trial_id=trial_id,
         site_id=site_id,
         subject_id=body.subject_id,
         ae_number=ae_num,
         term_verbatim=body.term_verbatim.strip(),
-        description=body.description.strip() if body.description else None,
+        description=event_desc,
         onset_date=body.onset_date,
         resolution_date=body.resolution_date,
         severity=body.severity.lower(),
@@ -318,6 +319,9 @@ def create_adverse_event(
         causality=body.causality.lower(),
         outcome=body.outcome.lower(),
         action_taken=body.action_taken.strip() if body.action_taken else None,
+        reported_by_user_id=user.id,
+        reported_date=now.date(),
+        reported_to_ec=False,
         meddra_pt_code=body.meddra_pt_code,
         meddra_pt_term=body.meddra_pt_term,
         meddra_soc=body.meddra_soc,

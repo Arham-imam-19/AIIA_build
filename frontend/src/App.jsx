@@ -74,6 +74,7 @@ function SignedIn() {
           changed={changed}
           lastEvent={live.lastEvent}
           onExpired={expire}
+          onRefresh={live.refresh}
         />
       )}
     </Shell>

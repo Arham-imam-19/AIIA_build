@@ -182,8 +182,53 @@ export default function ParticipantIntakeModal({ trialId, siteId, onClose, onSuc
             </div>
           </div>
 
-          <div className="rounded-lg bg-blue-50/70 p-3 text-[11px] text-blue-800 dark:bg-blue-950/60 dark:text-blue-300">
-            🔒 <strong>DPDP Compliance Note:</strong> Candidate will be registered under an anonymized participant code (e.g. <code>AIIA-ASH-01-XXX</code>) without storing unencrypted direct PII.
+          {/* Ethics-Permitted Participant Identity & Contact Section */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 dark:border-slate-800 dark:bg-slate-800/40 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
+                🪪 Identity & Contact Information (Ethics Permitted)
+              </span>
+              <span className="text-[10px] text-emerald-700 font-semibold dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/80 px-2 py-0.5 rounded">
+                DPDP Act 2023 Sec 6
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div>
+                <label className="block font-medium text-slate-700 dark:text-slate-300 text-[11px]">
+                  Participant Full Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Ramesh Sharma"
+                  className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                />
+              </div>
+              <div>
+                <label className="block font-medium text-slate-700 dark:text-slate-300 text-[11px]">
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  placeholder="+91 98765 43210"
+                  className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                />
+              </div>
+              <div>
+                <label className="block font-medium text-slate-700 dark:text-slate-300 text-[11px]">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  placeholder="patient@example.in"
+                  className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                />
+              </div>
+            </div>
+
+            <div className="text-[10px] text-slate-500 leading-relaxed">
+              🔒 <strong>Ethics Notice:</strong> Contact details are encrypted at rest and accessible exclusively by assigned site clinical investigators for study appointments. External regulatory and sponsor oversight dashboards display pseudonymized codes only.
+            </div>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
