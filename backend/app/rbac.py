@@ -358,7 +358,7 @@ async def user_from_token(token: str, session: Session) -> CurrentUser:
         site_id=user.site_id,
         subject_id=user.subject_id,
         organization=user.organization,
-        access_scope=user.access_scope,
+        access_scope=getattr(user, "access_scope", "GLOBAL") or claims.get("access_scope", "GLOBAL"),
         jti=claims.get("jti"),
     )
 

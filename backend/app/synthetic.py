@@ -488,94 +488,61 @@ def _allocate(total: int, weights: list[tuple[str, float]]) -> dict[str, int]:
 
 
 def _build_trials(reference_date: date) -> list[dict]:
-    start = reference_date - timedelta(days=250)
-    trials = []
-    trials.append({
-        "protocol_number": "TRIAL_001",
-        "title": (
-            "A Multicentre, Randomised, Double-Blind, Placebo-Controlled Trial to "
-            "Evaluate the Efficacy and Safety of Ashwagandha (Withania somnifera) "
-            "Root Churna in Adults with Generalised Anxiety Disorder"
-        ),
-        "short_title": "ASHWA-GAD Trial",
-        "ctri_number": "CTRI/2026/01/078412",
-        "ctri_registration_date": start - timedelta(days=21),
-        "phase": TrialPhase.PHASE_3.value,
-        "status": TrialStatus.RECRUITING.value,
-        "indication": "Generalised Anxiety Disorder (HAM-A score 14-25 at screening)",
-        "indication_ayurveda": "Chittodvega",
-        "intervention": (
-            "Ashwagandha (Withania somnifera) root churna 3 g twice daily with "
-            "warm milk, after food, for 84 days"
-        ),
-        "comparator": "Matched placebo churna 3 g twice daily for 84 days",
-        "design": (
-            "Multicentre, randomised, double-blind, placebo-controlled, "
-            "parallel-group, 1:1 allocation"
-        ),
-        "is_blinded": True,
-        "primary_objective": (
-            "To evaluate the efficacy of Ashwagandha root churna compared with "
-            "placebo in reducing anxiety severity in adults with Generalised "
-            "Anxiety Disorder over 84 days of treatment."
-        ),
-        "secondary_objective": (
-            "To assess safety and tolerability; to evaluate change in sleep "
-            "quality and quality of life; to explore whether response differs by "
-            "baseline prakriti."
-        ),
-        "primary_endpoint": (
-            "Change in Hamilton Anxiety Rating Scale (HAM-A) total score from "
-            "baseline to Day 84"
-        ),
-        "sponsor_name": "All India Institute of Ayurveda (AIIA), Ministry of Ayush",
-        "sponsor_type": "Government research institute",
-        "target_enrollment": 240,
-        "start_date": start,
-        "planned_end_date": start + timedelta(days=540),
-        "actual_end_date": None,
-        "ethics_approval_number": "AIIA/IEC/2025/114",
-        "ethics_approval_date": start - timedelta(days=45),
-        "ethics_approval_status": EthicsApprovalStatus.APPROVED.value,
-        "ethics_approval_valid_until": reference_date + timedelta(days=365),
-        "regulatory_approval_number": "CDSCO/AYUSH/CT/2025/0391",
-        "regulatory_approval_date": start - timedelta(days=30),
-        "activated_at": datetime(start.year, start.month, start.day, 10) - timedelta(days=1),
-    })
-
-    # 4 Mock trials
-    for i in range(2, 6):
-        trials.append({
-            "protocol_number": f"TRIAL_{i:03d}",
-            "title": f"Mock Safety and Efficacy Trial for Ayurvedic Formulation {i}",
-            "short_title": f"MOCK Trial {i}",
-            "ctri_number": f"CTRI/2026/01/00000{i}",
-            "ctri_registration_date": start - timedelta(days=30),
-            "phase": TrialPhase.PHASE_2.value,
+    start = reference_date - timedelta(days=240)
+    return [
+        {
+            "protocol_number": "AIIA-ASH-2026-01",
+            "title": (
+                "A Multi-Centre, Double-Blind, Placebo-Controlled Study of "
+                "Ashwagandha (Withania somnifera) Extract in Patients with "
+                "Generalised Anxiety Disorder"
+            ),
+            "short_title": "ASHWA-GAD Trial",
+            "ctri_number": "CTRI/2026/01/078412",
+            "ctri_registration_date": start - timedelta(days=21),
+            "phase": TrialPhase.PHASE_3.value,
             "status": TrialStatus.RECRUITING.value,
-            "indication": "Type 2 Diabetes Mellitus",
-            "indication_ayurveda": "Madhumeha",
-            "intervention": "Ayurvedic Formulation",
-            "comparator": "Placebo",
-            "design": "Multicentre, randomised, double-blind",
+            "indication": "Generalised Anxiety Disorder (HAM-A score 14-25 at screening)",
+            "indication_ayurveda": "Chittodvega",
+            "intervention": (
+                "Ashwagandha (Withania somnifera) root churna 3 g twice daily with "
+                "warm milk, after food, for 84 days"
+            ),
+            "comparator": "Matched placebo churna 3 g twice daily for 84 days",
+            "design": (
+                "Multicentre, randomised, double-blind, placebo-controlled, "
+                "parallel-group, 1:1 allocation"
+            ),
             "is_blinded": True,
-            "primary_objective": "Efficacy",
-            "secondary_objective": "Safety",
-            "primary_endpoint": "Change in HbA1c",
-            "sponsor_name": "Himalaya Wellness Company",
-            "sponsor_type": "Corporate",
-            "target_enrollment": 100 * i,
+            "primary_objective": (
+                "To evaluate the efficacy of Ashwagandha root churna compared with "
+                "placebo in reducing anxiety severity in adults with Generalised "
+                "Anxiety Disorder over 84 days of treatment."
+            ),
+            "secondary_objective": (
+                "To assess safety and tolerability; to evaluate change in sleep "
+                "quality and quality of life; to explore whether response differs by "
+                "baseline prakriti."
+            ),
+            "primary_endpoint": (
+                "Change in Hamilton Anxiety Rating Scale (HAM-A) total score from "
+                "baseline to Day 84"
+            ),
+            "sponsor_name": "All India Institute of Ayurveda (AIIA), Ministry of Ayush",
+            "sponsor_type": "Government research institute",
+            "target_enrollment": 240,
             "start_date": start,
+            "planned_end_date": start + timedelta(days=540),
+            "actual_end_date": None,
+            "ethics_approval_number": "AIIA/IEC/2025/114",
+            "ethics_approval_date": start - timedelta(days=45),
             "ethics_approval_status": EthicsApprovalStatus.APPROVED.value,
-            "ethics_approval_number": f"IEC/MOCK/{i}",
-            "ethics_approval_date": start - timedelta(days=50),
-            "ethics_approval_valid_until": start + timedelta(days=300),
-            "regulatory_approval_number": f"CT-06/2026/Ayush-00{i}",
-            "activated_at": start,
-            "_activated_by_email": "investor@himalaya.com",
-        })
-        
-    return trials
+            "ethics_approval_valid_until": reference_date + timedelta(days=365),
+            "regulatory_approval_number": "CDSCO/AYUSH/CT/2025/0391",
+            "regulatory_approval_date": start - timedelta(days=30),
+            "activated_at": datetime(start.year, start.month, start.day, 10) - timedelta(days=1),
+        }
+    ]
 
 
 def _build_sites(reference_date: date) -> list[dict]:
@@ -711,7 +678,7 @@ def _build_users() -> list[dict]:
             "External Funder (Himalaya)",
             UserRole.SPONSOR.value,
             "Himalaya Wellness Company",
-            "investor@himalaya.com",
+            "investor.himalaya@demo.aiia-ctms.in",
             "TRIAL_001",
         ),
         (
@@ -1448,6 +1415,7 @@ def generate(
 
     return {
         "reference_date": reference_date,
+        "trial": trials[0],
         "trials": trials,
         "sites": sites,
         "users": users,
