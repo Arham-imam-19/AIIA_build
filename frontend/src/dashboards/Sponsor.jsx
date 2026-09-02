@@ -26,6 +26,42 @@ export default function Sponsor(props) {
 
   return (
     <div className="space-y-6">
+      {/* Dashboard Header with Filter Controls */}
+      <div className="flex flex-wrap justify-between items-start gap-4">
+        <div>
+          <h2 className="text-base font-semibold tracking-tight text-slate-900">
+            {dashboard?.title || 'Sponsor Oversight'}
+          </h2>
+          <p className="text-sm text-slate-500">{dashboard?.subtitle || 'Clinical Trial Financials & Multi-Site Operational Health'}</p>
+          <p className="mt-1 text-xs leading-relaxed text-slate-400">
+            Sponsor view: Medical Trust Blue &amp; Statutory Blinded Monitoring active.
+          </p>
+        </div>
+
+        {/* Top Right Filters */}
+        <div className="flex flex-wrap gap-3">
+          <select 
+            value={selectedSite} 
+            onChange={e => setSelectedSite(e.target.value)}
+            className="border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-700 bg-white font-medium shadow-sm hover:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="All">Filter by Site: All Hospitals</option>
+            <option value="Delhi">All India Institute of Ayurveda, New Delhi</option>
+            <option value="Jaipur">National Institute of Ayurveda, Jaipur</option>
+            <option value="Kolkata">National Research Institute, Kolkata</option>
+            <option value="Jamnagar">ITRA, Jamnagar</option>
+          </select>
+
+          {isGlobal && (
+            <select className="border border-slate-300 rounded px-3 py-1.5 text-xs text-slate-700 bg-white font-medium shadow-sm hover:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option>Filter by Funder: All</option>
+              <option>Ministry of Ayush</option>
+              <option>Himalaya Wellness</option>
+            </select>
+          )}
+        </div>
+      </div>
+
       {/* Official Government DPDP Act 2023 / Blinding Oversight Banner */}
       <div className="flex items-center justify-between border border-blue-200 bg-blue-50/80 px-4 py-3 text-xs text-blue-900 shadow-sm">
         <span className="flex items-center gap-2 font-medium">
@@ -33,7 +69,7 @@ export default function Sponsor(props) {
           🔒 DPDP Act 2023 &amp; ICH GCP: Blinded Sponsor Oversight Mode
         </span>
         <span className="text-blue-700 hidden sm:inline text-[11px]">
-          Individual participant PII and randomization arm allocations are server-blinded to maintain trial integrity.
+          Individual participant PII and randomization arm allocations are server-blinded to protect trial integrity.
         </span>
       </div>
 
@@ -68,7 +104,7 @@ export default function Sponsor(props) {
           {/* Secondary Financial & Safety Metrics */}
           <div className="flex flex-wrap gap-4">
             <div className="bg-white border border-slate-200 p-4 rounded shadow-sm flex-1 min-w-[180px]">
-              <div className="text-xs uppercase font-bold tracking-wider text-slate-500 mb-1">Screening Success</div>
+              <div className="text-xs uppercase font-bold tracking-wider text-slate-500 mb-1">Screening Success Rate</div>
               <div className="text-2xl font-bold text-slate-900">{metrics.screening_success_rate}%</div>
             </div>
             <div className="bg-white border border-red-200 p-4 rounded shadow-sm flex-1 min-w-[180px]">
@@ -77,9 +113,9 @@ export default function Sponsor(props) {
               <div className="text-xs text-slate-500 mt-1">Cost of {metrics.total_screen_failed} screen failures</div>
             </div>
             <div className="bg-white border border-slate-200 p-4 rounded shadow-sm flex-1 min-w-[180px]">
-              <div className="text-xs uppercase font-bold tracking-wider text-slate-500 mb-1">Cost / Enrolled Subject</div>
+              <div className="text-xs uppercase font-bold tracking-wider text-slate-500 mb-1">Cost per Enrolled Patient</div>
               <div className="text-2xl font-bold text-indigo-700">₹{costPerPatient.toLocaleString()}</div>
-              <div className="text-xs text-slate-500 mt-1">Milestone burn / {metrics.total_enrolled} enrolled</div>
+              <div className="text-xs text-slate-500 mt-1">Milestone spend / {metrics.total_enrolled} enrolled</div>
             </div>
             <div className="bg-white border border-slate-200 p-4 rounded shadow-sm flex-1 min-w-[180px]">
               <div className="text-xs uppercase font-bold tracking-wider text-slate-500 mb-1">Serious Events (SAEs)</div>
@@ -93,7 +129,7 @@ export default function Sponsor(props) {
             <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
               <div className="text-sm font-bold text-slate-900">Site Activation &amp; Compliance Status</div>
               <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                CRA Oversight: {metrics.cra_performance.open_queries} Open Queries &middot; {metrics.cra_performance.overdue_visits} Overdue Visits
+                CRA Performance: {metrics.cra_performance.open_queries} Open Queries &middot; {metrics.cra_performance.overdue_visits} Overdue Visits
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
