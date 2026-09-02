@@ -13,9 +13,10 @@ browsing who is enrolled.
 from __future__ import annotations
 
 import json
+import logging
 import math
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -38,6 +39,7 @@ from app.enums import (
 from app.models import AdverseEvent, AuditLog, EConsent, Site, Subject, Trial, User, Visit
 from app.models.base import utcnow
 from app.rbac import (
+    BLINDED_ROLES,
     CurrentUser,
     Permission,
     assert_site_visible,
@@ -52,7 +54,40 @@ from app.services.subject_transition import (
 )
 from app.services.visit_transition import VisitTransitionError, validate_visit_transition
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api", tags=["subjects"])
+
+
+class SubjectBlinded(BaseModel):
+    """Subject view for roles that must remain blinded to treatment allocation.
+
+    Deliberately omits `arm` and `randomization_date` to prevent unblinding.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int | None = None
+    trial_id: int
+    site_id: int
+    subject_code: str
+    assigned_researcher_id: int | None = None
+    user_id: int | None = None
+    status: str
+    screening_date: date | None = None
+    enrollment_date: date | None = None
+    year_of_birth: int | None = None
+    age_at_enrollment: int | None = None
+    sex: str
+    height_cm: float | None = None
+    weight_kg: float | None = None
+    prakriti: str | None = None
+    completed_date: date | None = None
+    withdrawal_date: date | None = None
+    withdrawal_reason: str | None = None
+    screen_failure_reason: str | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class SubjectScreeningCreate(BaseModel):
@@ -869,7 +904,7 @@ def record_subject_outcome(
     return SubjectOutcomeResponse.model_validate(subject)
 
 
-@router.get("/subjects", response_model=Page[Subject])
+@router.get("/subjects", response_model=Page[Any])
 def list_subjects(
     session: Session = Depends(get_session),
     user: CurrentUser = Depends(require(Permission.SUBJECT_READ)),
@@ -880,7 +915,7 @@ def list_subjects(
     prakriti: str | None = Query(None, description="Ayurvedic constitutional type"),
     limit: int = limit_param(),
     offset: int = offset_param(),
-) -> Page[Subject]:
+) -> Page[Any]:
     statement = select(Subject).order_by(Subject.subject_code)
     if trial_id is not None:
         statement = statement.where(Subject.trial_id == trial_id)
@@ -888,7 +923,7 @@ def list_subjects(
         statement = statement.where(Subject.site_id == site_id)
     if status:
         statement = statement.where(Subject.status == status)
-    if arm:
+    if arm and not user.is_blinded:
         statement = statement.where(Subject.arm == arm)
     if prakriti:
         statement = statement.where(Subject.prakriti == prakriti)
@@ -896,16 +931,35 @@ def list_subjects(
     # their own site AND site 3, which is nothing. The URL cannot widen the scope.
     statement = scoped(statement, Subject.site_id, user)
     total, items = paginate(session, statement, limit, offset)
+
+    if user.is_blinded:
+        logger.info(
+            "Blinded response served: user=%s role=%s endpoint=/api/subjects",
+            user.id,
+            user.role,
+        )
+        blinded_items = [SubjectBlinded.model_validate(s).model_dump() for s in items]
+        return Page(total=total, limit=limit, offset=offset, items=blinded_items)
+
     return Page(total=total, limit=limit, offset=offset, items=items)
 
 
-@router.get("/subjects/{subject_id}", response_model=Subject)
+@router.get("/subjects/{subject_id}", response_model=Any)
 def get_subject(
     subject_id: int,
     session: Session = Depends(get_session),
     user: CurrentUser = Depends(require(Permission.SUBJECT_READ)),
-) -> Subject:
-    return _visible_subject(session, subject_id, user)
+) -> Any:
+    subject = _visible_subject(session, subject_id, user)
+    if user.is_blinded:
+        logger.info(
+            "Blinded response served: user=%s role=%s endpoint=/api/subjects/%s",
+            user.id,
+            user.role,
+            subject_id,
+        )
+        return SubjectBlinded.model_validate(subject).model_dump()
+    return subject
 
 
 @router.post(
@@ -1331,12 +1385,14 @@ def get_subject_dossier(
         age = ref_year - subject.year_of_birth
 
     # 1. Profile Data
+    arm_value = "[BLINDED]" if user.is_blinded else subject.arm
+    rand_date_val = None if user.is_blinded else (str(subject.randomization_date) if subject.randomization_date else None)
     profile = {
         "id": subject.id,
         "subject_code": subject.subject_code,
         "masked_name": privacy.mask_patient_name(None, subject.subject_code) if should_mask else f"Participant {subject.subject_code}",
         "status": subject.status,
-        "arm": subject.arm,
+        "arm": arm_value,
         "sex": subject.sex,
         "age": age,
         "year_of_birth": subject.year_of_birth,
@@ -1346,13 +1402,14 @@ def get_subject_dossier(
         "prakriti": subject.prakriti,
         "screening_date": str(subject.screening_date) if subject.screening_date else None,
         "enrollment_date": str(subject.enrollment_date) if subject.enrollment_date else None,
-        "randomization_date": str(subject.randomization_date) if subject.randomization_date else None,
+        "randomization_date": rand_date_val,
         "site_id": subject.site_id,
         "site_name": site.name if site else "Clinical Research Center",
         "site_code": site.site_code if site else f"SITE-{subject.site_id}",
         "trial_id": subject.trial_id,
         "protocol_number": trial.protocol_number if trial else "AIIA-ASH-2026-01",
         "is_dpdp_masked": should_mask,
+        "is_blinded": user.is_blinded,
     }
 
     if consent:
@@ -1408,6 +1465,13 @@ def get_subject_dossier(
 
     # Enrollment
     if subject.enrollment_date:
+        enroll_details = {
+            "Assigned Study Arm": "[BLINDED]" if user.is_blinded else subject.arm,
+            "Eligibility": "Inclusion Criteria Met / Cleared by PI",
+        }
+        if not user.is_blinded:
+            enroll_details["Randomization Date"] = str(subject.randomization_date or subject.enrollment_date)
+
         timeline_events.append({
             "id": f"evt-enroll-{subject.id}",
             "event_type": "enrollment",
@@ -1415,11 +1479,7 @@ def get_subject_dossier(
             "timestamp": f"{subject.enrollment_date}T10:30:00Z",
             "actor": "Principal Investigator",
             "badge": "success",
-            "details": {
-                "Assigned Study Arm": subject.arm,
-                "Randomization Date": str(subject.randomization_date or subject.enrollment_date),
-                "Eligibility": "Inclusion Criteria Met / Cleared by PI",
-            },
+            "details": enroll_details,
         })
 
     # Protocol Visits
@@ -1493,6 +1553,14 @@ def get_subject_dossier(
         })
 
     timeline_events.sort(key=lambda x: x["timestamp"], reverse=True)
+
+    if user.is_blinded:
+        logger.info(
+            "Blinded dossier response served: user=%s role=%s endpoint=/api/subjects/%s/dossier",
+            user.id,
+            user.role,
+            subject_id,
+        )
 
     return {
         "profile": profile,

@@ -115,7 +115,7 @@ def export_adverse_event_safety_report(
         subject_code=subject.subject_code,
         subject_sex=subject.sex,
         subject_age_at_enrollment=subject.age_at_enrollment,
-        study_arm=subject.arm,
+        study_arm="[BLINDED]" if user.is_blinded else subject.arm,
         ae_number=event.ae_number,
         term_verbatim=event.term_verbatim,
         description=event.description,

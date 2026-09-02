@@ -208,6 +208,13 @@ SITE_SCOPED_ROLES: frozenset[str] = frozenset(
     }
 )
 
+# The roles that must remain blinded to treatment allocation/randomization arms.
+BLINDED_ROLES: frozenset[str] = frozenset(
+    {
+        UserRole.SPONSOR.value,
+    }
+)
+
 # Human labels, used by the dashboards and the matrix endpoint.
 ROLE_LABELS: dict[str, str] = {
     UserRole.ADMIN.value: "Primary Administrator",
@@ -279,6 +286,10 @@ class CurrentUser(BaseModel):
     @property
     def is_site_scoped(self) -> bool:
         return self.role in SITE_SCOPED_ROLES
+
+    @property
+    def is_blinded(self) -> bool:
+        return self.role in BLINDED_ROLES
 
     @property
     def scope_site_id(self) -> int | None:
