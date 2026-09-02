@@ -148,6 +148,7 @@ def _login_for_portal(
         email=user.email,
         role=user.role,
         site_id=user.site_id,
+        access_scope=user.access_scope,
     )
 
     current = CurrentUser(
@@ -158,6 +159,7 @@ def _login_for_portal(
         site_id=user.site_id,
         subject_id=user.subject_id,
         organization=user.organization,
+        access_scope=user.access_scope,
     )
 
     user.last_login_at = datetime.now(timezone.utc)
@@ -241,31 +243,29 @@ def me(user: CurrentUser = Depends(get_current_user)) -> MePayload:
     return _me(user)
 
 
-def _demo_users_for_roles(session: Session, role_order: list[str]) -> dict:
-    """Return development-only synthetic personas for one portal.
-
-    Development only. Printing credentials from an API would be indefensible in a
-    real deployment, so this returns 404 unless APP_ENV=development - the same
-    answer an attacker would get if the route did not exist.
-
-    Every account here is synthetic. There is no real person and no real password
-    anywhere in this system.
-    """
+def _demo_users_for_emails(session, emails: list[str]) -> dict:
     if not config.IS_DEVELOPMENT:
         raise HTTPException(status_code=404, detail="not found")
 
     users = session.exec(
-        select(User).where(User.is_active == True).order_by(User.id)  # noqa: E712
+        select(User).where(User.is_active == True).order_by(User.id)
     ).all()
 
-    # One login per role: the first user found for each, matching what the seed
-    # script prints. Site-scoped roles get several users (one per hospital), and
-    # picking the lowest id makes "the demo PI" a stable choice.
-    chosen: dict[str, User] = {}
-    for user in users:
-        if user.role in role_order and user.role not in chosen:
-            if user.hashed_password:
-                chosen[user.role] = user
+    user_by_email = {u.email: u for u in users if u.hashed_password}
+    
+    selected_users = []
+    for email in emails:
+        if email in user_by_email:
+            u = user_by_email[email]
+            selected_users.append({
+                "email": u.email,
+                "full_name": u.full_name,
+                "role": u.role,
+                "role_label": ROLE_LABELS.get(u.role, u.role),
+                "site_id": u.site_id,
+                "organization": u.organization,
+                "access_scope": getattr(u, 'access_scope', 'GLOBAL'),
+            })
 
     return {
         "password": config.DEMO_PASSWORD,
@@ -273,22 +273,11 @@ def _demo_users_for_roles(session: Session, role_order: list[str]) -> dict:
             "Synthetic demo accounts. All share one password so a five-minute "
             "pitch does not become a typing exercise."
         ),
-        "users": [
-            {
-                "email": chosen[role].email,
-                "full_name": chosen[role].full_name,
-                "role": role,
-                "role_label": ROLE_LABELS.get(role, role),
-                "site_id": chosen[role].site_id,
-                "organization": chosen[role].organization,
-            }
-            for role in role_order
-            if role in chosen
-        ],
-        "seeded": bool(chosen),
+        "users": selected_users,
+        "seeded": len(selected_users) > 0,
         "hint": (
             "Empty? Run: docker compose exec backend python scripts/seed.py"
-            if not chosen
+            if not selected_users
             else None
         ),
     }
@@ -297,13 +286,24 @@ def _demo_users_for_roles(session: Session, role_order: list[str]) -> dict:
 @router.get("/demo-users")
 def demo_users(session: Session = Depends(get_session)) -> dict:
     """List synthetic clinical-staff personas for the staff login page."""
-    return _demo_users_for_roles(session, DEMO_ROLE_ORDER)
+    emails = [
+        "meenakshi.sharma@demo.aiia-ctms.in",
+        "kavita.nair@demo.aiia-ctms.in",
+        "priya.raghavan@demo.aiia-ctms.in",
+        "lalitha.krishnan@demo.aiia-ctms.in",
+        "dr.gupta@demo.aiia-ctms.in",
+        "director@demo.aiia-ctms.in",
+        "investor@himalaya.com",
+        "shri.arvind.kulkarni@demo.aiia-ctms.in",
+        "dsmb.member@demo.aiia-ctms.in"
+    ]
+    return _demo_users_for_emails(session, emails)
 
 
 @router.get("/patient/demo-users")
 def patient_demo_users(session: Session = Depends(get_session)) -> dict:
     """List synthetic patient personas for the patient login page."""
-    return _demo_users_for_roles(session, [UserRole.PATIENT.value])
+    return _demo_users_for_emails(session, ["patient.01.014@demo.aiia-ctms.in"])
 
 
 # Resolve the forward reference to MePayload now that it is defined.

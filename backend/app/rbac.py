@@ -295,6 +295,7 @@ class CurrentUser(BaseModel):
     site_id: int | None = None
     subject_id: int | None = None
     organization: str | None = None
+    access_scope: str = "GLOBAL"
     # Copied off the token so a WebSocket can log out the same session.
     jti: str | None = None
 
@@ -379,6 +380,7 @@ async def user_from_token(token: str, session: Session) -> CurrentUser:
         site_id=user.site_id,
         subject_id=user.subject_id,
         organization=user.organization,
+        access_scope=user.access_scope,
         jti=claims.get("jti"),
     )
 

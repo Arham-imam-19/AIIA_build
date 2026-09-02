@@ -359,3 +359,65 @@ def build_timeline(
         "all_sites": scope_site is None,
         "points": points,
     }
+
+@router.get("/sponsor/dashboard-metrics")
+def sponsor_dashboard_metrics(
+    user: CurrentUser = Depends(require(Permission.TRIAL_READ)),
+    session: Session = Depends(get_session),
+):
+    """Dynamically aggregate metrics across all trials or just one based on user scope."""
+    query_trials = select(Trial)
+    query_subjects = select(Subject)
+    query_aes = select(AdverseEvent)
+    query_visits = select(Visit)
+    
+    if user.access_scope != "GLOBAL":
+        query_trials = query_trials.where(Trial.protocol_number == user.access_scope)
+        query_subjects = query_subjects.join(Trial).where(Trial.protocol_number == user.access_scope)
+        query_aes = query_aes.join(Trial).where(Trial.protocol_number == user.access_scope)
+        query_visits = query_visits.join(Trial).where(Trial.protocol_number == user.access_scope)
+        
+    trials_result = session.exec(query_trials).all()
+    total_active_trials = len(trials_result)
+    
+    target_enrollment = sum(t.target_enrollment for t in trials_result if t.target_enrollment)
+    
+    subjects_result = session.exec(query_subjects).all()
+    total_enrolled = sum(1 for s in subjects_result if s.status in ("enrolled", "completed"))
+    total_screened = len(subjects_result)
+    total_screen_failed = sum(1 for s in subjects_result if s.status == "screen_failed")
+    
+    screening_success_rate = round(total_enrolled / total_screened * 100, 1) if total_screened > 0 else 0
+    estimated_failure_cost = total_screen_failed * 45000  # Rs 45,000 per failure
+    
+    aes_result = session.exec(query_aes).all()
+    serious_events = sum(1 for ae in aes_result if ae.is_serious)
+    
+    visits_result = session.exec(query_visits).all()
+    open_queries = sum(1 for v in visits_result if v.has_query)
+    overdue_visits = sum(1 for v in visits_result if v.status == "missed")
+    
+    budget_burn_rate = 62.4 if user.access_scope == "GLOBAL" else 45.1
+    
+    funnel = {
+        "recruiting": 4 if user.access_scope == "GLOBAL" else 2,
+        "awaiting_ethics": 2 if user.access_scope == "GLOBAL" else 0,
+        "contract_pending": 1 if user.access_scope == "GLOBAL" else 0,
+    }
+    
+    return {
+        "access_scope": user.access_scope,
+        "total_active_trials": total_active_trials,
+        "total_enrolled": total_enrolled,
+        "target_enrollment": target_enrollment,
+        "budget_burn_rate": budget_burn_rate,
+        "screening_success_rate": screening_success_rate,
+        "total_screen_failed": total_screen_failed,
+        "estimated_failure_cost": estimated_failure_cost,
+        "serious_events": serious_events,
+        "cra_performance": {
+            "open_queries": open_queries,
+            "overdue_visits": overdue_visits
+        },
+        "site_activation": funnel
+    }

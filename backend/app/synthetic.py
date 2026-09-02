@@ -487,10 +487,11 @@ def _allocate(total: int, weights: list[tuple[str, float]]) -> dict[str, int]:
     return floors
 
 
-def _build_trial(reference_date: date) -> dict:
+def _build_trials(reference_date: date) -> list[dict]:
     start = reference_date - timedelta(days=250)
-    return {
-        "protocol_number": "AIIA-ASH-2026-01",
+    trials = []
+    trials.append({
+        "protocol_number": "TRIAL_001",
         "title": (
             "A Multicentre, Randomised, Double-Blind, Placebo-Controlled Trial to "
             "Evaluate the Efficacy and Safety of Ashwagandha (Withania somnifera) "
@@ -540,7 +541,41 @@ def _build_trial(reference_date: date) -> dict:
         "regulatory_approval_number": "CDSCO/AYUSH/CT/2025/0391",
         "regulatory_approval_date": start - timedelta(days=30),
         "activated_at": datetime(start.year, start.month, start.day, 10) - timedelta(days=1),
-    }
+    })
+
+    # 4 Mock trials
+    for i in range(2, 6):
+        trials.append({
+            "protocol_number": f"TRIAL_{i:03d}",
+            "title": f"Mock Safety and Efficacy Trial for Ayurvedic Formulation {i}",
+            "short_title": f"MOCK Trial {i}",
+            "ctri_number": f"CTRI/2026/01/00000{i}",
+            "ctri_registration_date": start - timedelta(days=30),
+            "phase": TrialPhase.PHASE_2.value,
+            "status": TrialStatus.RECRUITING.value,
+            "indication": "Type 2 Diabetes Mellitus",
+            "indication_ayurveda": "Madhumeha",
+            "intervention": "Ayurvedic Formulation",
+            "comparator": "Placebo",
+            "design": "Multicentre, randomised, double-blind",
+            "is_blinded": True,
+            "primary_objective": "Efficacy",
+            "secondary_objective": "Safety",
+            "primary_endpoint": "Change in HbA1c",
+            "sponsor_name": "Himalaya Wellness Company",
+            "sponsor_type": "Corporate",
+            "target_enrollment": 100 * i,
+            "start_date": start,
+            "ethics_approval_status": EthicsApprovalStatus.APPROVED.value,
+            "ethics_approval_number": f"IEC/MOCK/{i}",
+            "ethics_approval_date": start - timedelta(days=50),
+            "ethics_approval_valid_until": start + timedelta(days=300),
+            "regulatory_approval_number": f"CT-06/2026/Ayush-00{i}",
+            "activated_at": start,
+            "_activated_by_email": "investor@himalaya.com",
+        })
+        
+    return trials
 
 
 def _build_sites(reference_date: date) -> list[dict]:
@@ -656,45 +691,59 @@ def _build_users() -> list[dict]:
             UserRole.ADMIN.value,
             "System Administration",
             "admin@demo.aiia-ctms.in",
+            "GLOBAL",
         ),
         (
-            "Dr. Vikram Desai",
+            "Institutional Leadership (AIIA Director)",
             UserRole.SPONSOR.value,
-            "All India Institute of Ayurveda (AIIA), Ministry of Ayush",
-            "vikram.desai@demo.aiia-ctms.in",
+            "All India Institute of Ayurveda (AIIA)",
+            "director@demo.aiia-ctms.in",
+            "GLOBAL",
+        ),
+        (
+            "External Funder (Himalaya)",
+            UserRole.SPONSOR.value,
+            "Himalaya Wellness Company",
+            "investor@himalaya.com",
+            "TRIAL_001",
         ),
         (
             "Dr. Lalitha Krishnan",
             UserRole.ETHICS_COMMITTEE.value,
             "AIIA Institutional Ethics Committee",
             "lalitha.krishnan@demo.aiia-ctms.in",
+            "GLOBAL",
         ),
         (
             "Shri Arvind Kulkarni",
             UserRole.REGULATOR.value,
             "Central Drugs Standard Control Organisation (CDSCO)",
             "shri.arvind.kulkarni@demo.aiia-ctms.in",
+            "GLOBAL",
         ),
         (
             "Priya Raghavan",
             UserRole.MONITOR.value,
             "Independent Clinical Auditor",
             "priya.raghavan@demo.aiia-ctms.in",
+            "GLOBAL",
         ),
         (
             "Dr. Gupta",
             UserRole.PHARMACOVIGILANCE.value,
             "National Pharmacovigilance Centre (NPvCC)",
             "dr.gupta@demo.aiia-ctms.in",
+            "GLOBAL",
         ),
         (
             "DSMB Member",
             UserRole.DSMB.value,
             "Data Safety Monitoring Board",
             "dsmb.member@demo.aiia-ctms.in",
+            "GLOBAL",
         ),
     ]
-    for name, role, organization, email in oversight:
+    for name, role, organization, email, scope in oversight:
         users.append(
             {
                 "email": email,
@@ -702,6 +751,7 @@ def _build_users() -> list[dict]:
                 "role": role,
                 "organization": organization,
                 "_site_code": None,
+                "access_scope": scope,
             }
         )
 
@@ -1397,22 +1447,22 @@ def generate(
     reference_date = reference_date or date.today()
     rng = random.Random(random_seed)
 
-    trial = _build_trial(reference_date)
+    trials = _build_trials(reference_date)
     sites = _build_sites(reference_date)
     users = _build_users()
-    trial["_activated_by_email"] = next(
+    trials[0]["_activated_by_email"] = next(
         user["email"] for user in users if user["role"] == UserRole.SPONSOR.value
     )
     subjects = _build_subjects(rng, reference_date)
     visits = _build_visits(rng, reference_date, subjects, users)
     adverse_events = _build_adverse_events(rng, reference_date, subjects, users)
-    audit_logs = _build_audit_logs(rng, reference_date, trial, users, subjects, adverse_events)
+    audit_logs = _build_audit_logs(rng, reference_date, trials[0], users, subjects, adverse_events)
     patient_requests = _build_patient_requests(rng, reference_date, users)
     econsents = _build_econsents(rng, reference_date, subjects, users)
 
     return {
         "reference_date": reference_date,
-        "trial": trial,
+        "trials": trials,
         "sites": sites,
         "users": users,
         "subjects": subjects,

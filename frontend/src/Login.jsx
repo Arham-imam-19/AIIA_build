@@ -22,6 +22,13 @@ const ROLE_BLURB = {
   dsmb: 'reviews aggregate safety data to halt or modify trials',
 }
 
+const getBlurb = (user, patientPortal) => {
+  if (patientPortal) return 'trial participant: view schedule & message hospital admin'
+  if (user.email === 'director@demo.aiia-ctms.in') return 'Has global portfolio access'
+  if (user.email === 'investor@himalaya.com') return 'Access scoped strictly to funded trials'
+  return ROLE_BLURB[user.role]
+}
+
 export default function Login({ patientPortal = false }) {
   const { signIn, state } = useAuth()
   const [email, setEmail] = useState('')
@@ -150,12 +157,10 @@ export default function Login({ patientPortal = false }) {
                   >
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="text-sm font-medium text-slate-800">
-                        {user.role_label}
+                        {user.email === 'director@demo.aiia-ctms.in' ? 'Institutional Leadership (AIIA Director)' : user.email === 'investor@himalaya.com' ? 'External Funder (Himalaya)' : user.role_label}
                       </span>
                       <span className="text-xs text-slate-400">
-                        {patientPortal
-                          ? 'trial participant: view schedule & message hospital admin'
-                          : ROLE_BLURB[user.role]}
+                        {getBlurb(user, patientPortal)}
                       </span>
                     </div>
                     <div className="mt-0.5 font-mono text-xs text-slate-500">

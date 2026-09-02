@@ -37,6 +37,9 @@ class User(SQLModel, table=True):
 
     organization: str | None = Field(default=None, max_length=200)
     phone: str | None = Field(default=None, max_length=40)
+    
+    # Global or Trial-specific access
+    access_scope: str = Field(default="GLOBAL", max_length=100)
 
     is_active: bool = Field(default=True)
 

@@ -74,6 +74,7 @@ def create_access_token(
     email: str,
     role: str,
     site_id: int | None,
+    access_scope: str = "GLOBAL",
     ttl_minutes: int | None = None,
 ) -> tuple[str, datetime, str]:
     """Mint a signed token. Returns (token, expires_at, jti).
@@ -95,6 +96,7 @@ def create_access_token(
         # Carried in the token so the API can scope a site user's queries
         # without a database round trip on every request.
         "site_id": site_id,
+        "access_scope": access_scope,
         "jti": jti,
         "iat": int(now.timestamp()),
         "exp": int(expires_at.timestamp()),
