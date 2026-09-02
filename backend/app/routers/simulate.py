@@ -46,6 +46,7 @@ from app.models import AdverseEvent, Site, Subject, Trial, Visit
 from app.models.base import utcnow
 from app.rbac import CurrentUser, Permission, get_current_user, require
 from app.routers.stats import resolve_trial
+from app.services import trial_compliance
 
 router = APIRouter(prefix="/api/simulate", tags=["simulate"])
 
@@ -289,6 +290,13 @@ async def simulate_enrollment(
     if site.trial_id != trial.id:
         raise HTTPException(
             status_code=404, detail=f"no site with id {site.id} in this trial"
+        )
+
+    ethics_ok, ethics_reason = trial_compliance.check_ethics_clearance_for_enrollment(trial)
+    if not ethics_ok:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Enrollment Blocked: {ethics_reason}",
         )
 
     today = date.today()

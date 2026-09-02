@@ -35,12 +35,9 @@ class UserRole(str, Enum):
     INSTITUTION_ADMIN = "institution_admin"  # Institution / Site Administrator (manages site & researchers)
     PRINCIPAL_INVESTIGATOR = "principal_investigator"  # Lead Researcher at a site
     COORDINATOR = "coordinator"  # Clinical Research Coordinator (enters data, manages visits)
-    MONITOR = "monitor"  # Clinical Research Associate (verifies data, raises queries)
     SPONSOR = "sponsor"  # funds the trial, watches cost and timelines
     ETHICS_COMMITTEE = "ethics_committee"  # approves the trial, reviews safety
-    PHARMACOVIGILANCE = "pharmacovigilance"  # codes adverse events, tracks NDCT timelines
     REGULATOR = "regulator"  # CDSCO / Ministry of Ayush oversight
-    DSMB = "dsmb"  # Data Safety Monitoring Board (reviews aggregate safety, halts trials)
     PATIENT = "patient"  # Trial participant (can view schedule and contact Institution Admin)
 
 

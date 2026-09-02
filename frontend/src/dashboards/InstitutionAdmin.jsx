@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { respondPatientRequest } from '../api'
 import DashboardLayout from './layout'
+import DataExportCenter from '../components/DataExportCenter'
 
 function RespondModal({ requestId, onClose, onSuccess }) {
   const [response, setResponse] = useState('')
@@ -98,7 +99,17 @@ export default function InstitutionAdmin(props) {
   const [selectedRequest, setSelectedRequest] = useState(null)
 
   return (
-    <div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between rounded-lg border border-teal-100 bg-teal-50/70 px-4 py-2.5 text-xs text-teal-900">
+        <span className="flex items-center gap-2 font-medium">
+          <span className="flex h-2 w-2 rounded-full bg-teal-600"></span>
+          🏥 Site Healthcare Provider Scope: Direct Patient Communication Enabled
+        </span>
+        <span className="text-teal-700 hidden sm:inline">
+          Access is limited to participants enrolled at your hospital site.
+        </span>
+      </div>
+
       <DashboardLayout
         {...props}
         wide={['patient_requests', 'staff']}
@@ -124,6 +135,8 @@ export default function InstitutionAdmin(props) {
           </button>
         </div>
       </div>
+
+      <DataExportCenter />
 
       {selectedRequest && (
         <RespondModal

@@ -1,35 +1,129 @@
+import { useEffect, useState } from 'react'
+import { fetchTrials } from '../api'
 import DashboardLayout from './layout'
+import ParticipantIntakeModal from '../components/ParticipantIntakeModal'
+import ReportAdverseEventModal from '../components/ReportAdverseEventModal'
+import LogProtocolDeviationModal from '../components/LogProtocolDeviationModal'
+import ParticipantDossierModal from '../components/ParticipantDossierModal'
+
+function SiteComplianceStatusBanner() {
+  const [trial, setTrial] = useState(null)
+
+  useEffect(() => {
+    fetchTrials()
+      .then((res) => {
+        if (res.items?.[0]) setTrial(res.items[0])
+      })
+      .catch(() => {})
+  }, [])
+
+  const isEthicsApproved = trial?.ethics_approval_status === 'approved'
+  const isCtriRegistered = Boolean(trial?.ctri_number && trial?.ctri_number.trim())
+  const isFullyCleared = isEthicsApproved && isCtriRegistered
+
+  return (
+    <div className={`flex items-center justify-between rounded-lg border px-4 py-2.5 text-xs ${
+      isFullyCleared
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+        : 'border-amber-200 bg-amber-50 text-amber-900'
+    }`}>
+      <span className="flex items-center gap-2 font-medium">
+        <span className={`flex h-2 w-2 rounded-full ${isFullyCleared ? 'bg-emerald-600' : 'bg-amber-600'}`}></span>
+        {isFullyCleared
+          ? `✅ Regulatory & Ethics Cleared (${trial.ethics_approval_number || 'IEC Approved'} | ${trial.ctri_number}): Site authorized to recruit.`
+          : !isEthicsApproved
+          ? `⚠️ Enrollment On Hold: Trial ethics approval is ${trial?.ethics_approval_status || 'Pending'}. Software blocks enrollment until IEC approves.`
+          : `⚠️ Enrollment On Hold: Prospective CTRI registration required before participant screening (NDCT Rules 2019).`}
+      </span>
+      <span className="hidden sm:inline font-mono text-[11px]">
+        NDCT Rules 2019 Rule 22
+      </span>
+    </div>
+  )
+}
 
 export default function Coordinator(props) {
+  const [showIntakeModal, setShowIntakeModal] = useState(false)
+  const [showAeModal, setShowAeModal] = useState(false)
+  const [showDeviationModal, setShowDeviationModal] = useState(false)
+  const [selectedSubjectId, setSelectedSubjectId] = useState(null)
+
   return (
-    <div>
-      <div className="flex gap-4 mb-6">
-        <div className="bg-white border border-slate-200 text-slate-700 px-4 py-3 rounded-xl shadow-sm flex items-center gap-3 w-1/3">
-          <span className="text-2xl">📅</span>
+    <div className="space-y-4">
+      <SiteComplianceStatusBanner />
+
+      {/* Clinical Site Actions Center */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-sm font-bold uppercase tracking-wider text-slate-900">Visit Calendar</div>
-            <div className="text-xs">3 patients due for Week-2 checkup today.</div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-aiia-600"></span>
+              Site Clinical Actions & Intake Center
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Execute structured CDASH participant intake, MedDRA safety reports, and protocol deviations.
+            </p>
           </div>
-        </div>
-        <div className="bg-white border border-slate-200 text-slate-700 px-4 py-3 rounded-xl shadow-sm flex items-center gap-3 w-1/3">
-          <span className="text-2xl">📋</span>
-          <div>
-            <div className="text-sm font-bold uppercase tracking-wider text-slate-900">Task Inbox</div>
-            <div className="text-xs text-amber-600 font-medium">2 overdue data entry tasks.</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowIntakeModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-aiia-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-aiia-700 transition"
+            >
+              📝 Screen New Participant
+            </button>
+            <button
+              onClick={() => setShowAeModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-700 transition"
+            >
+              🚨 Report Adverse Event
+            </button>
+            <button
+              onClick={() => setShowDeviationModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-700 transition"
+            >
+              ⚠️ Log Protocol Deviation
+            </button>
+            <button
+              onClick={() => setSelectedSubjectId(1)}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 transition"
+            >
+              🔍 Inspect Participant Dossier
+            </button>
           </div>
-        </div>
-        <div className="bg-white border border-dashed border-slate-300 text-slate-500 px-4 py-3 rounded-xl flex items-center justify-center gap-3 w-1/3 cursor-pointer hover:bg-slate-50" onClick={() => alert("Mock: Uploaded Source Document (e.g. PDF Lab Results)")}>
-          <span className="text-xl">📄</span>
-          <div className="text-sm font-medium">Drag & Drop Source Documents (PDF/Images)</div>
         </div>
       </div>
 
       <DashboardLayout
         {...props}
         wide={['upcoming', 'screening']}
-        simulateFirst
         note="Your worklist for the next two weeks. An overdue visit becomes a protocol deviation if it slips outside its window, so these dates are the ones that matter."
       />
+
+      {/* Modals */}
+      {showIntakeModal && (
+        <ParticipantIntakeModal
+          onClose={() => setShowIntakeModal(false)}
+          onSuccess={props.onRefresh}
+        />
+      )}
+      {showAeModal && (
+        <ReportAdverseEventModal
+          onClose={() => setShowAeModal(false)}
+          onSuccess={props.onRefresh}
+        />
+      )}
+      {showDeviationModal && (
+        <LogProtocolDeviationModal
+          onClose={() => setShowDeviationModal(false)}
+          onSuccess={props.onRefresh}
+        />
+      )}
+      {selectedSubjectId && (
+        <ParticipantDossierModal
+          subjectId={selectedSubjectId}
+          onClose={() => setSelectedSubjectId(null)}
+        />
+      )}
     </div>
   )
 }

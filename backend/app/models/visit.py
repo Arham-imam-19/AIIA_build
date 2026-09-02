@@ -52,10 +52,6 @@ class Visit(SQLModel, table=True):
     is_protocol_deviation: bool = Field(default=False, index=True)
     deviation_description: str | None = Field(default=None, max_length=1000)
 
-    # Added for CRA Data Queries
-    has_query: bool = Field(default=False)
-    query_text: str | None = Field(default=None, max_length=1000)
-
     notes: str | None = Field(default=None, max_length=2000)
 
     # Which coordinator or investigator recorded the visit.

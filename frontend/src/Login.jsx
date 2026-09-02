@@ -14,12 +14,9 @@ const ROLE_BLURB = {
   institution_admin: 'manages hospital site, researchers & patient inquiries',
   principal_investigator: 'Lead Researcher: runs clinical trial at the site',
   coordinator: 'books visits, enters data & coordinates care',
-  monitor: 'Clinical Research Associate: verifies data and raises queries',
   sponsor: 'funds the trial and watches progress across all sites',
   ethics_committee: 'reviews safety events and protocol deviations',
-  pharmacovigilance: 'codes adverse events and tracks NDCT timelines',
   regulator: 'inspects CTRI registration and the audit trail',
-  dsmb: 'reviews aggregate safety data to halt or modify trials',
 }
 
 export default function Login({ patientPortal = false }) {

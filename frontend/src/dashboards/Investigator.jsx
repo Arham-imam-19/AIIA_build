@@ -1,81 +1,129 @@
-// Principal Investigator: the doctor legally responsible for the trial at one
-// hospital. Everything on this screen is their own site - asking for another
-// site's participant returns 403, by design.
-
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { fetchTrials } from '../api'
 import DashboardLayout from './layout'
-import { api } from '../api'
+import ParticipantIntakeModal from '../components/ParticipantIntakeModal'
+import ReportAdverseEventModal from '../components/ReportAdverseEventModal'
+import LogProtocolDeviationModal from '../components/LogProtocolDeviationModal'
+import ParticipantDossierModal from '../components/ParticipantDossierModal'
 
-export default function Investigator(props) {
-  const [saeModal, setSaeModal] = useState(false)
-  const [subjectId, setSubjectId] = useState(1)
-  const [term, setTerm] = useState('')
-  const [error, setError] = useState(null)
+function SiteComplianceStatusBanner() {
+  const [trial, setTrial] = useState(null)
 
-  const reportSAE = async (e) => {
-    e.preventDefault()
-    setError(null)
-    try {
-      await api('/api/adverse-events', {
-        method: 'POST',
-        body: {
-          subject_id: subjectId,
-          term_verbatim: term,
-          severity: 'severe',
-          is_serious: true,
-          seriousness_criteria: 'hospitalization',
-          causality: 'probable',
-          action_taken: 'drug_withdrawn',
-          outcome: 'ongoing'
-        }
+  useEffect(() => {
+    fetchTrials()
+      .then((res) => {
+        if (res.items?.[0]) setTrial(res.items[0])
       })
-      setSaeModal(false)
-      setTerm('')
-    } catch (err) {
-      setError(err.message)
-    }
-  }
+      .catch(() => {})
+  }, [])
+
+  const isEthicsApproved = trial?.ethics_approval_status === 'approved'
+  const isCtriRegistered = Boolean(trial?.ctri_number && trial?.ctri_number.trim())
+  const isFullyCleared = isEthicsApproved && isCtriRegistered
 
   return (
-    <div>
-      <div className="flex gap-4 mb-6">
-        <button onClick={() => alert("Add Patient (Mock): Sending e-Consent SMS to patient...")} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-blue-700">
-          + Add Patient
-        </button>
-        <button onClick={() => alert("EDC Form (Mock): Logging daily BP and Prakriti observations...")} className="bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-slate-50">
-          📝 Log EDC Vitals
-        </button>
-        <button onClick={() => setSaeModal(true)} className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:bg-red-700 ml-auto flex items-center gap-2">
-          🚨 Report Severe Adverse Event (SAE)
-        </button>
-      </div>
+    <div className={`flex items-center justify-between rounded-lg border px-4 py-2.5 text-xs ${
+      isFullyCleared
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+        : 'border-amber-200 bg-amber-50 text-amber-900'
+    }`}>
+      <span className="flex items-center gap-2 font-medium">
+        <span className={`flex h-2 w-2 rounded-full ${isFullyCleared ? 'bg-emerald-600' : 'bg-amber-600'}`}></span>
+        {isFullyCleared
+          ? `✅ Regulatory & Ethics Cleared (${trial.ethics_approval_number || 'IEC Approved'} | ${trial.ctri_number}): Site authorized to recruit.`
+          : !isEthicsApproved
+          ? `⚠️ Enrollment On Hold: Trial ethics approval is ${trial?.ethics_approval_status || 'Pending'}. Software blocks enrollment until IEC approves.`
+          : `⚠️ Enrollment On Hold: Prospective CTRI registration required before participant screening (NDCT Rules 2019).`}
+      </span>
+      <span className="hidden sm:inline font-mono text-[11px]">
+        NDCT Rules 2019 Rule 22
+      </span>
+    </div>
+  )
+}
 
-      {saeModal && (
-        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50">
-          <form onSubmit={reportSAE} className="bg-white p-6 rounded-xl shadow-xl max-w-md w-full">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Report Severe Adverse Event</h3>
+export default function Investigator(props) {
+  const [showIntakeModal, setShowIntakeModal] = useState(false)
+  const [showAeModal, setShowAeModal] = useState(false)
+  const [showDeviationModal, setShowDeviationModal] = useState(false)
+  const [selectedSubjectId, setSelectedSubjectId] = useState(null)
 
-            {error && <div className="mb-4 text-red-600 text-sm bg-red-50 p-2 rounded">{error}</div>}
+  return (
+    <div className="space-y-4">
+      <SiteComplianceStatusBanner />
 
-            <label className="block text-sm font-medium text-slate-700 mb-1">Subject ID (Internal)</label>
-            <input type="number" value={subjectId} onChange={e => setSubjectId(Number(e.target.value))} className="w-full border border-slate-300 rounded p-2 mb-4 text-sm" />
-
-            <label className="block text-sm font-medium text-slate-700 mb-1">Event Term</label>
-            <input type="text" value={term} onChange={e => setTerm(e.target.value)} placeholder="e.g. Severe Nausea" className="w-full border border-slate-300 rounded p-2 mb-6 text-sm" required />
-
-            <div className="flex justify-end gap-3">
-              <button type="button" onClick={() => setSaeModal(false)} className="px-4 py-2 text-sm text-slate-600 font-medium hover:bg-slate-50 rounded">Cancel</button>
-              <button type="submit" className="px-4 py-2 text-sm bg-red-600 text-white font-medium rounded hover:bg-red-700">Submit to PV</button>
-            </div>
-          </form>
+      {/* Clinical Site Actions Center */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-aiia-600"></span>
+              Principal Investigator Clinical & Safety Actions
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Execute structured CDASH screening intake, evaluate & report MedDRA adverse events, and log deviations.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowIntakeModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-aiia-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-aiia-700 transition"
+            >
+              📝 Screen New Participant
+            </button>
+            <button
+              onClick={() => setShowAeModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-700 transition"
+            >
+              🚨 Report Adverse Event
+            </button>
+            <button
+              onClick={() => setShowDeviationModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-700 transition"
+            >
+              ⚠️ Log Protocol Deviation
+            </button>
+            <button
+              onClick={() => setSelectedSubjectId(1)}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 transition"
+            >
+              🔍 Inspect Participant Dossier
+            </button>
+          </div>
         </div>
-      )}
+      </div>
 
       <DashboardLayout
         {...props}
         wide={['recent_aes']}
         note="Scoped to your site only. Safety first: an open adverse event is one that has not resolved yet, and a serious one has to reach the ethics committee within days."
       />
+
+      {/* Modals */}
+      {showIntakeModal && (
+        <ParticipantIntakeModal
+          onClose={() => setShowIntakeModal(false)}
+          onSuccess={props.onRefresh}
+        />
+      )}
+      {showAeModal && (
+        <ReportAdverseEventModal
+          onClose={() => setShowAeModal(false)}
+          onSuccess={props.onRefresh}
+        />
+      )}
+      {showDeviationModal && (
+        <LogProtocolDeviationModal
+          onClose={() => setShowDeviationModal(false)}
+          onSuccess={props.onRefresh}
+        />
+      )}
+      {selectedSubjectId && (
+        <ParticipantDossierModal
+          subjectId={selectedSubjectId}
+          onClose={() => setSelectedSubjectId(null)}
+        />
+      )}
     </div>
   )
 }

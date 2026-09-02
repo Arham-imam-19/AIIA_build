@@ -209,6 +209,7 @@ def _sae_reporting(session: Session, trial_id: int, user: CurrentUser) -> dict:
     rows: list[dict] = []
     late = 0
     unreported = 0
+    today_eval = date.today()
     for event in events:
         delay: int | None = None
         if event.reported_to_ec_date and event.reported_date:
@@ -221,6 +222,18 @@ def _sae_reporting(session: Session, trial_id: int, user: CurrentUser) -> dict:
             verdict = f"late ({delay} days)"
         else:
             verdict = f"on time ({delay} days)" if delay is not None else "on time"
+
+        # NDCT Rules 2019 24h expedited reporting check
+        if event.reported_to_ec:
+            urgency = "COMPLIANT_SUBMITTED"
+        elif event.onset_date:
+            expedited_due = event.onset_date + timedelta(days=1)
+            if today_eval > expedited_due:
+                urgency = "EXPEDITED_OVERDUE"
+            else:
+                urgency = "EXPEDITED_DUE_SOON"
+        else:
+            urgency = "EXPEDITED_DUE_SOON"
 
         rows.append(
             {
@@ -238,6 +251,7 @@ def _sae_reporting(session: Session, trial_id: int, user: CurrentUser) -> dict:
                     else None
                 ),
                 "days": delay,
+                "urgency": urgency,
                 "verdict": verdict,
             }
         )
@@ -583,6 +597,7 @@ def _ethics(session, user, stats, trial, today) -> tuple[list, list]:
             "Serious adverse events and their reporting",
             [("ae_number", "AE"), ("site", "Site"), ("term", "Event"),
              ("criteria", "Why serious"), ("onset", "Onset"),
+             ("urgency", "24h Regulatory Clock"),
              ("reported", "Reported"), ("to_ethics", "To ethics"),
              ("days", "Days"), ("verdict", "Verdict")],
             sae["rows"],
@@ -724,8 +739,8 @@ def _regulator(session, user, stats, trial, today) -> tuple[list, list]:
                 "sae_reporting",
                 "Serious adverse events",
                 [("ae_number", "AE"), ("site", "Site"), ("term", "Event"),
-                 ("onset", "Onset"), ("to_ethics", "To ethics"),
-                 ("days", "Days"), ("verdict", "Verdict")],
+                 ("onset", "Onset"), ("urgency", "24h Regulatory Clock"),
+                 ("to_ethics", "To ethics"), ("days", "Days"), ("verdict", "Verdict")],
                 sae["rows"],
                 empty="No serious adverse events reported.",
             ),
@@ -961,13 +976,10 @@ BUILDERS = {
     UserRole.INSTITUTION_ADMIN.value: _institution_admin,
     UserRole.PRINCIPAL_INVESTIGATOR.value: _investigator,
     UserRole.COORDINATOR.value: _coordinator,
-    UserRole.MONITOR.value: _coordinator,
     UserRole.PATIENT.value: _patient,
     UserRole.SPONSOR.value: _sponsor,
     UserRole.ETHICS_COMMITTEE.value: _ethics,
-    UserRole.PHARMACOVIGILANCE.value: _ethics,
     UserRole.REGULATOR.value: _regulator,
-    UserRole.DSMB.value: _sponsor,
 }
 
 HEADLINES = {
@@ -996,24 +1008,12 @@ HEADLINES = {
         "Every site, one screen: is this trial on track and is it safe?",
     ),
     UserRole.ETHICS_COMMITTEE.value: (
-        "Ethics Committee view",
-        "Protocol deviations, safety signals, and trial-wide ethics approvals.",
-    ),
-    UserRole.PHARMACOVIGILANCE.value: (
-        "Pharmacovigilance (NPvCC) Inbox",
-        "Triage, MedDRA coding, and tracking NDCT 2019 regulatory timelines.",
-    ),
-    UserRole.DSMB.value: (
-        "Data Safety Monitoring Board",
-        "Aggregate safety analytics and continuous trial-continuation decisions.",
+        "Safety and ethics review",
+        "Serious events, how fast they reached this committee, and protocol deviations.",
     ),
     UserRole.REGULATOR.value: (
         "Regulatory oversight",
         "Registration, approvals, reporting timeliness and the audit trail.",
-    ),
-    UserRole.MONITOR.value: (
-        "Monitor / CRA view",
-        "Source data verification and clinical query management.",
     ),
 }
 

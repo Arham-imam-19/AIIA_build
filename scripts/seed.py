@@ -44,9 +44,9 @@ TABLES_IN_DELETE_ORDER = (
     AdverseEvent,
     Visit,
     Subject,
-    User,
     Site,
     Trial,
+    User,
 )
 
 # The order the demo logins are printed in, matching the full hierarchy:
@@ -56,13 +56,10 @@ DEMO_ROLE_ORDER = (
     UserRole.INSTITUTION_ADMIN.value,
     UserRole.PRINCIPAL_INVESTIGATOR.value,
     UserRole.COORDINATOR.value,
-    UserRole.MONITOR.value,
     UserRole.PATIENT.value,
     UserRole.SPONSOR.value,
     UserRole.ETHICS_COMMITTEE.value,
-    UserRole.PHARMACOVIGILANCE.value,
     UserRole.REGULATOR.value,
-    UserRole.DSMB.value,
 )
 
 
@@ -82,7 +79,7 @@ from sqlalchemy import text
 
 def wipe(session: Session) -> None:
     """Empty every application table in dependency order."""
-    session.exec(text("UPDATE users SET subject_id = NULL"))
+    session.exec(text("UPDATE users SET subject_id = NULL, site_id = NULL"))
     session.exec(text("UPDATE subjects SET assigned_researcher_id = NULL, user_id = NULL"))
     session.exec(text("UPDATE trials SET activated_by_user_id = NULL"))
     session.commit()

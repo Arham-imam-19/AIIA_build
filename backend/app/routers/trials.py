@@ -12,7 +12,6 @@ from dataclasses import asdict
 from datetime import date, datetime
 import json
 
-from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.exc import IntegrityError
@@ -21,7 +20,8 @@ from sqlmodel import Session, SQLModel, select
 from app import audit
 from app.db import get_session
 from app.enums import AuditAction, EthicsApprovalStatus, TrialStatus
-from app.models import Site, Subject, Trial
+from app.events import bus, now_iso
+from app.models import Site, Subject, Trial, User
 from app.models.base import utcnow
 from app.services import trial_compliance
 from app.rbac import (
@@ -338,7 +338,7 @@ def get_trial(
     "/trials/{trial_id}/ethics-approval",
     response_model=TrialEthicsApprovalResponse,
 )
-def update_trial_ethics_approval(
+async def update_trial_ethics_approval(
     trial_id: int,
     body: TrialEthicsApprovalUpdate,
     request: Request,
@@ -408,6 +408,20 @@ def update_trial_ethics_approval(
     )
     session.commit()
     session.refresh(trial)
+
+    try:
+        await bus.publish(
+            {
+                "type": "trial.ethics_updated",
+                "at": now_iso(),
+                "trial_id": trial.id,
+                "status": trial.ethics_approval_status,
+                "label": f"Ethics {trial.ethics_approval_status}",
+                "message": f"Trial ethics approval updated to {trial.ethics_approval_status}.",
+            }
+        )
+    except Exception:
+        pass
 
     return TrialEthicsApprovalResponse(
         trial_id=trial.id,
@@ -719,8 +733,71 @@ def list_site_subjects(
     return Page(total=total, limit=limit, offset=offset, items=items)
 
 
+class CreateTrialRequest(SQLModel):
+    protocol_number: str
+    title: str
+    short_title: str | None = None
+    phase: str = "phase_2"
+    indication: str
+    indication_ayurveda: str | None = None
+    intervention: str
+    comparator: str | None = None
+    design: str = "Randomized, Double-Blind, Parallel Group"
+    sponsor_name: str = "All India Institute of Ayurveda"
+    target_enrollment: int = 100
+
+
+@router.post("/trials", response_model=Trial, status_code=201)
+def create_trial(
+    body: CreateTrialRequest,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.USER_MANAGE)),
+) -> Trial:
+    """Primary Admin creates a new Clinical Trial protocol."""
+    proto = body.protocol_number.strip().upper()
+    existing = session.exec(select(Trial).where(Trial.protocol_number == proto)).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"protocol {proto} already exists")
+
+    now = utcnow()
+    trial = Trial(
+        protocol_number=proto,
+        title=body.title.strip(),
+        short_title=body.short_title.strip() if body.short_title else body.title.strip()[:180],
+        phase=body.phase,
+        status=TrialStatus.PLANNING.value,
+        indication=body.indication.strip(),
+        indication_ayurveda=body.indication_ayurveda.strip() if body.indication_ayurveda else None,
+        intervention=body.intervention.strip(),
+        comparator=body.comparator.strip() if body.comparator else None,
+        design=body.design.strip(),
+        is_blinded=True,
+        sponsor_name=body.sponsor_name.strip(),
+        target_enrollment=body.target_enrollment,
+        ethics_approval_status=EthicsApprovalStatus.PENDING.value,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(trial)
+    session.flush()
+
+    audit.record(
+        session,
+        user=user,
+        action=AuditAction.CREATE,
+        entity_type="trials",
+        entity_id=trial.id,
+        entity_label=trial.protocol_number,
+        reason=f"Clinical Trial Protocol {trial.protocol_number} created by Primary Admin",
+        trial_id=trial.id,
+    )
+    session.commit()
+    session.refresh(trial)
+    return trial
+
+
 class CreateSiteRequest(SQLModel):
-    trial_id: int
+    trial_id: int | None = None
     site_code: str
     name: str
     city: str
@@ -740,50 +817,124 @@ def create_site(
     user: CurrentUser = Depends(require(Permission.INSTITUTION_MANAGE)),
 ) -> Site:
     """Primary Admin creates a new participating Institution / Site."""
-    trial = session.get(Trial, body.trial_id)
+    trial_id = body.trial_id
+    if trial_id is None:
+        first_trial = session.exec(select(Trial)).first()
+        if first_trial is None:
+            raise HTTPException(status_code=404, detail="no trial found to associate site with")
+        trial_id = first_trial.id
+
+    trial = session.get(Trial, trial_id)
     if trial is None:
-        raise HTTPException(status_code=404, detail=f"trial {body.trial_id} not found")
+        raise HTTPException(status_code=404, detail=f"trial {trial_id} not found")
 
-    existing = session.exec(select(Site).where(Site.site_code == body.site_code)).first()
+    site_code = body.site_code.strip().upper()
+    existing = session.exec(select(Site).where(Site.site_code == site_code, Site.trial_id == trial_id)).first()
     if existing:
-        raise HTTPException(status_code=400, detail=f"site code {body.site_code} already exists")
+        raise HTTPException(status_code=400, detail=f"site code {site_code} already exists for this trial")
 
-    site = Site(**body.model_dump())
+    now = utcnow()
+    site = Site(
+        trial_id=trial_id,
+        site_code=site_code,
+        name=body.name.strip(),
+        city=body.city.strip(),
+        state=body.state.strip(),
+        country=body.country.strip(),
+        pi_name=body.pi_name.strip(),
+        pi_email=body.pi_email.strip().lower() if body.pi_email else None,
+        contact_phone=body.contact_phone.strip() if body.contact_phone else None,
+        status=body.status,
+        target_enrollment=body.target_enrollment,
+        activation_date=now.date(),
+        created_at=now,
+    )
     session.add(site)
+    session.flush()
+
+    audit.record(
+        session,
+        user=user,
+        action=AuditAction.CREATE,
+        entity_type="sites",
+        entity_id=site.id,
+        entity_label=site.name,
+        reason=f"Study site {site.site_code} ({site.name}) registered by {user.role_label}",
+        trial_id=trial_id,
+    )
     session.commit()
     session.refresh(site)
     return site
 
-class DSMBDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    decision: Literal["CONTINUE", "MODIFY", "HALT"]
-    notes: str | None = None
 
-@router.patch("/trials/{trial_id}/dsmb-decision", response_model=Trial)
-def update_dsmb_decision(
-    trial_id: int,
-    body: DSMBDecision,
+@router.post("/admin/reset-trial-data")
+def reset_trial_data(
+    trial_id: int | None = None,
     session: Session = Depends(get_session),
-    user: CurrentUser = Depends(require(Permission.COMPLIANCE_READ)), # using read for MVP
-) -> Trial:
-    trial = session.get(Trial, trial_id)
-    if not trial:
-        raise HTTPException(status_code=404, detail="Trial not found")
-        
+    user: CurrentUser = Depends(require(Permission.USER_MANAGE)),
+) -> dict:
+    """Clean slate: Wipe synthetic/demo patient dossiers, visits, AEs, and deviations.
+    Preserves Trials, Sites, Users, and 21 CFR Part 11 audit trails for real trial execution.
+    """
+    from app.models import AdverseEvent, EConsent, PatientRequest, Visit
+
+    target_trial = session.get(Trial, trial_id) if trial_id else session.exec(select(Trial)).first()
+    if target_trial is None:
+        raise HTTPException(status_code=404, detail="no trial found to reset")
+
+    t_id = target_trial.id
+
+    # 1. Delete patient requests
+    p_reqs = list(session.exec(select(PatientRequest).where(PatientRequest.trial_id == t_id)).all())
+    for pr in p_reqs:
+        session.delete(pr)
+
+    # 2. Delete econsents
+    consents = list(session.exec(select(EConsent).where(EConsent.trial_id == t_id)).all())
+    for ec in consents:
+        session.delete(ec)
+
+    # 3. Delete adverse events
+    aes = list(session.exec(select(AdverseEvent).where(AdverseEvent.trial_id == t_id)).all())
+    for ae in aes:
+        session.delete(ae)
+
+    # 4. Delete visits
+    visits = list(session.exec(select(Visit).where(Visit.trial_id == t_id)).all())
+    for v in visits:
+        session.delete(v)
+
+    # 5. Unlink patient accounts in users table
+    patient_users = list(session.exec(select(User).where(User.subject_id.is_not(None))).all())  # type: ignore[union-attr]
+    for u in patient_users:
+        u.subject_id = None
+        session.add(u)
+
+    # 6. Delete subjects
+    subjects = list(session.exec(select(Subject).where(Subject.trial_id == t_id)).all())
+    deleted_subjects_count = len(subjects)
+    for s in subjects:
+        session.delete(s)
+
+    # Record 21 CFR Part 11 audit log entry
     audit.record(
         session,
         user=user,
         action=AuditAction.UPDATE,
         entity_type="trials",
-        entity_id=trial.id,
-        entity_label=trial.protocol_number,
-        field_name="dsmb_decision",
-        old_value="",
-        new_value=json.dumps({"decision": body.decision, "notes": body.notes}),
-        reason=f"DSMB decided to {body.decision}",
-        trial_id=trial.id,
+        entity_id=t_id,
+        entity_label=target_trial.protocol_number,
+        reason=f"Clean Slate Reset: Cleared {deleted_subjects_count} synthetic participant records for real production deployment.",
+        trial_id=t_id,
     )
     session.commit()
-    session.refresh(trial)
-    bus.broadcast(str(user.id), "dashboard_updated", {"message": f"DSMB decision: {body.decision}"})
-    return trial
+
+    return {
+        "status": "reset_completed",
+        "trial_id": t_id,
+        "protocol_number": target_trial.protocol_number,
+        "cleared_subjects": deleted_subjects_count,
+        "cleared_visits": len(visits),
+        "cleared_adverse_events": len(aes),
+        "message": "All synthetic participant records cleared. Clean slate ready for real clinical intake.",
+    }

@@ -1,34 +1,28 @@
+// Sponsor: funds and oversees the study but never touches the data. The question
+// is always the same - is this trial on track, across every site?
+
 import DashboardLayout from './layout'
+import DataExportCenter from '../components/DataExportCenter'
 
 export default function Sponsor(props) {
   return (
-    <div>
-      <div className="flex gap-4 mb-6">
-        <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex-1">
-          <div className="text-xs uppercase font-bold tracking-wider text-slate-500 mb-1">Total Active Trials</div>
-          <div className="text-3xl font-bold text-slate-900">1</div>
-        </div>
-        <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex-1">
-          <div className="text-xs uppercase font-bold tracking-wider text-slate-500 mb-1">Total Enrolled vs Target</div>
-          <div className="flex items-end gap-2">
-            <div className="text-3xl font-bold text-aiia-600">186</div>
-            <div className="text-sm font-medium text-slate-400 mb-1">/ 240</div>
-          </div>
-          <div className="w-full bg-slate-100 h-1.5 mt-3 rounded-full overflow-hidden">
-            <div className="bg-aiia-500 h-full w-[77%]"></div>
-          </div>
-        </div>
-        <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex-1">
-          <div className="text-xs uppercase font-bold tracking-wider text-slate-500 mb-1">Budget Burn Rate</div>
-          <div className="text-3xl font-bold text-red-600">62.4%</div>
-          <div className="text-xs text-red-600 font-medium mt-1">↑ 4.1% this month</div>
-        </div>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50/70 px-4 py-2.5 text-xs text-blue-900">
+        <span className="flex items-center gap-2 font-medium">
+          <span className="flex h-2 w-2 rounded-full bg-blue-600"></span>
+          🔒 DPDP Act 2023: Blinded Sponsor Oversight Mode
+        </span>
+        <span className="text-blue-700 hidden sm:inline">
+          Individual participant PII is masked to prevent observer bias and protect patient privacy.
+        </span>
       </div>
-      
+
+      <DataExportCenter />
+
       <DashboardLayout
         {...props}
         wide={['site_performance']}
-        note="Data Privacy Lock active: Patient identifiers are fully redacted from this view."
+        note="Every site, all sites. A Sponsor cannot enter or edit trial data: a monitor who could change the numbers would undermine the numbers. Leave this screen open and have the coordinator enrol someone - it moves on its own."
       />
     </div>
   )

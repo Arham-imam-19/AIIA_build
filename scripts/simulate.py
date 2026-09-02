@@ -5,6 +5,8 @@ Run with:
     docker compose exec backend python scripts/simulate.py adverse-event --serious
     docker compose exec backend python scripts/simulate.py --count 5 --every 4
     docker compose exec backend python scripts/simulate.py --as sponsor   # a 403, on purpose
+    docker compose exec backend python scripts/simulate.py ethics-revoke  # blocks enrollment
+    docker compose exec backend python scripts/simulate.py ethics-approve # unblocks enrollment
 
 This is the command-line twin of the "Simulate an event" button in the UI. Same
 endpoints, same audit entries, same broadcast - so it is useful when you want the
@@ -30,22 +32,21 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import date, timedelta
 
 DEFAULT_URL = "http://localhost:8000"
 
-# What each action does, in one line, so the terminal says what to look for on
-# screen instead of just "201 Created". Kept word-for-word in step with the
-# `moves` strings in backend/app/routers/simulate.py, which label the UI buttons.
 ACTIONS = {
     "enrollment": "Screened, Enrolled, % of target, the recruitment curve",
     "adverse-event": "Adverse events, Serious events, Events awaiting coding",
     "deviation": "Protocol deviations, Deviation rate, Visits completed",
+    "ethics-approve": "IEC Approval Status, Unlocks screening and enrollment across all sites",
+    "ethics-revoke": "IEC Approval Status, Blocks screening and enrollment (409 Conflict)",
+    "audit-inspect": "Reads ALCOA+ audit trail entries with before/after diffs",
 }
 
-# Short names for the five personas, because typing "principal_investigator" at a
-# demo is a way to mistype it. Only these five are here because only these five
-# are published by /api/auth/demo-users; for anyone else, pass --email/--password.
 PERSONAS = {
+    "admin": "admin",
     "pi": "principal_investigator",
     "investigator": "principal_investigator",
     "crc": "coordinator",
@@ -67,11 +68,7 @@ def call(
     token: str | None = None,
     payload: dict | None = None,
 ) -> tuple[int, object]:
-    """One HTTP call. Returns (status, decoded body) and never raises for a 4xx.
-
-    A 403 is a *result* here, not a crash: `--as sponsor` is a demo step that
-    shows a monitor cannot enter trial data.
-    """
+    """One HTTP call. Returns (status, decoded body) and never raises for a 4xx."""
     headers = {"Accept": "application/json"}
     body = None
     if payload is not None:
@@ -109,12 +106,7 @@ def detail_of(body: object) -> str:
 
 
 def find_login(base: str, persona: str) -> tuple[str, str]:
-    """Look up one demo persona's email and password from the API.
-
-    `/api/auth/demo-users` only answers while APP_ENV=development, which is
-    deliberate - a deployed system must not hand out logins. Outside development,
-    pass --email and --password yourself.
-    """
+    """Look up one demo persona's email and password from the API."""
     status, body = call(base, "GET", "/api/auth/demo-users")
     if status == 404:
         print("✗ the demo-users endpoint is switched off (APP_ENV is not development)")
@@ -149,7 +141,59 @@ def sign_in(base: str, email: str, password: str) -> tuple[str, dict]:
     return body["access_token"], body["user"]
 
 
-# ------------------------------------------------------------------- the action
+# ------------------------------------------------------------------- actions
+
+
+def handle_ethics_action(base: str, token: str, action: str) -> bool:
+    """Simulate ethics approval or revocation."""
+    status_t, body_t = call(base, "GET", "/api/trials", token=token)
+    trial_id = 1
+    if status_t == 200 and isinstance(body_t, dict) and body_t.get("items"):
+        trial_id = body_t["items"][0]["id"]
+
+    today = date.today()
+    if action == "ethics-approve":
+        payload = {
+            "ethics_approval_status": "approved",
+            "ethics_approval_number": "IEC/AIIA/2026/042",
+            "ethics_approval_date": today.isoformat(),
+            "ethics_approval_valid_until": (today + timedelta(days=365)).isoformat(),
+        }
+        status, body = call(base, "PATCH", f"/api/trials/{trial_id}/ethics-approval", token=token, payload=payload)
+        if status == 200:
+            print(f"✓ Trial {trial_id} ethics status updated to APPROVED (IEC/AIIA/2026/042)")
+            print("  Site enrollment gate UNLOCKED; event published to live bus.")
+            return True
+        print(f"• failed ({status}): {detail_of(body)}")
+        return False
+    elif action == "ethics-revoke":
+        payload = {
+            "ethics_approval_status": "pending",
+            "ethics_approval_number": None,
+            "ethics_approval_date": None,
+            "ethics_approval_valid_until": None,
+        }
+        status, body = call(base, "PATCH", f"/api/trials/{trial_id}/ethics-approval", token=token, payload=payload)
+        if status == 200:
+            print(f"✓ Trial {trial_id} ethics status updated to PENDING")
+            print("  Site enrollment gate LOCKED; doctors are physically blocked from enrolling.")
+            return True
+        print(f"• failed ({status}): {detail_of(body)}")
+        return False
+    return False
+
+
+def handle_audit_inspect(base: str, token: str) -> bool:
+    """Retrieve and display latest ALCOA+ audit entries."""
+    status, body = call(base, "GET", "/api/audit-log?limit=5", token=token)
+    if status == 200 and isinstance(body, dict):
+        items = body.get("items", [])
+        print(f"✓ Retrieved {len(items)} latest ALCOA+ Audit Log records (Total: {body.get('total')}):")
+        for item in items:
+            print(f"  - [{item['timestamp'][:19]}] {item['user_email']} ({item['user_role']}) -> {item['action'].upper()} on {item['entity_type']} #{item.get('entity_id')}: {item.get('reason') or '-'}")
+        return True
+    print(f"• failed to fetch audit log ({status}): {detail_of(body)}")
+    return False
 
 
 def describe(action: str, body: dict) -> str:
@@ -176,6 +220,11 @@ def describe(action: str, body: dict) -> str:
 
 def fire(base: str, token: str, action: str, *, serious: bool, site_id: int | None) -> bool:
     """Fire one simulated action. Returns True if a row was written."""
+    if action in ("ethics-approve", "ethics-revoke"):
+        return handle_ethics_action(base, token, action)
+    if action == "audit-inspect":
+        return handle_audit_inspect(base, token)
+
     payload: dict = {"serious": serious}
     if site_id is not None:
         payload["site_id"] = site_id
@@ -189,108 +238,60 @@ def fire(base: str, token: str, action: str, *, serious: bool, site_id: int | No
         return True
 
     if status == 403:
-        # Not a failure of the script - a demonstration that permissions hold.
         print(f"• refused (403): {detail_of(body)}")
-        print("  That is the rule working: only the site roles enter trial data.")
+        print("  That is the rule working: only authorized roles may perform this action.")
         return False
 
     if status == 409:
-        print(f"• nothing to do (409): {detail_of(body)}")
+        print(f"• blocked / conflict (409): {detail_of(body)}")
         return False
 
     print(f"✗ unexpected {status}: {detail_of(body)}")
-    raise SystemExit(1)
+    return False
 
 
-# ----------------------------------------------------------------------- the CLI
-
-
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Fire simulated trial events so the live dashboards move.",
-        epilog="Restore the baseline dataset afterwards with: "
-        "python scripts/seed.py --reset",
-    )
-    parser.add_argument(
-        "action",
-        nargs="?",
-        default="enrollment",
-        choices=sorted(ACTIONS),
-        help="what to simulate (default: enrollment)",
-    )
-    parser.add_argument(
-        "--serious",
-        action="store_true",
-        help="adverse-event only: report a serious event, the one that moves the "
-        "Ethics Committee and Regulator screens",
-    )
-    parser.add_argument(
-        "--as",
-        dest="persona",
-        default="coordinator",
-        choices=sorted(PERSONAS),
-        help="which persona fires it (default: coordinator, the site role that "
-        "enters data). Try --as sponsor to see the refusal.",
-    )
-    parser.add_argument("--email", help="log in as this address instead of a persona")
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("action", nargs="?", default="enrollment", choices=list(ACTIONS.keys()))
+    parser.add_argument("--url", default=DEFAULT_URL, help=f"API base URL (default: {DEFAULT_URL})")
+    parser.add_argument("--as", dest="persona", default=None, choices=list(PERSONAS.keys()))
+    parser.add_argument("--email", help="sign in as this specific email")
     parser.add_argument("--password", help="password for --email")
-    parser.add_argument(
-        "--site-id",
-        type=int,
-        help="which site to write to; ignored for site-scoped personas, who always "
-        "write to their own",
-    )
-    parser.add_argument(
-        "--count", type=int, default=1, metavar="N", help="fire N times (default: 1)"
-    )
-    parser.add_argument(
-        "--every",
-        type=float,
-        default=3.0,
-        metavar="SECONDS",
-        help="pause between events when --count > 1 (default: 3)",
-    )
-    parser.add_argument(
-        "--url", default=DEFAULT_URL, help=f"API base URL (default: {DEFAULT_URL})"
-    )
-    return parser.parse_args(argv)
+    parser.add_argument("--serious", action="store_true", help="adverse-event only: mark as serious")
+    parser.add_argument("--site-id", type=int, help="site ID (admin only)")
+    parser.add_argument("--count", type=int, default=1, help="how many events to fire (default: 1)")
+    parser.add_argument("--every", type=float, default=3.0, help="seconds between events (default: 3.0)")
+    args = parser.parse_args()
 
-
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
-    base = args.url
+    # Default persona per action
+    persona = args.persona
+    if not persona and not args.email:
+        if args.action in ("ethics-approve", "ethics-revoke"):
+            persona = "ethics"
+        elif args.action == "audit-inspect":
+            persona = "regulator"
+        else:
+            persona = "coordinator"
 
     if args.email:
         if not args.password:
-            print("✗ --email needs --password")
-            return 2
+            print("✗ --password is required with --email")
+            raise SystemExit(2)
         email, password = args.email, args.password
     else:
-        email, password = find_login(base, args.persona)
+        email, password = find_login(args.url, persona)
 
-    token, user = sign_in(base, email, password)
-    where = f"site {user['site_id']}" if user.get("site_id") else "all sites"
-    print(f"✓ signed in as {user['full_name']} - {user['role_label']} ({where})")
-    print()
+    token, user = sign_in(args.url, email, password)
+    print(f"Signed in as: {user['full_name']} <{user['email']}> ({user['role']})")
 
-    written = 0
-    for attempt in range(args.count):
-        if attempt:
-            time.sleep(max(0.0, args.every))
-        if fire(base, token, args.action, serious=args.serious, site_id=args.site_id):
-            written += 1
-        if args.count > 1:
-            print()
-
-    # Being polite about the token: it stays valid for hours otherwise, and the
-    # audit trail should show the session closing.
-    call(base, "POST", "/api/auth/logout", token=token)
-
-    if written:
-        print(f"{written} row(s) written. All synthetic. Restore the baseline with:")
-        print("  docker compose exec backend python scripts/seed.py --reset")
-    return 0
+    for i in range(args.count):
+        if i > 0:
+            time.sleep(args.every)
+        ok = fire(args.url, token, args.action, serious=args.serious, site_id=args.site_id)
+        if not ok and args.count > 1:
+            print(f"Stopping after iteration {i+1} due to rejection.")
+            break
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

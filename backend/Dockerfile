@@ -27,5 +27,4 @@ EXPOSE 8000
 
 # The entrypoint waits for Postgres, runs `alembic upgrade head`, then starts
 # uvicorn with --reload so code edits on the mounted volume take effect without
-# a rebuild.
-CMD ["/app/entrypoint.sh"]
+CMD ["sh", "-c", "sed -i 's/\\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh && exec /app/entrypoint.sh"]

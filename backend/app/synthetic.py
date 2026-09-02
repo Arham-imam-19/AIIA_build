@@ -652,52 +652,30 @@ def _build_users() -> list[dict]:
     # Oversight roles are not tied to any one site, so `_site_code` is None.
     oversight = [
         (
-            "System Admin",
-            UserRole.ADMIN.value,
-            "System Administration",
-            "admin@demo.aiia-ctms.in",
-        ),
-        (
             "Dr. Vikram Desai",
             UserRole.SPONSOR.value,
             "All India Institute of Ayurveda (AIIA), Ministry of Ayush",
-            "vikram.desai@demo.aiia-ctms.in",
         ),
         (
             "Dr. Lalitha Krishnan",
             UserRole.ETHICS_COMMITTEE.value,
             "AIIA Institutional Ethics Committee",
-            "lalitha.krishnan@demo.aiia-ctms.in",
         ),
         (
             "Shri Arvind Kulkarni",
             UserRole.REGULATOR.value,
             "Central Drugs Standard Control Organisation (CDSCO)",
-            "shri.arvind.kulkarni@demo.aiia-ctms.in",
         ),
         (
             "Priya Raghavan",
-            UserRole.MONITOR.value,
-            "Independent Clinical Auditor",
-            "priya.raghavan@demo.aiia-ctms.in",
-        ),
-        (
-            "Dr. Gupta",
-            UserRole.PHARMACOVIGILANCE.value,
-            "National Pharmacovigilance Centre (NPvCC)",
-            "dr.gupta@demo.aiia-ctms.in",
-        ),
-        (
-            "DSMB Member",
-            UserRole.DSMB.value,
-            "Data Safety Monitoring Board",
-            "dsmb.member@demo.aiia-ctms.in",
+            UserRole.ADMIN.value,
+            "AIIA Clinical Data Management Unit",
         ),
     ]
-    for name, role, organization, email in oversight:
+    for name, role, organization in oversight:
         users.append(
             {
-                "email": email,
+                "email": _email(name),
                 "full_name": name,
                 "role": role,
                 "organization": organization,

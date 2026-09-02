@@ -26,16 +26,15 @@ from app.rbac import (
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-# Exactly the 8 demo personas from the hackathon prompt.
+# Roles the demo has a login for, ordered through the hierarchy.
 DEMO_ROLE_ORDER = [
+    UserRole.ADMIN.value,
+    UserRole.INSTITUTION_ADMIN.value,
     UserRole.PRINCIPAL_INVESTIGATOR.value,
     UserRole.COORDINATOR.value,
-    UserRole.MONITOR.value,
-    UserRole.ETHICS_COMMITTEE.value,
-    UserRole.PHARMACOVIGILANCE.value,
     UserRole.SPONSOR.value,
+    UserRole.ETHICS_COMMITTEE.value,
     UserRole.REGULATOR.value,
-    UserRole.DSMB.value,
 ]
 
 

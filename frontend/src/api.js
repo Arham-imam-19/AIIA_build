@@ -106,11 +106,42 @@ export const createPatientRequest = (body) =>
 export const respondPatientRequest = (id, body) =>
   api(`/api/patient-requests/${id}/respond`, { method: 'PATCH', body })
 
+export const createTrial = (body) =>
+  api('/api/trials', { method: 'POST', body })
+
+export const resetTrialData = (trialId) =>
+  api(`/api/admin/reset-trial-data${trialId ? `?trial_id=${trialId}` : ''}`, { method: 'POST' })
+
 export const createSite = (body) =>
   api('/api/sites', { method: 'POST', body })
 
+export const fetchSites = (params = {}) => {
+  const query = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') {
+      query.append(k, v)
+    }
+  }
+  const qStr = query.toString()
+  return api(`/api/sites${qStr ? `?${qStr}` : ''}`)
+}
+
 export const createUser = (body) =>
   api('/api/users', { method: 'POST', body })
+
+export const fetchUsers = (params = {}) => {
+  const query = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') {
+      query.append(k, v)
+    }
+  }
+  const qStr = query.toString()
+  return api(`/api/users${qStr ? `?${qStr}` : ''}`)
+}
+
+export const updateUser = (userId, body) =>
+  api(`/api/users/${userId}`, { method: 'PATCH', body })
 
 export const getMyEConsent = () => api('/api/econsent/my')
 
@@ -119,6 +150,83 @@ export const signEConsent = (body) =>
 
 export const getSubjectEConsent = (subjectId) =>
   api(`/api/econsent/subjects/${subjectId}`)
+
+export const getSubjectFhirConsent = (subjectId) =>
+  api(`/api/econsent/subjects/${subjectId}/fhir`)
+
+export const getSubjectAbdmConsent = (subjectId) =>
+  api(`/api/econsent/subjects/${subjectId}/abdm-artefact`)
+
+export const fetchAuditLogs = (params = {}) => {
+  const query = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') {
+      query.append(k, v)
+    }
+  }
+  const qStr = query.toString()
+  return api(`/api/audit-log${qStr ? `?${qStr}` : ''}`)
+}
+
+export const updateEthicsApproval = (trialId, body) =>
+  api(`/api/trials/${trialId}/ethics-approval`, { method: 'PATCH', body })
+
+export const fetchSubjectDossier = (subjectId) =>
+  api(`/api/subjects/${subjectId}/dossier`)
+
+export const createStructuredSubject = (body) =>
+  api('/api/subjects', { method: 'POST', body })
+
+export const createAdverseEvent = (body) =>
+  api('/api/adverse-events', { method: 'POST', body })
+
+export const logProtocolDeviation = (body) =>
+  api('/api/protocol-deviations', { method: 'POST', body })
+
+export const fetchSubjects = (params = {}) => {
+  const query = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') {
+      query.append(k, v)
+    }
+  }
+  const qStr = query.toString()
+  return api(`/api/subjects${qStr ? `?${qStr}` : ''}`)
+}
+
+export const fetchTrialCdiscJson = (trialId) =>
+  api(`/api/trials/${trialId}/export/cdisc-json`)
+
+export const fetchTrialFhirBundle = (trialId) =>
+  api(`/api/trials/${trialId}/export/fhir-bundle`)
+
+export const fetchSubjectFhirBundle = (subjectId) =>
+  api(`/api/subjects/${subjectId}/export/fhir`)
+
+export async function downloadTrialCdiscSdtmZip(trialId, token = savedToken()) {
+  const res = await fetch(
+    `/api/trials/${encodeURIComponent(trialId)}/export/cdisc-sdtm.zip`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    },
+  )
+  if (!res.ok) throw new ApiError(res.status, await readDetail(res))
+
+  const disposition = res.headers.get('Content-Disposition') || ''
+  const match = disposition.match(/filename="?([^";]+)"?/i)
+  const filename = match?.[1] || `CDISC_SDTM_Trial_${trialId}.zip`
+  const url = URL.createObjectURL(await res.blob())
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  return filename
+}
+
+export const fetchTrials = () => api('/api/trials')
 
 export async function downloadSafetyReport(eventId, token = savedToken()) {
   const res = await fetch(

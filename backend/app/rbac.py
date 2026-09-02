@@ -140,17 +140,6 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.ECONSENT_READ,
         }
     ),
-    UserRole.MONITOR.value: frozenset(
-        {
-            _P.TRIAL_READ,
-            _P.SITE_READ,
-            _P.SUBJECT_READ,
-            _P.VISIT_READ,
-            _P.AE_READ,
-            _P.COMPLIANCE_READ,
-            _P.USER_READ,
-        }
-    ),
     UserRole.SPONSOR.value: frozenset(
         {
             _P.TRIAL_READ,
@@ -180,25 +169,6 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.ETHICS_WRITE,
             _P.AUDIT_READ,
             _P.ECONSENT_READ,
-        }
-    ),
-    UserRole.PHARMACOVIGILANCE.value: frozenset(
-        {
-            _P.TRIAL_READ,
-            _P.SITE_READ,
-            _P.SUBJECT_READ,
-            _P.VISIT_READ,
-            _P.AE_READ,
-            _P.AE_WRITE,
-            _P.COMPLIANCE_READ,
-        }
-    ),
-    UserRole.DSMB.value: frozenset(
-        {
-            _P.TRIAL_READ,
-            _P.SITE_READ,
-            _P.AE_READ,
-            _P.COMPLIANCE_READ,
         }
     ),
     UserRole.REGULATOR.value: frozenset(
@@ -238,18 +208,22 @@ SITE_SCOPED_ROLES: frozenset[str] = frozenset(
     }
 )
 
+# The roles that must remain blinded to treatment allocation/randomization arms.
+BLINDED_ROLES: frozenset[str] = frozenset(
+    {
+        UserRole.SPONSOR.value,
+    }
+)
+
 # Human labels, used by the dashboards and the matrix endpoint.
 ROLE_LABELS: dict[str, str] = {
     UserRole.ADMIN.value: "Primary Administrator",
     UserRole.INSTITUTION_ADMIN.value: "Institution Administrator",
-    UserRole.PRINCIPAL_INVESTIGATOR.value: "Principal Investigator",
-    UserRole.COORDINATOR.value: "Study Coordinator",
-    UserRole.MONITOR.value: "Monitor / CRA",
-    UserRole.SPONSOR.value: "Admin / Sponsor",
-    UserRole.ETHICS_COMMITTEE.value: "Ethics Committee (IEC)",
-    UserRole.PHARMACOVIGILANCE.value: "Pharmacovigilance Officer (NPvCC)",
-    UserRole.REGULATOR.value: "Regulator (CDSCO)",
-    UserRole.DSMB.value: "Data Safety Monitoring Board",
+    UserRole.PRINCIPAL_INVESTIGATOR.value: "Principal Investigator (Researcher)",
+    UserRole.COORDINATOR.value: "Clinical Research Coordinator",
+    UserRole.SPONSOR.value: "Sponsor",
+    UserRole.ETHICS_COMMITTEE.value: "Ethics Committee",
+    UserRole.REGULATOR.value: "Regulator",
     UserRole.PATIENT.value: "Patient (Participant)",
 }
 
@@ -312,6 +286,10 @@ class CurrentUser(BaseModel):
     @property
     def is_site_scoped(self) -> bool:
         return self.role in SITE_SCOPED_ROLES
+
+    @property
+    def is_blinded(self) -> bool:
+        return self.role in BLINDED_ROLES
 
     @property
     def scope_site_id(self) -> int | None:

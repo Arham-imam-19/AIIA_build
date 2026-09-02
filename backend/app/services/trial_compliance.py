@@ -182,3 +182,53 @@ def check_activation_eligibility(
         checks=tuple(checks),
         blockers=blocker_values,
     )
+
+
+def check_regulatory_and_ethics_clearance_for_enrollment(
+    trial: Trial, as_of: date | None = None
+) -> tuple[bool, str | None]:
+    """Verify that a trial has valid Institutional Ethics Committee (IEC) approval
+    and prospective Clinical Trials Registry - India (CTRI) registration.
+
+    Under NDCT Rules 2019 (Rule 22), ICMR Ethical Guidelines, and GCP-ASU:
+    1. IEC approval must be formally granted, active, and not expired.
+    2. CTRI registration must be prospectively secured before the first participant is screened.
+    """
+    evaluation_date = as_of or date.today()
+    if trial.ethics_approval_status != EthicsApprovalStatus.APPROVED.value:
+        return (
+            False,
+            f"Institutional Ethics Committee (IEC) approval is required before screening or enrolling participants (Current status: '{trial.ethics_approval_status}').",
+        )
+    if not trial.ethics_approval_number or not trial.ethics_approval_number.strip():
+        return (
+            False,
+            "IEC approval number is missing from the trial record.",
+        )
+    if trial.ethics_approval_date is not None and trial.ethics_approval_date > evaluation_date:
+        return (
+            False,
+            f"IEC approval date ({trial.ethics_approval_date.isoformat()}) is in the future; screening and enrollment are blocked.",
+        )
+    if trial.ethics_approval_valid_until is not None and trial.ethics_approval_valid_until < evaluation_date:
+        return (
+            False,
+            f"IEC approval expired on {trial.ethics_approval_valid_until.isoformat()}; screening and enrollment are blocked.",
+        )
+    if not trial.ctri_number or not trial.ctri_number.strip():
+        return (
+            False,
+            "Prospective CTRI registration number is required before participant screening (NDCT Rules 2019).",
+        )
+    if trial.ctri_registration_date is not None and trial.ctri_registration_date > evaluation_date:
+        return (
+            False,
+            f"CTRI registration date ({trial.ctri_registration_date.isoformat()}) is in the future; participant screening is blocked.",
+        )
+    return (True, None)
+
+
+# Backward-compatible alias
+check_ethics_clearance_for_enrollment = check_regulatory_and_ethics_clearance_for_enrollment
+
+

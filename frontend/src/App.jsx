@@ -10,6 +10,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { AuthProvider, useAuth } from './auth'
+import CreateUserPage from './pages/CreateUserPage'
+import InfrastructurePage from './pages/InfrastructurePage'
 import Login from './Login'
 import RbacMatrix from './RbacMatrix'
 import Shell from './Shell'
@@ -55,16 +57,20 @@ function SignedIn() {
 
   return (
     <Shell view={view} setView={setView} live={live}>
-      {view === 'access' ? (
+      {view === 'infrastructure' ? (
+        <InfrastructurePage onNavigateDashboard={() => setView('dashboard')} />
+      ) : view === 'create_account' ? (
+        <CreateUserPage onNavigateDashboard={() => setView('dashboard')} />
+      ) : view === 'access' ? (
         <RbacMatrix highlightRole={user.role} />
       ) : live.status === 'refused' ? (
-        <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{live.error}</p>
+        <p className="border border-red-300 bg-red-50 p-4 text-xs font-semibold text-red-800">{live.error}</p>
       ) : !live.dashboard ? (
-        <p className="text-sm text-slate-400">Loading your dashboard…</p>
+        <p className="text-xs text-slate-500">Loading dashboard...</p>
       ) : !live.dashboard.seeded ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-800">
+        <div className="border border-amber-300 bg-amber-50 p-4 text-xs leading-relaxed text-amber-900">
           {live.dashboard.message}
-          <code className="mt-1.5 block font-mono text-xs">
+          <code className="mt-1.5 block font-mono text-[11px]">
             docker compose exec backend python scripts/seed.py
           </code>
         </div>
@@ -74,6 +80,9 @@ function SignedIn() {
           changed={changed}
           lastEvent={live.lastEvent}
           onExpired={expire}
+          onRefresh={live.refresh}
+          onNavigateCreateUser={() => setView('create_account')}
+          onNavigateInfrastructure={() => setView('infrastructure')}
         />
       )}
     </Shell>
