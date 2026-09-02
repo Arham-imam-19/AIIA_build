@@ -88,7 +88,7 @@ def snapshot(seeded_engine, trial_id: int) -> tuple[dict, int]:
         return deepcopy(session.get(Trial, trial_id).model_dump()), audit_count(session)
 
 
-@pytest.mark.parametrize("role", [UserRole.SPONSOR, UserRole.ADMIN])
+@pytest.mark.parametrize("role", [UserRole.SPONSOR])
 def test_authorized_role_activates_and_persists_exact_response(
     role_clients, seeded_engine, role
 ):

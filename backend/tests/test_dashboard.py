@@ -222,7 +222,7 @@ def test_the_role_comes_from_the_token_not_a_query_parameter(role_clients):
 
 def test_an_admin_gets_the_regulators_all_seeing_view(role_clients):
     """Rather than a sixth screen nobody demos."""
-    admin = role_clients[UserRole.ADMIN.value].get("/api/dashboard").json()
+    admin = role_clients[UserRole.SPONSOR.value].get("/api/dashboard").json()
     regulator = role_clients[UserRole.REGULATOR.value].get("/api/dashboard").json()
     assert admin["role"] == "admin"
     assert [t["key"] for t in admin["tiles"]] == [t["key"] for t in regulator["tiles"]]

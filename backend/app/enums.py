@@ -24,21 +24,21 @@ from enum import Enum
 
 
 class UserRole(str, Enum):
-    """The user roles across the hierarchy, from Primary Admin to Patient.
-
-    RBAC (role-based access control) means permissions hang off these roles
-    rather than off individual people - like a hotel keycard that opens your
-    floor, while the manager's opens all of them.
+    """The 9-Role Enterprise structure + IT Admin + Patient.
+    Strict segregation of duties enforced.
     """
 
-    ADMIN = "admin"  # Primary / System Administrator (creates institutions, oversees system)
-    INSTITUTION_ADMIN = "institution_admin"  # Institution / Site Administrator (manages site & researchers)
-    PRINCIPAL_INVESTIGATOR = "principal_investigator"  # Lead Researcher at a site
-    COORDINATOR = "coordinator"  # Clinical Research Coordinator (enters data, manages visits)
-    SPONSOR = "sponsor"  # funds the trial, watches cost and timelines
-    ETHICS_COMMITTEE = "ethics_committee"  # approves the trial, reviews safety
-    REGULATOR = "regulator"  # CDSCO / Ministry of Ayush oversight
-    PATIENT = "patient"  # Trial participant (can view schedule and contact Institution Admin)
+    ADMIN = "admin"  # Now acting as IT_ADMIN: Only provisions accounts, NO clinical access.
+    INSTITUTION_ADMIN = "institution_admin"
+    PRINCIPAL_INVESTIGATOR = "principal_investigator"
+    COORDINATOR = "coordinator"
+    MONITOR = "monitor"  # CRA: Source Data Verification (SDV)
+    SPONSOR = "sponsor"  # Director / Funder
+    ETHICS_COMMITTEE = "ethics_committee"
+    PHARMACOVIGILANCE = "pharmacovigilance"  # NPvCC: MedDRA coding and SAE review
+    REGULATOR = "regulator"  # CDSCO: Export CDISC and Audit read
+    DSMB = "dsmb"  # Data Safety Monitoring Board: Halt trial authority
+    PATIENT = "patient"  # Trial participant
 
 
 class TrialStatus(str, Enum):

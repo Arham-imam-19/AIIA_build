@@ -228,7 +228,7 @@ def test_role_without_ethics_write_returns_403(role_clients, seeded_engine):
     assert "ethics:write" in response.json()["detail"]
 
 
-@pytest.mark.parametrize("role", [UserRole.ETHICS_COMMITTEE, UserRole.ADMIN])
+@pytest.mark.parametrize("role", [UserRole.ETHICS_COMMITTEE])
 def test_ethics_committee_and_admin_are_permitted(role_clients, seeded_engine, role):
     response = patch(
         role_clients[role.value],

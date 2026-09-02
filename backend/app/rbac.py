@@ -62,6 +62,8 @@ class Permission(str, Enum):
     PATIENT_REQUEST_RESPOND = "patient_request:respond"  # respond to patient inquiries
     ECONSENT_READ = "econsent:read"  # view informed consent records & certificates
     ECONSENT_SIGN = "econsent:sign"  # digitally sign electronic informed consent
+    HALT_TRIAL = "trial:halt" # DSMB emergency stop
+    CODE_MEDDRA = "ae:code" # Pharmacovigilance safety coding
 
 
 # Shorthand so the table below fits on a screen.
@@ -94,7 +96,13 @@ _P = Permission
 
 # --------------------------------------------------------------------------
 ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
-    UserRole.ADMIN.value: frozenset(Permission),
+    UserRole.ADMIN.value: frozenset({
+        _P.TRIAL_READ,
+        _P.SITE_READ,
+        _P.USER_READ,
+        _P.USER_MANAGE,
+        _P.INSTITUTION_MANAGE,
+    }),
     UserRole.INSTITUTION_ADMIN.value: frozenset(
         {
             _P.TRIAL_READ,
@@ -140,6 +148,17 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.ECONSENT_READ,
         }
     ),
+    UserRole.MONITOR.value: frozenset(
+        {
+            _P.TRIAL_READ,
+            _P.SITE_READ,
+            _P.SUBJECT_READ,
+            _P.VISIT_READ,
+            _P.AE_READ,
+            _P.COMPLIANCE_READ,
+            _P.AUDIT_READ,
+        }
+    ),
     UserRole.SPONSOR.value: frozenset(
         {
             _P.TRIAL_READ,
@@ -150,25 +169,31 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.COMPLIANCE_READ,
             _P.USER_READ,
             _P.EXPORT,
-
             _P.CTRI_WRITE,
             _P.REGULATORY_WRITE,
             _P.ACTIVATION_WRITE,
-
             _P.ECONSENT_READ,
-
         }
     ),
     UserRole.ETHICS_COMMITTEE.value: frozenset(
         {
             _P.TRIAL_READ,
             _P.SITE_READ,
-            _P.VISIT_READ,  # needed to review protocol deviations
+            _P.VISIT_READ,  
             _P.AE_READ,
             _P.COMPLIANCE_READ,
             _P.ETHICS_WRITE,
             _P.AUDIT_READ,
             _P.ECONSENT_READ,
+        }
+    ),
+    UserRole.PHARMACOVIGILANCE.value: frozenset(
+        {
+            _P.TRIAL_READ,
+            _P.SITE_READ,
+            _P.SUBJECT_READ,
+            _P.AE_READ,
+            _P.CODE_MEDDRA,
         }
     ),
     UserRole.REGULATOR.value: frozenset(
@@ -183,6 +208,13 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.USER_READ,
             _P.EXPORT,
             _P.ECONSENT_READ,
+        }
+    ),
+    UserRole.DSMB.value: frozenset(
+        {
+            _P.TRIAL_READ,
+            _P.AE_READ,
+            _P.HALT_TRIAL,
         }
     ),
     UserRole.PATIENT.value: frozenset(
@@ -210,13 +242,16 @@ SITE_SCOPED_ROLES: frozenset[str] = frozenset(
 
 # Human labels, used by the dashboards and the matrix endpoint.
 ROLE_LABELS: dict[str, str] = {
-    UserRole.ADMIN.value: "Primary Administrator",
+    UserRole.ADMIN.value: "IT Administrator",
     UserRole.INSTITUTION_ADMIN.value: "Institution Administrator",
     UserRole.PRINCIPAL_INVESTIGATOR.value: "Principal Investigator (Researcher)",
     UserRole.COORDINATOR.value: "Clinical Research Coordinator",
-    UserRole.SPONSOR.value: "Sponsor",
+    UserRole.MONITOR.value: "Clinical Research Associate (Monitor)",
+    UserRole.SPONSOR.value: "Sponsor (Director / Funder)",
     UserRole.ETHICS_COMMITTEE.value: "Ethics Committee",
+    UserRole.PHARMACOVIGILANCE.value: "Pharmacovigilance (NPvCC)",
     UserRole.REGULATOR.value: "Regulator",
+    UserRole.DSMB.value: "Data and Safety Monitoring Board (DSMB)",
     UserRole.PATIENT.value: "Patient (Participant)",
 }
 
@@ -244,8 +279,9 @@ PERMISSION_LABELS: dict[str, str] = {
     _P.PATIENT_REQUEST_RESPOND.value: "Respond to patient inquiries and requests",
     _P.ECONSENT_READ.value: "View electronic informed consent records & certificates",
     _P.ECONSENT_SIGN.value: "Digitally sign electronic informed consent",
+    _P.HALT_TRIAL.value: "Halt trial due to safety signals",
+    _P.CODE_MEDDRA.value: "Code adverse events to MedDRA dictionary",
 }
-
 
 class CurrentUser(BaseModel):
     """The logged-in user, as the rest of the app sees them.

@@ -63,7 +63,7 @@ def live(seeded_engine):
     site - so the simulate calls can name *which* site to write to, which is what
     lets these tests prove that another site's investigator is left alone.
     """
-    client = client_for(seeded_engine, UserRole.ADMIN.value)
+    client = client_for(seeded_engine, UserRole.SPONSOR.value)
     with client:
         yield client
     app.dependency_overrides.clear()
@@ -80,7 +80,6 @@ def tokens(seeded_engine) -> dict[str, str]:
             UserRole.SPONSOR,
             UserRole.ETHICS_COMMITTEE,
             UserRole.REGULATOR,
-            UserRole.ADMIN,
         )
     }
 

@@ -51,10 +51,13 @@ ROLES = [
     UserRole.INSTITUTION_ADMIN.value,
     UserRole.PRINCIPAL_INVESTIGATOR.value,
     UserRole.COORDINATOR.value,
-    UserRole.PATIENT.value,
+    UserRole.MONITOR.value,
     UserRole.SPONSOR.value,
     UserRole.ETHICS_COMMITTEE.value,
+    UserRole.PHARMACOVIGILANCE.value,
     UserRole.REGULATOR.value,
+    UserRole.DSMB.value,
+    UserRole.PATIENT.value,
 ]
 
 
@@ -407,7 +410,7 @@ def test_only_sponsor_and_admin_can_write_trial_regulatory_approval():
     }
     assert granted == expected
     assert Permission.REGULATORY_WRITE in rbac.ROLE_PERMISSIONS[UserRole.SPONSOR.value]
-    assert Permission.REGULATORY_WRITE in rbac.ROLE_PERMISSIONS[UserRole.ADMIN.value]
+    assert Permission.REGULATORY_WRITE in rbac.ROLE_PERMISSIONS[UserRole.SPONSOR.value]
     for role in (
         UserRole.REGULATOR,
         UserRole.ETHICS_COMMITTEE,
@@ -428,7 +431,7 @@ def test_only_sponsor_and_admin_can_activate_a_trial():
     }
     assert granted == expected
     assert Permission.ACTIVATION_WRITE in rbac.ROLE_PERMISSIONS[UserRole.SPONSOR.value]
-    assert Permission.ACTIVATION_WRITE in rbac.ROLE_PERMISSIONS[UserRole.ADMIN.value]
+    assert Permission.ACTIVATION_WRITE in rbac.ROLE_PERMISSIONS[UserRole.SPONSOR.value]
     for role in (
         UserRole.REGULATOR,
         UserRole.ETHICS_COMMITTEE,

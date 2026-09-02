@@ -105,7 +105,6 @@ def test_seeded_jaipur_loose_stools_is_a_signal(client):
 
 def test_authorization_allows_safety_read_roles_and_denies_patient(role_clients):
     allowed_roles = (
-        UserRole.ADMIN,
         UserRole.INSTITUTION_ADMIN,
         UserRole.PRINCIPAL_INVESTIGATOR,
         UserRole.COORDINATOR,
@@ -144,7 +143,6 @@ def test_site_scoped_roles_receive_only_their_site(seeded_engine):
 
 def test_trial_wide_roles_receive_all_trial_sites(role_clients):
     for role in (
-        UserRole.ADMIN,
         UserRole.SPONSOR,
         UserRole.ETHICS_COMMITTEE,
         UserRole.REGULATOR,

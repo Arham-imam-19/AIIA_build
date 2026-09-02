@@ -67,7 +67,7 @@ def set_trial_state(
         return trial.id
 
 
-@pytest.mark.parametrize("role", [UserRole.SPONSOR, UserRole.ADMIN])
+@pytest.mark.parametrize("role", [UserRole.SPONSOR])
 def test_sponsor_and_administrator_can_register_and_number_is_trimmed(
     role_clients, seeded_engine, role
 ):
