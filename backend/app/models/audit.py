@@ -58,4 +58,8 @@ class AuditLog(SQLModel, table=True):
     ip_address: str | None = Field(default=None, max_length=60)
     user_agent: str | None = Field(default=None, max_length=300)
 
+# Blockchain-lite: cryptographic hashes to prove immutability
+    previous_hash: str | None = Field(default=None, max_length=64)
+    current_hash: str | None = Field(default=None, max_length=64, index=True)
+
     created_at: datetime = Field(default_factory=utcnow)

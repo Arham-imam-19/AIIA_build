@@ -102,6 +102,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
         _P.USER_READ,
         _P.USER_MANAGE,
         _P.INSTITUTION_MANAGE,
+            _P.AUDIT_READ,
     }),
     UserRole.INSTITUTION_ADMIN.value: frozenset(
         {
@@ -472,10 +473,13 @@ def matrix() -> dict:
         UserRole.INSTITUTION_ADMIN,
         UserRole.PRINCIPAL_INVESTIGATOR,
         UserRole.COORDINATOR,
+        UserRole.MONITOR,
         UserRole.PATIENT,
         UserRole.SPONSOR,
         UserRole.ETHICS_COMMITTEE,
+        UserRole.PHARMACOVIGILANCE,
         UserRole.REGULATOR,
+        UserRole.DSMB,
     ]
     return {
         "permissions": [

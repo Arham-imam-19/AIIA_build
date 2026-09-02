@@ -361,3 +361,51 @@ def get_adverse_event(
         raise HTTPException(status_code=404, detail=f"no adverse event with id {event_id}")
     assert_site_visible(user, event.site_id)
     return _hydrate_adverse_event(event)
+
+class MedDRACodeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    meddra_pt_code: str
+    meddra_pt_term: str
+    meddra_soc: str
+
+@router.patch("/adverse-events/{event_id}/code", response_model=AdverseEventPublic)
+def code_adverse_event(
+    event_id: int,
+    body: MedDRACodeRequest,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.CODE_MEDDRA)),
+) -> AdverseEventPublic:
+    """Pharmacovigilance MedDRA coding endpoint."""
+    event = session.get(AdverseEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Adverse event not found")
+        
+    old_code = event.meddra_pt_code
+    
+    event.meddra_pt_code = body.meddra_pt_code
+    event.meddra_pt_term = body.meddra_pt_term
+    event.meddra_soc = body.meddra_soc
+    
+    now = utcnow()
+    event.updated_at = now
+    
+    session.add(event)
+    
+    audit.record(
+        session,
+        user=user,
+        action=AuditAction.UPDATE,
+        entity_type="adverse_events",
+        entity_id=event_id,
+        entity_label=event.ae_number,
+        field_name="meddra_pt_code",
+        old_value=old_code,
+        new_value=body.meddra_pt_code,
+        reason=f"MedDRA coding assigned: {body.meddra_pt_term}",
+        trial_id=event.trial_id,
+    )
+    session.commit()
+    session.refresh(event)
+    
+    return _hydrate_adverse_event(event)
+

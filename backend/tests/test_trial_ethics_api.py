@@ -57,14 +57,14 @@ def approved_payload() -> dict:
     )
 
 
-def patch(client, seeded_engine, body: dict):
-    return client.patch(
+def patch(role_clients, seeded_engine, body: dict):
+    return role_clients[UserRole.ETHICS_COMMITTEE.value].patch(
         f"/api/trials/{trial_id(seeded_engine)}/ethics-approval", json=body
     )
 
 
 def test_successful_approved_update_persists_audits_and_preserves_other_fields(
-    client, seeded_engine
+    role_clients, seeded_engine
 ):
     target_id = trial_id(seeded_engine)
     with Session(seeded_engine) as session:
@@ -81,7 +81,7 @@ def test_successful_approved_update_persists_audits_and_preserves_other_fields(
         before_updated_at = trial.updated_at
         before_audits = audit_count(session)
 
-    response = client.patch(
+    response = role_clients[UserRole.ETHICS_COMMITTEE.value].patch(
         f"/api/trials/{target_id}/ethics-approval", json=approved_payload()
     )
     assert response.status_code == 200, response.text
@@ -122,7 +122,7 @@ def test_successful_approved_update_persists_audits_and_preserves_other_fields(
 
 
 def test_identical_normalized_request_is_noop_without_commit(
-    client, seeded_engine, monkeypatch
+    role_clients, seeded_engine, monkeypatch
 ):
     target_id = trial_id(seeded_engine)
     today = utc_today()
@@ -144,7 +144,7 @@ def test_identical_normalized_request_is_noop_without_commit(
         raise AssertionError("identical ethics request must not commit")
 
     monkeypatch.setattr(Session, "commit", unexpected_commit)
-    response = client.patch(
+    response = role_clients[UserRole.ETHICS_COMMITTEE.value].patch(
         f"/api/trials/{target_id}/ethics-approval",
         json=payload(
             EthicsApprovalStatus.APPROVED,
@@ -180,7 +180,7 @@ def test_identical_normalized_request_is_noop_without_commit(
     ],
 )
 def test_valid_target_states_are_permitted_and_audited_once(
-    client,
+    role_clients,
     seeded_engine,
     status,
     number,
@@ -202,7 +202,7 @@ def test_valid_target_states_are_permitted_and_audited_once(
     with Session(seeded_engine) as session:
         before_audits = audit_count(session)
 
-    response = patch(client, seeded_engine, body)
+    response = patch(role_clients, seeded_engine, body)
     assert response.status_code == 200, response.text
     assert response.json()["ethics_approval_status"] == status.value
 
@@ -215,8 +215,8 @@ def test_valid_target_states_are_permitted_and_audited_once(
         assert entry.action == action.value
 
 
-def test_anonymous_request_returns_401(anonymous_client, seeded_engine):
-    response = patch(anonymous_client, seeded_engine, approved_payload())
+def test_anonymous_request_returns_401(anonymous_role_clients, seeded_engine):
+    response = patch(anonymous_role_clients, seeded_engine, approved_payload())
     assert response.status_code == 401
 
 
@@ -238,30 +238,30 @@ def test_ethics_committee_and_admin_are_permitted(role_clients, seeded_engine, r
     assert response.status_code == 200, response.text
 
 
-def test_missing_trial_uses_existing_404_format(client):
-    response = client.patch(
+def test_missing_trial_uses_existing_404_format(role_clients):
+    response = role_clients[UserRole.ETHICS_COMMITTEE.value].patch(
         "/api/trials/999999/ethics-approval", json=approved_payload()
     )
     assert response.status_code == 404
     assert response.json()["detail"] == "no trial with id 999999"
 
 
-def test_unknown_status_is_rejected(client, seeded_engine):
+def test_unknown_status_is_rejected(role_clients, seeded_engine):
     body = approved_payload()
     body["ethics_approval_status"] = "unknown"
-    assert patch(client, seeded_engine, body).status_code == 422
+    assert patch(role_clients, seeded_engine, body).status_code == 422
 
 
-def test_missing_required_request_key_is_rejected(client, seeded_engine):
+def test_missing_required_request_key_is_rejected(role_clients, seeded_engine):
     body = approved_payload()
     del body["ethics_approval_number"]
-    assert patch(client, seeded_engine, body).status_code == 422
+    assert patch(role_clients, seeded_engine, body).status_code == 422
 
 
-def test_unknown_request_field_is_rejected(client, seeded_engine):
+def test_unknown_request_field_is_rejected(role_clients, seeded_engine):
     body = approved_payload()
     body["unexpected"] = "not allowed"
-    assert patch(client, seeded_engine, body).status_code == 422
+    assert patch(role_clients, seeded_engine, body).status_code == 422
 
 
 @pytest.mark.parametrize(
@@ -312,9 +312,9 @@ def test_unknown_request_field_is_rejected(client, seeded_engine):
     ],
 )
 def test_invalid_approved_states_do_not_mutate_or_audit(
-    client, seeded_engine, body
+    role_clients, seeded_engine, body
 ):
-    assert_failed_without_side_effects(client, seeded_engine, body)
+    assert_failed_without_side_effects(role_clients, seeded_engine, body)
 
 
 @pytest.mark.parametrize(
@@ -342,9 +342,9 @@ def test_invalid_approved_states_do_not_mutate_or_audit(
     ],
 )
 def test_invalid_expired_states_do_not_mutate_or_audit(
-    client, seeded_engine, body
+    role_clients, seeded_engine, body
 ):
-    assert_failed_without_side_effects(client, seeded_engine, body)
+    assert_failed_without_side_effects(role_clients, seeded_engine, body)
 
 
 @pytest.mark.parametrize(
@@ -356,19 +356,19 @@ def test_invalid_expired_states_do_not_mutate_or_audit(
     ],
 )
 def test_non_approval_statuses_reject_approval_details(
-    client, seeded_engine, status
+    role_clients, seeded_engine, status
 ):
     body = payload(status, number="CONTRADICTORY")
-    assert_failed_without_side_effects(client, seeded_engine, body)
+    assert_failed_without_side_effects(role_clients, seeded_engine, body)
 
 
-def assert_failed_without_side_effects(client, seeded_engine, body: dict) -> None:
+def assert_failed_without_side_effects(role_clients, seeded_engine, body: dict) -> None:
     target_id = trial_id(seeded_engine)
     with Session(seeded_engine) as session:
         before = deepcopy(session.get(Trial, target_id).model_dump())
         before_audits = audit_count(session)
 
-    response = client.patch(
+    response = role_clients[UserRole.ETHICS_COMMITTEE.value].patch(
         f"/api/trials/{target_id}/ethics-approval", json=body
     )
     assert response.status_code == 422, response.text

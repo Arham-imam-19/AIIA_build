@@ -14,7 +14,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import Request
-from sqlmodel import Session
+import hashlib
+from sqlmodel import Session, select
 
 from app.enums import AuditAction
 from app.models import AuditLog
@@ -61,6 +62,9 @@ def record(
     `user_email` / `user_role` exist for the failed-login case, where there is no
     authenticated user but the attempt still has to be recorded.
     """
+    last_log = session.exec(select(AuditLog).order_by(AuditLog.id.desc()).limit(1)).first()
+    prev_hash = last_log.current_hash if last_log and last_log.current_hash else "0" * 64
+
     entry = AuditLog(
         timestamp=datetime.now(timezone.utc),
         user_id=user.id if user else None,
@@ -79,6 +83,12 @@ def record(
         user_agent=(
             request.headers.get("user-agent", "")[:300] if request is not None else None
         ),
+        previous_hash=prev_hash,
     )
+    
+    # Calculate deterministic hash of the entry
+    payload = f"{prev_hash}|{entry.timestamp.isoformat()}|{entry.action}|{entry.user_email}|{entry.entity_type}|{entry.entity_id}|{entry.new_value}"
+    entry.current_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
     session.add(entry)
     return entry

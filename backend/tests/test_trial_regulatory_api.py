@@ -40,8 +40,8 @@ def body(number: str | None, approval_date: date | str | None) -> dict:
     }
 
 
-def patch(client, target_id: int, payload: dict):
-    return client.patch(
+def patch(role_clients, target_id: int, payload: dict):
+    return role_clients[UserRole.SPONSOR.value].patch(
         f"/api/trials/{target_id}/regulatory-approval",
         json=payload,
     )
@@ -102,7 +102,7 @@ def test_sponsor_and_admin_can_update_and_number_is_trimmed(
 
 
 def test_explicit_null_pair_clears_before_activation_and_audits_once(
-    client, seeded_engine
+    role_clients, seeded_engine
 ):
     target_id = set_trial_state(
         seeded_engine,
@@ -112,7 +112,7 @@ def test_explicit_null_pair_clears_before_activation_and_audits_once(
     with Session(seeded_engine) as session:
         before_audits = audit_count(session)
 
-    response = patch(client, target_id, body(None, None))
+    response = patch(role_clients, target_id, body(None, None))
     assert response.status_code == 200, response.text
     assert response.json()["regulatory_approval_number"] is None
     assert response.json()["regulatory_approval_date"] is None
@@ -127,11 +127,11 @@ def test_explicit_null_pair_clears_before_activation_and_audits_once(
 
 
 def test_anonymous_request_returns_401_without_side_effects(
-    anonymous_client, seeded_engine
+    anonymous_role_clients, seeded_engine
 ):
     target_id = set_trial_state(seeded_engine)
     assert_failure_without_side_effects(
-        anonymous_client,
+        anonymous_role_clients,
         seeded_engine,
         target_id,
         body("SYNTHETIC-DENIED", utc_today() - timedelta(days=30)),
@@ -164,10 +164,10 @@ def test_unauthorized_roles_receive_403_without_side_effects(
     )
 
 
-def test_missing_trial_uses_existing_404_format_without_audit(client, seeded_engine):
+def test_missing_trial_uses_existing_404_format_without_audit(role_clients, seeded_engine):
     with Session(seeded_engine) as session:
         before_audits = audit_count(session)
-    response = patch(client, 999999, body(None, None))
+    response = patch(role_clients, 999999, body(None, None))
     assert response.status_code == 404
     assert response.json()["detail"] == "no trial with id 999999"
     with Session(seeded_engine) as session:
@@ -193,18 +193,18 @@ def test_missing_trial_uses_existing_404_format_without_audit(client, seeded_eng
         body("SYNTHETIC-FUTURE", utc_today() + timedelta(days=1)),
     ],
 )
-def test_invalid_requests_do_not_mutate_or_audit(client, seeded_engine, payload):
+def test_invalid_requests_do_not_mutate_or_audit(role_clients, seeded_engine, payload):
     target_id = set_trial_state(seeded_engine)
     assert_failure_without_side_effects(
-        client, seeded_engine, target_id, payload, expected_status=422
+        role_clients, seeded_engine, target_id, payload, expected_status=422
     )
 
 
-def test_approval_date_after_trial_start_is_rejected(client, seeded_engine):
+def test_approval_date_after_trial_start_is_rejected(role_clients, seeded_engine):
     start = utc_today() - timedelta(days=10)
     target_id = set_trial_state(seeded_engine, start_date=start)
     assert_failure_without_side_effects(
-        client,
+        role_clients,
         seeded_engine,
         target_id,
         body("SYNTHETIC-AFTER-START", start + timedelta(days=1)),
@@ -212,19 +212,19 @@ def test_approval_date_after_trial_start_is_rejected(client, seeded_engine):
     )
 
 
-def test_approval_date_equal_to_trial_start_is_accepted(client, seeded_engine):
+def test_approval_date_equal_to_trial_start_is_accepted(role_clients, seeded_engine):
     start = utc_today() - timedelta(days=10)
     target_id = set_trial_state(seeded_engine, start_date=start)
-    response = patch(client, target_id, body("SYNTHETIC-ON-START", start))
+    response = patch(role_clients, target_id, body("SYNTHETIC-ON-START", start))
     assert response.status_code == 200, response.text
     assert response.json()["regulatory_approval_date"] == str(start)
 
 
-def test_approval_can_be_stored_without_trial_start_date(client, seeded_engine):
+def test_approval_can_be_stored_without_trial_start_date(role_clients, seeded_engine):
     target_id = set_trial_state(seeded_engine, start_date=None)
     approval_date = utc_today()
     response = patch(
-        client, target_id, body("SYNTHETIC-NO-START", approval_date)
+        role_clients, target_id, body("SYNTHETIC-NO-START", approval_date)
     )
     assert response.status_code == 200, response.text
     with Session(seeded_engine) as session:
@@ -233,7 +233,7 @@ def test_approval_can_be_stored_without_trial_start_date(client, seeded_engine):
         assert trial.regulatory_approval_date == approval_date
 
 
-def test_identical_normalized_request_is_noop(client, seeded_engine):
+def test_identical_normalized_request_is_noop(role_clients, seeded_engine):
     approval_date = utc_today() - timedelta(days=20)
     target_id = set_trial_state(
         seeded_engine,
@@ -245,7 +245,7 @@ def test_identical_normalized_request_is_noop(client, seeded_engine):
         before_audits = audit_count(session)
 
     response = patch(
-        client,
+        role_clients,
         target_id,
         body("  SYNTHETIC-REGULATORY-NOOP  ", approval_date),
     )
@@ -256,7 +256,7 @@ def test_identical_normalized_request_is_noop(client, seeded_engine):
         assert audit_count(session) == before_audits
 
 
-def test_identical_noop_remains_allowed_after_activation(client, seeded_engine):
+def test_identical_noop_remains_allowed_after_activation(role_clients, seeded_engine):
     approval_date = utc_today() - timedelta(days=20)
     target_id = set_trial_state(
         seeded_engine,
@@ -269,7 +269,7 @@ def test_identical_noop_remains_allowed_after_activation(client, seeded_engine):
         before_audits = audit_count(session)
 
     response = patch(
-        client,
+        role_clients,
         target_id,
         body("  SYNTHETIC-ACTIVATED-NOOP  ", approval_date),
     )
@@ -281,7 +281,7 @@ def test_identical_noop_remains_allowed_after_activation(client, seeded_engine):
 
 @pytest.mark.parametrize("clearing", [False, True])
 def test_change_or_clearing_after_activation_returns_409_without_side_effects(
-    client, seeded_engine, clearing
+    role_clients, seeded_engine, clearing
 ):
     approval_date = utc_today() - timedelta(days=20)
     target_id = set_trial_state(
@@ -296,12 +296,12 @@ def test_change_or_clearing_after_activation_returns_409_without_side_effects(
         else body("SYNTHETIC-ACTIVATED-CHANGED", approval_date)
     )
     assert_failure_without_side_effects(
-        client, seeded_engine, target_id, payload, expected_status=409
+        role_clients, seeded_engine, target_id, payload, expected_status=409
     )
 
 
 def test_successful_change_audits_once_and_preserves_unrelated_fields(
-    client, seeded_engine
+    role_clients, seeded_engine
 ):
     target_id = set_trial_state(
         seeded_engine,
@@ -329,7 +329,7 @@ def test_successful_change_audits_once_and_preserves_unrelated_fields(
         before_audits = audit_count(session)
 
     response = patch(
-        client,
+        role_clients,
         target_id,
         body("SYNTHETIC-REGULATORY-AUDITED", approval_date),
     )
@@ -372,7 +372,7 @@ def test_successful_change_audits_once_and_preserves_unrelated_fields(
         assert entry.reason == "Trial regulatory approval updated."
 
 
-def test_regulatory_approval_numbers_are_not_api_unique(client, seeded_engine):
+def test_regulatory_approval_numbers_are_not_api_unique(role_clients, seeded_engine):
     duplicate = "SYNTHETIC-REGULATORY-SHARED"
     with Session(seeded_engine) as session:
         target = first_trial(session)
@@ -399,7 +399,7 @@ def test_regulatory_approval_numbers_are_not_api_unique(client, seeded_engine):
         target_id = target.id
         assert target_id is not None
 
-    response = patch(client, target_id, body(duplicate, approval_date))
+    response = patch(role_clients, target_id, body(duplicate, approval_date))
     assert response.status_code == 200, response.text
     with Session(seeded_engine) as session:
         owners = session.exec(
@@ -409,7 +409,7 @@ def test_regulatory_approval_numbers_are_not_api_unique(client, seeded_engine):
 
 
 def assert_failure_without_side_effects(
-    client,
+    role_clients,
     seeded_engine,
     target_id: int,
     payload: dict,
@@ -420,7 +420,7 @@ def assert_failure_without_side_effects(
         before = deepcopy(session.get(Trial, target_id).model_dump())
         before_audits = audit_count(session)
 
-    response = patch(client, target_id, payload)
+    response = patch(role_clients, target_id, payload)
     assert response.status_code == expected_status, response.text
 
     with Session(seeded_engine) as session:

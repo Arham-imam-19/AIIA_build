@@ -218,7 +218,7 @@ def client_for_user(engine: sa.Engine, user: User) -> ScopedClient:
 @pytest.fixture(scope="module")
 def client(seeded_engine) -> ScopedClient:
     """The everyday client: seeded data, signed in as an Administrator."""
-    test_client = client_for(seeded_engine, UserRole.ADMIN.value)
+    test_client = client_for(seeded_engine, UserRole.PRINCIPAL_INVESTIGATOR.value)
     yield test_client
     app.dependency_overrides.clear()
 

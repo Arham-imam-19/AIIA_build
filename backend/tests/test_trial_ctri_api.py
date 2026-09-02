@@ -39,8 +39,8 @@ def body(number: str | None, registration_date: date | None) -> dict:
     }
 
 
-def patch(client, target_id: int, payload: dict):
-    return client.patch(
+def patch(role_clients, target_id: int, payload: dict):
+    return role_clients[UserRole.SPONSOR.value].patch(
         f"/api/trials/{target_id}/ctri-registration",
         json=payload,
     )
@@ -97,7 +97,7 @@ def test_sponsor_and_administrator_can_register_and_number_is_trimmed(
         assert trial.ctri_registration_date == registration_date
 
 
-def test_explicit_null_pair_clears_registration_before_activation(client, seeded_engine):
+def test_explicit_null_pair_clears_registration_before_activation(role_clients, seeded_engine):
     target_id = set_trial_state(
         seeded_engine,
         number="SYNTHETIC-CTRI-TO-CLEAR",
@@ -106,7 +106,7 @@ def test_explicit_null_pair_clears_registration_before_activation(client, seeded
     with Session(seeded_engine) as session:
         before_audits = audit_count(session)
 
-    response = patch(client, target_id, body(None, None))
+    response = patch(role_clients, target_id, body(None, None))
     assert response.status_code == 200, response.text
     assert response.json()["ctri_number"] is None
     assert response.json()["ctri_registration_date"] is None
@@ -119,11 +119,11 @@ def test_explicit_null_pair_clears_registration_before_activation(client, seeded
         assert entry.reason == "Trial CTRI registration cleared."
 
 
-def test_anonymous_request_returns_401(anonymous_client, seeded_engine):
+def test_anonymous_request_returns_401(anonymous_role_clients, seeded_engine):
     target_id = set_trial_state(seeded_engine)
     with Session(seeded_engine) as session:
         before_audits = audit_count(session)
-    response = patch(anonymous_client, target_id, body(None, None))
+    response = patch(anonymous_role_clients, target_id, body(None, None))
     assert response.status_code == 401
     with Session(seeded_engine) as session:
         assert audit_count(session) == before_audits
@@ -158,10 +158,10 @@ def test_every_role_without_ctri_write_returns_403_without_side_effects(
         assert audit_count(session) == before_audits
 
 
-def test_missing_trial_uses_existing_404_format_without_audit(client, seeded_engine):
+def test_missing_trial_uses_existing_404_format_without_audit(role_clients, seeded_engine):
     with Session(seeded_engine) as session:
         before_audits = audit_count(session)
-    response = patch(client, 999999, body(None, None))
+    response = patch(role_clients, 999999, body(None, None))
     assert response.status_code == 404
     assert response.json()["detail"] == "no trial with id 999999"
     with Session(seeded_engine) as session:
@@ -169,18 +169,18 @@ def test_missing_trial_uses_existing_404_format_without_audit(client, seeded_eng
 
 
 @pytest.mark.parametrize("missing_key", ["ctri_number", "ctri_registration_date"])
-def test_both_request_keys_are_required(client, seeded_engine, missing_key):
+def test_both_request_keys_are_required(role_clients, seeded_engine, missing_key):
     target_id = set_trial_state(seeded_engine)
     payload = body(None, None)
     del payload[missing_key]
-    assert patch(client, target_id, payload).status_code == 422
+    assert patch(role_clients, target_id, payload).status_code == 422
 
 
-def test_unknown_request_field_is_rejected(client, seeded_engine):
+def test_unknown_request_field_is_rejected(role_clients, seeded_engine):
     target_id = set_trial_state(seeded_engine)
     payload = body(None, None)
     payload["unexpected"] = "not allowed"
-    assert patch(client, target_id, payload).status_code == 422
+    assert patch(role_clients, target_id, payload).status_code == 422
 
 
 @pytest.mark.parametrize(
@@ -195,19 +195,19 @@ def test_unknown_request_field_is_rejected(client, seeded_engine):
     ],
 )
 def test_invalid_shapes_and_values_do_not_mutate_or_audit(
-    client, seeded_engine, payload
+    role_clients, seeded_engine, payload
 ):
     target_id = set_trial_state(seeded_engine)
     assert_failure_without_side_effects(
-        client, seeded_engine, target_id, payload, expected_status=422
+        role_clients, seeded_engine, target_id, payload, expected_status=422
     )
 
 
-def test_registration_date_after_trial_start_is_rejected(client, seeded_engine):
+def test_registration_date_after_trial_start_is_rejected(role_clients, seeded_engine):
     start = utc_today() - timedelta(days=10)
     target_id = set_trial_state(seeded_engine, start_date=start)
     assert_failure_without_side_effects(
-        client,
+        role_clients,
         seeded_engine,
         target_id,
         body("SYNTHETIC-AFTER-START", start + timedelta(days=1)),
@@ -215,19 +215,19 @@ def test_registration_date_after_trial_start_is_rejected(client, seeded_engine):
     )
 
 
-def test_registration_on_trial_start_date_is_accepted(client, seeded_engine):
+def test_registration_on_trial_start_date_is_accepted(role_clients, seeded_engine):
     start = utc_today() - timedelta(days=10)
     target_id = set_trial_state(seeded_engine, start_date=start)
-    response = patch(client, target_id, body("SYNTHETIC-ON-START", start))
+    response = patch(role_clients, target_id, body("SYNTHETIC-ON-START", start))
     assert response.status_code == 200, response.text
     assert response.json()["ctri_registration_date"] == str(start)
 
 
-def test_registration_can_be_stored_without_trial_start_date(client, seeded_engine):
+def test_registration_can_be_stored_without_trial_start_date(role_clients, seeded_engine):
     target_id = set_trial_state(seeded_engine, start_date=None)
     registration_date = utc_today() - timedelta(days=1)
     response = patch(
-        client, target_id, body("SYNTHETIC-NO-START", registration_date)
+        role_clients, target_id, body("SYNTHETIC-NO-START", registration_date)
     )
     assert response.status_code == 200, response.text
     with Session(seeded_engine) as session:
@@ -236,15 +236,15 @@ def test_registration_can_be_stored_without_trial_start_date(client, seeded_engi
         assert trial.ctri_registration_date == registration_date
 
 
-def test_registration_today_is_allowed_when_start_date_is_null(client, seeded_engine):
+def test_registration_today_is_allowed_when_start_date_is_null(role_clients, seeded_engine):
     target_id = set_trial_state(seeded_engine, start_date=None)
-    response = patch(client, target_id, body("SYNTHETIC-TODAY", utc_today()))
+    response = patch(role_clients, target_id, body("SYNTHETIC-TODAY", utc_today()))
     assert response.status_code == 200, response.text
     assert response.json()["ctri_registration_date"] == str(utc_today())
 
 
 def test_duplicate_number_owned_by_another_trial_returns_409_without_side_effects(
-    client, seeded_engine
+    role_clients, seeded_engine
 ):
     duplicate = "SYNTHETIC-CTRI-DUPLICATE"
     with Session(seeded_engine) as session:
@@ -272,7 +272,7 @@ def test_duplicate_number_owned_by_another_trial_returns_409_without_side_effect
         assert target_id is not None
 
     assert_failure_without_side_effects(
-        client,
+        role_clients,
         seeded_engine,
         target_id,
         body(duplicate, utc_today() - timedelta(days=5)),
@@ -280,7 +280,7 @@ def test_duplicate_number_owned_by_another_trial_returns_409_without_side_effect
     )
 
 
-def test_reusing_current_trials_own_number_is_an_allowed_noop(client, seeded_engine):
+def test_reusing_current_trials_own_number_is_an_allowed_noop(role_clients, seeded_engine):
     registration_date = utc_today() - timedelta(days=5)
     target_id = set_trial_state(
         seeded_engine,
@@ -288,7 +288,7 @@ def test_reusing_current_trials_own_number_is_an_allowed_noop(client, seeded_eng
         registration_date=registration_date,
     )
     response = patch(
-        client,
+        role_clients,
         target_id,
         body("  SYNTHETIC-CTRI-OWN  ", registration_date),
     )
@@ -297,7 +297,7 @@ def test_reusing_current_trials_own_number_is_an_allowed_noop(client, seeded_eng
 
 @pytest.mark.parametrize("clearing", [False, True])
 def test_actual_change_or_clearing_after_activation_returns_409(
-    client, seeded_engine, clearing
+    role_clients, seeded_engine, clearing
 ):
     registration_date = utc_today() - timedelta(days=20)
     target_id = set_trial_state(
@@ -312,12 +312,12 @@ def test_actual_change_or_clearing_after_activation_returns_409(
         else body("SYNTHETIC-ACTIVATED-CHANGED", registration_date)
     )
     assert_failure_without_side_effects(
-        client, seeded_engine, target_id, payload, expected_status=409
+        role_clients, seeded_engine, target_id, payload, expected_status=409
     )
 
 
 def test_identical_noop_after_activation_does_not_update_or_audit(
-    client, seeded_engine
+    role_clients, seeded_engine
 ):
     registration_date = utc_today() - timedelta(days=20)
     target_id = set_trial_state(
@@ -331,7 +331,7 @@ def test_identical_noop_after_activation_does_not_update_or_audit(
         before_audits = audit_count(session)
 
     response = patch(
-        client,
+        role_clients,
         target_id,
         body("  SYNTHETIC-ACTIVATED-NOOP  ", registration_date),
     )
@@ -343,7 +343,7 @@ def test_identical_noop_after_activation_does_not_update_or_audit(
 
 
 def test_successful_change_audits_once_and_preserves_unrelated_trial_fields(
-    client, seeded_engine
+    role_clients, seeded_engine
 ):
     target_id = set_trial_state(seeded_engine)
     with Session(seeded_engine) as session:
@@ -366,7 +366,7 @@ def test_successful_change_audits_once_and_preserves_unrelated_trial_fields(
         before_audits = audit_count(session)
 
     response = patch(
-        client,
+        role_clients,
         target_id,
         body("SYNTHETIC-CTRI-AUDITED", registration_date),
     )
@@ -402,7 +402,7 @@ def test_successful_change_audits_once_and_preserves_unrelated_trial_fields(
 
 
 def assert_failure_without_side_effects(
-    client,
+    role_clients,
     seeded_engine,
     target_id: int,
     payload: dict,
@@ -413,7 +413,7 @@ def assert_failure_without_side_effects(
         before = deepcopy(session.get(Trial, target_id).model_dump())
         before_audits = audit_count(session)
 
-    response = patch(client, target_id, payload)
+    response = patch(role_clients, target_id, payload)
     assert response.status_code == expected_status, response.text
 
     with Session(seeded_engine) as session:

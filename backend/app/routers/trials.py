@@ -380,6 +380,12 @@ async def update_trial_ethics_approval(
     trial.ethics_approval_number = trimmed_number
     trial.ethics_approval_date = body.ethics_approval_date
     trial.ethics_approval_valid_until = body.ethics_approval_valid_until
+    
+    # Auto-suspend the global trial if ethics approval is rejected
+    if body.ethics_approval_status == EthicsApprovalStatus.REJECTED:
+        if trial.status == TrialStatus.ACTIVE:
+            trial.status = TrialStatus.SUSPENDED
+            
     trial.updated_at = now
     session.add(trial)
 
@@ -867,4 +873,37 @@ def create_site(
     return site
 
 
+
+
+@router.post("/{trial_id}/halt")
+def halt_trial_emergency(
+    trial_id: int,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.HALT_TRIAL)),
+) -> dict:
+    """DSMB Emergency Halt API. Instantly suspends a trial for safety reasons."""
+    trial = session.get(Trial, trial_id)
+    if not trial:
+        raise HTTPException(status_code=404, detail="Trial not found")
+        
+    old_status = trial.status
+    trial.status = TrialStatus.SUSPENDED
+    session.add(trial)
+    
+    audit.record(
+        session,
+        user=user,
+        action=AuditAction.UPDATE,
+        entity_type="trials",
+        entity_id=trial_id,
+        entity_label=trial.protocol_number,
+        field_name="status",
+        old_value=old_status,
+        new_value=TrialStatus.SUSPENDED,
+        reason="EMERGENCY HALT ordered by DSMB due to safety signals.",
+        trial_id=trial_id,
+    )
+    session.commit()
+    
+    return {"status": "success", "message": "Trial has been suspended immediately."}
 
