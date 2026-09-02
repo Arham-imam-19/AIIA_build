@@ -120,8 +120,8 @@ export default function ParticipantDossierModal({ subjectId, onClose }) {
                 </div>
                 <div className="rounded-lg bg-slate-50 p-2.5 dark:bg-slate-800/60">
                   <span className="text-slate-400 block text-[10px] uppercase font-semibold">Randomized Arm</span>
-                  <span className="font-bold text-indigo-700 dark:text-indigo-400 mt-0.5 block truncate" title={profile?.arm}>
-                    {profile?.arm || 'Not Randomized'}
+                  <span className={`font-bold mt-0.5 block truncate ${profile?.arm === '[BLINDED]' ? 'text-amber-600 dark:text-amber-400 italic' : 'text-indigo-700 dark:text-indigo-400'}`} title={profile?.arm}>
+                    {profile?.arm === '[BLINDED]' ? '🔒 Blinded' : (profile?.arm || 'Not Randomized')}
                   </span>
                 </div>
                 <div className="rounded-lg bg-slate-50 p-2.5 dark:bg-slate-800/60">
