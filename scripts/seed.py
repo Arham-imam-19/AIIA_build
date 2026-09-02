@@ -100,11 +100,15 @@ def seed(
     data = synthetic.generate(reference_date=reference_date, random_seed=random_seed)
 
     # ----------------------------------------------------------------- trial
-    trial = Trial(**_strip_references(data["trial"]))
-    session.add(trial)
-    # flush sends the INSERT so the database assigns an id, without ending the
-    # transaction. If a later step fails, the whole seed still rolls back.
-    session.flush()
+    db_trials = []
+    for t_data in data["trials"]:
+        db_trial = Trial(**_strip_references(t_data))
+        session.add(db_trial)
+        session.flush()
+        db_trials.append(db_trial)
+        
+    # The first trial is the main one that has sites, subjects, etc.
+    trial = db_trials[0]
     trial_id: int = trial.id  # type: ignore[assignment]
 
     # ---------------------------------------------------------------- sites
@@ -134,10 +138,11 @@ def seed(
         user_role_by_email[user.email] = user.role
         user_obj_by_email[user.email] = user
 
-    trial.activated_by_user_id = user_id_by_email[
-        data["trial"]["_activated_by_email"]
-    ]
-    session.add(trial)
+    # Set activated_by_user_id for all trials
+    for i, t_data in enumerate(data["trials"]):
+        if "_activated_by_email" in t_data:
+            db_trials[i].activated_by_user_id = user_id_by_email[t_data["_activated_by_email"]]
+            session.add(db_trials[i])
     session.flush()
 
     # ------------------------------------------------------------- subjects
@@ -264,7 +269,7 @@ def seed(
         )
 
     session.commit()
-    return data["summary"] | {"reference_date": data["reference_date"], "trial": data["trial"]}
+    return data["summary"] | {"reference_date": data["reference_date"], "trial": data["trials"][0]}
 
 
 def report(session: Session) -> None:
