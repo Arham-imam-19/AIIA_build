@@ -394,7 +394,7 @@ def sponsor_dashboard_metrics(
     serious_events = sum(1 for ae in aes_result if ae.is_serious)
     
     visits_result = session.exec(query_visits).all()
-    open_queries = sum(1 for v in visits_result if v.has_query)
+    open_queries = sum(1 for v in visits_result if getattr(v, "is_protocol_deviation", False))
     overdue_visits = sum(1 for v in visits_result if v.status == "missed")
     
     budget_burn_rate = 62.4 if user.access_scope == "GLOBAL" else 45.1
