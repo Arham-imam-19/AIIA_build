@@ -5,6 +5,7 @@ import ParticipantIntakeModal from '../components/ParticipantIntakeModal'
 import ReportAdverseEventModal from '../components/ReportAdverseEventModal'
 import LogProtocolDeviationModal from '../components/LogProtocolDeviationModal'
 import ParticipantDossierModal from '../components/ParticipantDossierModal'
+import CreateResearchModal from '../components/CreateResearchModal'
 
 function SiteComplianceStatusBanner() {
   const [trial, setTrial] = useState(null)
@@ -46,6 +47,7 @@ export default function Investigator(props) {
   const [showIntakeModal, setShowIntakeModal] = useState(false)
   const [showAeModal, setShowAeModal] = useState(false)
   const [showDeviationModal, setShowDeviationModal] = useState(false)
+  const [showCreateResearch, setShowCreateResearch] = useState(false)
   const [selectedSubjectId, setSelectedSubjectId] = useState(null)
 
   return (
@@ -61,10 +63,16 @@ export default function Investigator(props) {
               Principal Investigator Clinical & Safety Actions
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Execute structured CDASH screening intake, evaluate & report MedDRA adverse events, and log deviations.
+              Execute structured CDASH screening intake, evaluate & report MedDRA adverse events, register research, and log deviations.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowCreateResearch(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-indigo-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-800 transition"
+            >
+              ➕ Register Research Protocol
+            </button>
             <button
               onClick={() => setShowIntakeModal(true)}
               className="flex items-center gap-1.5 rounded-lg bg-aiia-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-aiia-700 transition"
@@ -100,6 +108,12 @@ export default function Investigator(props) {
       />
 
       {/* Modals */}
+      {showCreateResearch && (
+        <CreateResearchModal
+          onClose={() => setShowCreateResearch(false)}
+          onSuccess={props.onRefresh}
+        />
+      )}
       {showIntakeModal && (
         <ParticipantIntakeModal
           onClose={() => setShowIntakeModal(false)}

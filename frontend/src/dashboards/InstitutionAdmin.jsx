@@ -1,10 +1,13 @@
 // Institution Administrator: manages hospital site operations, coordinates researchers,
-// monitors local recruitment & safety, and reviews/responds to patient inquiries.
+// monitors local recruitment & safety, creates scoped research protocols, and reviews/responds to patient inquiries.
 
 import { useState } from 'react'
 import { respondPatientRequest } from '../api'
+import { useAuth } from '../auth'
 import DashboardLayout from './layout'
 import DataExportCenter from '../components/DataExportCenter'
+import CreateResearchModal from '../components/CreateResearchModal'
+import SiteResearchModal from '../components/SiteResearchModal'
 
 function RespondModal({ requestId, onClose, onSuccess }) {
   const [response, setResponse] = useState('')
@@ -96,45 +99,66 @@ function RespondModal({ requestId, onClose, onSuccess }) {
 }
 
 export default function InstitutionAdmin(props) {
+  const { user } = useAuth()
   const [selectedRequest, setSelectedRequest] = useState(null)
+  const [showCreateResearch, setShowCreateResearch] = useState(false)
+  const [showSiteResearch, setShowSiteResearch] = useState(false)
 
   return (
     <div className="space-y-4">
+      {/* Site Scope Banner */}
       <div className="flex items-center justify-between rounded-lg border border-teal-100 bg-teal-50/70 px-4 py-2.5 text-xs text-teal-900">
         <span className="flex items-center gap-2 font-medium">
           <span className="flex h-2 w-2 rounded-full bg-teal-600"></span>
-          🏥 Site Healthcare Provider Scope: Direct Patient Communication Enabled
+          🏥 Site Healthcare Provider Scope: {user?.organization || 'Hospital Clinical Research Centre'}
         </span>
         <span className="text-teal-700 hidden sm:inline">
-          Access is limited to participants enrolled at your hospital site.
+          Authorized for Clinical Protocol Registration &amp; Hospital Operations
         </span>
+      </div>
+
+      {/* Institutional Clinical Research Action Hub */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-indigo-600"></span>
+              Institutional Clinical Research &amp; Operations Hub
+            </h4>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Register new research protocols, review site capacity &amp; patient communications.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowCreateResearch(true)}
+              className="rounded-lg bg-indigo-900 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-800 transition-colors flex items-center gap-1.5"
+            >
+              <span>+</span> Register New Research Protocol
+            </button>
+            {user?.site_id && (
+              <button
+                onClick={() => setShowSiteResearch(true)}
+                className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1.5"
+              >
+                <span>🔍</span> Site Research &amp; Capacity Overview
+              </button>
+            )}
+            <button
+              onClick={() => setSelectedRequest(1)}
+              className="rounded-lg border border-teal-600 bg-teal-50 px-3.5 py-2 text-xs font-semibold text-teal-900 hover:bg-teal-100 transition-colors"
+            >
+              Reply to Patient Inquiry
+            </button>
+          </div>
+        </div>
       </div>
 
       <DashboardLayout
         {...props}
         wide={['patient_requests', 'staff']}
-        note="Institution Scope: Manage hospital research personnel, track patient enrollment milestones, and respond to participant inquiries."
+        note="Institution Scope: Manage hospital research personnel, track patient enrollment milestones, and register new institutional clinical trials."
       />
-
-      {/* Action button in dashboard context */}
-      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h4 className="text-sm font-semibold text-slate-800">
-              Patient Inquiry Management
-            </h4>
-            <p className="text-xs text-slate-500">
-              Select an inquiry ID to draft an official response or change its review status.
-            </p>
-          </div>
-          <button
-            onClick={() => setSelectedRequest(1)}
-            className="rounded-lg bg-aiia-600 px-3.5 py-2 text-xs font-medium text-white shadow-sm hover:bg-aiia-700"
-          >
-            Reply to Patient Inquiry
-          </button>
-        </div>
-      </div>
 
       <DataExportCenter />
 
@@ -143,6 +167,21 @@ export default function InstitutionAdmin(props) {
           requestId={selectedRequest}
           onClose={() => setSelectedRequest(null)}
           onSuccess={props.onRefresh}
+        />
+      )}
+
+      {showCreateResearch && (
+        <CreateResearchModal
+          onClose={() => setShowCreateResearch(false)}
+          onSuccess={props.onRefresh}
+        />
+      )}
+
+      {showSiteResearch && user?.site_id && (
+        <SiteResearchModal
+          siteId={user.site_id}
+          siteName={user.organization}
+          onClose={() => setShowSiteResearch(false)}
         />
       )}
     </div>

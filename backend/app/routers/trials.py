@@ -9,7 +9,7 @@ distinction matters.
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -19,9 +19,9 @@ from sqlmodel import Session, SQLModel, select
 
 from app import audit
 from app.db import get_session
-from app.enums import AuditAction, EthicsApprovalStatus, TrialStatus
+from app.enums import AuditAction, EthicsApprovalStatus, SiteStatus, TrialStatus, UserRole
 from app.events import bus, now_iso
-from app.models import Site, Subject, Trial, User
+from app.models import AdverseEvent, Site, Subject, Trial, User, Visit
 from app.models.base import utcnow
 from app.services import trial_compliance
 from app.rbac import (
@@ -737,7 +737,7 @@ class CreateTrialRequest(SQLModel):
     protocol_number: str
     title: str
     short_title: str | None = None
-    phase: str = "phase_2"
+    phase: str = "phase_3"
     indication: str
     indication_ayurveda: str | None = None
     intervention: str
@@ -745,21 +745,202 @@ class CreateTrialRequest(SQLModel):
     design: str = "Randomized, Double-Blind, Parallel Group"
     sponsor_name: str = "All India Institute of Ayurveda"
     target_enrollment: int = 100
+    start_date: date | None = None
+    planned_end_date: date | None = None
+
+
+class SiteResearchTrialSummary(BaseModel):
+    trial_id: int
+    protocol_number: str
+    title: str
+    short_title: str
+    phase: str
+    status: str
+    indication: str
+    sponsor_name: str
+    site_id: int
+    site_code: str
+    site_status: str
+    site_pi_name: str
+    site_pi_email: str | None = None
+    site_target_enrollment: int = 0
+    site_enrolled_subjects: int = 0
+    site_screened_subjects: int = 0
+    ethics_approval_status: str | None = None
+    ethics_approval_number: str | None = None
+
+
+class SiteResearchOverviewResponse(BaseModel):
+    site_id: int
+    site_code: str
+    name: str
+    city: str
+    state: str
+    country: str
+    pi_name: str
+    pi_email: str | None = None
+    contact_phone: str | None = None
+    status: str
+    total_trials: int
+    total_enrolled_subjects: int
+    total_screened_subjects: int
+    total_open_deviations: int
+    total_active_saes: int
+    total_staff_count: int
+    trials: list[SiteResearchTrialSummary]
+
+
+@router.get("/sites/{site_id}/trials", response_model=SiteResearchOverviewResponse)
+def get_site_research_overview(
+    site_id: int,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.SITE_READ)),
+) -> SiteResearchOverviewResponse:
+    """Retrieve comprehensive research overview and operational capacity metrics for an active Site."""
+    site = session.get(Site, site_id)
+    if site is None:
+        raise HTTPException(status_code=404, detail=f"site {site_id} not found")
+
+    # Site-scoping check: Site-scoped users may only view their home institution
+    if user.is_site_scoped:
+        user_site = session.get(Site, user.site_id) if user.site_id else None
+        if user_site:
+            if site.id != user_site.id and site.name != user_site.name and site.site_code != user_site.site_code:
+                raise HTTPException(
+                    status_code=403,
+                    detail="access to other hospital site research overview is forbidden",
+                )
+        elif site.id != user.site_id:
+            raise HTTPException(
+                status_code=403,
+                detail="access to other hospital site research overview is forbidden",
+            )
+
+    # Find all Site rows across trials matching this institute (by name or site_code)
+    matching_sites = session.exec(
+        select(Site).where(
+            (Site.name == site.name) | (Site.site_code == site.site_code) | (Site.id == site.id)
+        )
+    ).all()
+
+    trial_summaries: list[SiteResearchTrialSummary] = []
+    total_enrolled = 0
+    total_screened = 0
+    total_deviations = 0
+    total_saes = 0
+
+    seen_trial_ids = set()
+    for s in matching_sites:
+        if s.trial_id in seen_trial_ids:
+            continue
+        trial = session.get(Trial, s.trial_id)
+        if trial is None:
+            continue
+        seen_trial_ids.add(trial.id)
+
+        # Subjects at this site
+        subjects = session.exec(select(Subject).where(Subject.site_id == s.id)).all()
+        enrolled_count = sum(1 for sub in subjects if sub.enrollment_date is not None)
+        screened_count = len(subjects)
+
+        # Deviations at this site
+        dev_count = len(
+            session.exec(
+                select(Visit)
+                .join(Subject, Visit.subject_id == Subject.id)
+                .where(Subject.site_id == s.id, Visit.is_protocol_deviation == True)  # noqa: E712
+            ).all()
+        )
+
+        # SAEs at this site
+        sae_count = len(
+            session.exec(
+                select(AdverseEvent)
+                .join(Subject, AdverseEvent.subject_id == Subject.id)
+                .where(Subject.site_id == s.id, AdverseEvent.is_serious == True)  # noqa: E712
+            ).all()
+        )
+
+        total_enrolled += enrolled_count
+        total_screened += screened_count
+        total_deviations += dev_count
+        total_saes += sae_count
+
+        trial_summaries.append(
+            SiteResearchTrialSummary(
+                trial_id=trial.id,
+                protocol_number=trial.protocol_number,
+                title=trial.title,
+                short_title=trial.short_title or trial.title[:180],
+                phase=trial.phase,
+                status=trial.status,
+                indication=trial.indication,
+                sponsor_name=trial.sponsor_name,
+                site_id=s.id,
+                site_code=s.site_code,
+                site_status=s.status,
+                site_pi_name=s.pi_name,
+                site_pi_email=s.pi_email,
+                site_target_enrollment=s.target_enrollment,
+                site_enrolled_subjects=enrolled_count,
+                site_screened_subjects=screened_count,
+                ethics_approval_status=trial.ethics_approval_status,
+                ethics_approval_number=trial.ethics_approval_number,
+            )
+        )
+
+    # Registered personnel at site
+    site_ids = [s.id for s in matching_sites if s.id is not None]
+    staff_count = len(
+        session.exec(
+            select(User).where(
+                (User.site_id.in_(site_ids)) | (User.organization == site.name)
+            )
+        ).all()
+    )
+
+    return SiteResearchOverviewResponse(
+        site_id=site.id,
+        site_code=site.site_code,
+        name=site.name,
+        city=site.city,
+        state=site.state,
+        country=site.country,
+        pi_name=site.pi_name,
+        pi_email=site.pi_email,
+        contact_phone=site.contact_phone,
+        status=site.status,
+        total_trials=len(trial_summaries),
+        total_enrolled_subjects=total_enrolled,
+        total_screened_subjects=total_screened,
+        total_open_deviations=total_deviations,
+        total_active_saes=total_saes,
+        total_staff_count=staff_count,
+        trials=trial_summaries,
+    )
 
 
 @router.post("/trials", response_model=Trial, status_code=201)
 def create_trial(
     body: CreateTrialRequest,
     session: Session = Depends(get_session),
-    user: CurrentUser = Depends(require(Permission.USER_MANAGE)),
+    user: CurrentUser = Depends(require(Permission.TRIAL_CREATE)),
 ) -> Trial:
-    """Primary Admin creates a new Clinical Trial protocol."""
+    """Primary Admin, Institution Admin, or Principal Investigator creates a new Research Protocol."""
     proto = body.protocol_number.strip().upper()
+    if len(proto) < 3:
+        raise HTTPException(
+            status_code=422,
+            detail="protocol number must be at least 3 characters",
+        )
+
     existing = session.exec(select(Trial).where(Trial.protocol_number == proto)).first()
     if existing:
         raise HTTPException(status_code=400, detail=f"protocol {proto} already exists")
 
     now = utcnow()
+    start_d = body.start_date or now.date()
+    end_d = body.planned_end_date or (start_d + timedelta(days=365))
     trial = Trial(
         protocol_number=proto,
         title=body.title.strip(),
@@ -774,12 +955,36 @@ def create_trial(
         is_blinded=True,
         sponsor_name=body.sponsor_name.strip(),
         target_enrollment=body.target_enrollment,
+        start_date=start_d,
+        planned_end_date=end_d,
         ethics_approval_status=EthicsApprovalStatus.PENDING.value,
         created_at=now,
         updated_at=now,
     )
     session.add(trial)
     session.flush()
+
+    # If created by a hospital-scoped role (Institution Admin or PI), auto-provision their site for this trial
+    if user.is_site_scoped and user.site_id:
+        home_site = session.get(Site, user.site_id)
+        if home_site:
+            inst_site = Site(
+                trial_id=trial.id,
+                site_code=home_site.site_code,
+                name=home_site.name,
+                city=home_site.city,
+                state=home_site.state,
+                country=home_site.country,
+                pi_name=user.full_name if user.role == UserRole.PRINCIPAL_INVESTIGATOR.value else home_site.pi_name,
+                pi_email=user.email if user.role == UserRole.PRINCIPAL_INVESTIGATOR.value else home_site.pi_email,
+                contact_phone=home_site.contact_phone,
+                status=SiteStatus.PLANNED.value,
+                target_enrollment=body.target_enrollment,
+                activation_date=now.date(),
+                created_at=now,
+            )
+            session.add(inst_site)
+            session.flush()
 
     audit.record(
         session,
@@ -788,7 +993,7 @@ def create_trial(
         entity_type="trials",
         entity_id=trial.id,
         entity_label=trial.protocol_number,
-        reason=f"Clinical Trial Protocol {trial.protocol_number} created by Primary Admin",
+        reason=f"Clinical Trial Protocol {trial.protocol_number} created by {user.role_label} ({user.full_name})",
         trial_id=trial.id,
     )
     session.commit()

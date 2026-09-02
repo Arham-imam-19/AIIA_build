@@ -126,6 +126,9 @@ export const fetchSites = (params = {}) => {
   return api(`/api/sites${qStr ? `?${qStr}` : ''}`)
 }
 
+export const fetchSiteResearchOverview = (siteId) =>
+  api(`/api/sites/${siteId}/trials`)
+
 export const createUser = (body) =>
   api('/api/users', { method: 'POST', body })
 

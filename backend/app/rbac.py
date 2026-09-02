@@ -40,6 +40,7 @@ class Permission(str, Enum):
     """One capability. Named `area:verb` so a permission reads as a sentence."""
 
     TRIAL_READ = "trial:read"  # the protocol, its dates, its registrations
+    TRIAL_CREATE = "trial:create"  # create and register new research protocols
     SITE_READ = "site:read"  # the participating hospitals / institutions
     INSTITUTION_MANAGE = "institution:manage"  # create or manage institutions
     SUBJECT_READ = "subject:read"  # participant records (de-identified)
@@ -98,6 +99,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
     UserRole.INSTITUTION_ADMIN.value: frozenset(
         {
             _P.TRIAL_READ,
+            _P.TRIAL_CREATE,
             _P.SITE_READ,
             _P.SUBJECT_READ,
             _P.VISIT_READ,
@@ -113,6 +115,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
     UserRole.PRINCIPAL_INVESTIGATOR.value: frozenset(
         {
             _P.TRIAL_READ,
+            _P.TRIAL_CREATE,
             _P.SITE_READ,
             _P.SUBJECT_READ,
             _P.SUBJECT_WRITE,
@@ -229,6 +232,7 @@ ROLE_LABELS: dict[str, str] = {
 
 PERMISSION_LABELS: dict[str, str] = {
     _P.TRIAL_READ.value: "View the trial and its protocol",
+    _P.TRIAL_CREATE.value: "Create and register new research / trial protocols",
     _P.SITE_READ.value: "View participating sites / institutions",
     _P.INSTITUTION_MANAGE.value: "Manage institutions and sites",
     _P.SUBJECT_READ.value: "View participants",

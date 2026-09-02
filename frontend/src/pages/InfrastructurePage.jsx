@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { fetchSites, fetchTrials, resetTrialData } from '../api'
 import CreateSiteModal from '../components/CreateSiteModal'
 import CreateTrialModal from '../components/CreateTrialModal'
+import SiteResearchModal from '../components/SiteResearchModal'
 
 export default function InfrastructurePage({ onNavigateDashboard }) {
   const [trials, setTrials] = useState([])
@@ -9,6 +10,7 @@ export default function InfrastructurePage({ onNavigateDashboard }) {
   const [loading, setLoading] = useState(false)
   const [showTrialModal, setShowTrialModal] = useState(false)
   const [showSiteModal, setShowSiteModal] = useState(false)
+  const [selectedSiteForResearch, setSelectedSiteForResearch] = useState(null)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [cleanSlateBusy, setCleanSlateBusy] = useState(false)
   const [cleanSlateResult, setCleanSlateResult] = useState(null)
@@ -128,12 +130,21 @@ export default function InfrastructurePage({ onNavigateDashboard }) {
                 </tr>
               ) : (
                 sites.map((s) => (
-                  <tr key={s.id} className="hover:bg-slate-50">
-                    <td className="border-r border-slate-200 px-3.5 py-2.5 font-mono font-bold text-slate-900">
+                  <tr
+                    key={s.id}
+                    onClick={() => setSelectedSiteForResearch(s)}
+                    className="hover:bg-indigo-50/60 cursor-pointer transition-colors group"
+                  >
+                    <td className="border-r border-slate-200 px-3.5 py-2.5 font-mono font-bold text-slate-900 group-hover:text-indigo-900">
                       {s.site_code}
                     </td>
-                    <td className="border-r border-slate-200 px-3.5 py-2.5 font-semibold text-slate-900">
-                      {s.name}
+                    <td className="border-r border-slate-200 px-3.5 py-2.5 font-semibold text-slate-900 group-hover:text-indigo-900">
+                      <div className="flex items-center justify-between gap-2">
+                        <span>{s.name}</span>
+                        <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded opacity-80 group-hover:opacity-100">
+                          🔍 Research Overview
+                        </span>
+                      </div>
                     </td>
                     <td className="border-r border-slate-200 px-3.5 py-2.5 text-slate-700">
                       {s.city}, {s.state}
@@ -364,6 +375,14 @@ export default function InfrastructurePage({ onNavigateDashboard }) {
             )}
           </div>
         </div>
+      )}
+
+      {selectedSiteForResearch && (
+        <SiteResearchModal
+          siteId={selectedSiteForResearch.id}
+          siteName={selectedSiteForResearch.name}
+          onClose={() => setSelectedSiteForResearch(null)}
+        />
       )}
     </div>
   )
