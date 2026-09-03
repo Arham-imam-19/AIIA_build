@@ -58,6 +58,16 @@ export default function Shell({ view, setView, live, children }) {
 
   const navItems = [
     ['dashboard', 'Dashboard'],
+    ...((user.role === 'coordinator' || user.permissions?.includes('subject:write'))
+      ? [
+          ['screen_participant', 'Screen New Participant'],
+        ]
+      : []),
+    ...((user.role === 'coordinator' || user.role === 'principal_investigator' || user.permissions?.includes('subject:read'))
+      ? [
+          ['view_participants', 'View Participants'],
+        ]
+      : []),
     ...((user.role === 'admin')
       ? [
           ['cdisc_ingest', 'CDISC Harmonizer (Import)'],

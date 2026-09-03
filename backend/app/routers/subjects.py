@@ -35,7 +35,17 @@ from app.enums import (
     UserRole,
     VisitStatus,
 )
-from app.models import AdverseEvent, AuditLog, EConsent, Site, Subject, Trial, User, Visit
+from app.models import (
+    AdverseEvent,
+    AuditLog,
+    ClinicalLogEntry,
+    EConsent,
+    Site,
+    Subject,
+    Trial,
+    User,
+    Visit,
+)
 from app.models.base import utcnow
 from app.rbac import (
     CurrentUser,
@@ -68,6 +78,16 @@ class SubjectScreeningCreate(BaseModel):
     height_cm: float | None = None
     weight_kg: float | None = None
     prakriti: Prakriti | None = None
+    protocol_version: str | None = None
+    inclusion_criteria: dict | None = None
+    exclusion_criteria: dict | None = None
+    eligibility_outcome: str | None = None
+    screen_failure_reason: str | None = None
+    icf_version: str | None = None
+    consent_date: datetime | None = None
+    consent_obtained_by: str | None = None
+    withdrawal_of_consent: bool = False
+    ethnicity: str | None = None
 
     @field_validator("height_cm", "weight_kg")
     @classmethod
@@ -405,11 +425,17 @@ def create_subject_in_screening(
 
     now = utcnow()
     code = _next_subject_code(session, site)
+    outcome = body.eligibility_outcome or "eligible"
+    initial_status = (
+        SubjectStatus.SCREEN_FAILED.value
+        if outcome == "screen_failed"
+        else SubjectStatus.SCREENING.value
+    )
     subject = Subject(
         trial_id=trial.id,
         site_id=site.id,
         subject_code=code,
-        status=SubjectStatus.SCREENING.value,
+        status=initial_status,
         screening_date=body.screening_date,
         enrollment_date=None,
         randomization_date=None,
@@ -420,10 +446,21 @@ def create_subject_in_screening(
         height_cm=body.height_cm,
         weight_kg=body.weight_kg,
         prakriti=body.prakriti.value if body.prakriti else None,
+        inclusion_criteria=body.inclusion_criteria or {},
+        exclusion_criteria=body.exclusion_criteria or {},
+        eligibility_outcome=outcome,
+        protocol_version=body.protocol_version,
+        icf_version=body.icf_version,
+        consent_date=body.consent_date,
+        consent_obtained_by=body.consent_obtained_by or user.full_name,
+        withdrawal_of_consent=body.withdrawal_of_consent,
+        ethnicity=body.ethnicity,
+        created_by_id=user.id,
+        updated_by_id=user.id,
         completed_date=None,
         withdrawal_date=None,
         withdrawal_reason=None,
-        screen_failure_reason=None,
+        screen_failure_reason=body.screen_failure_reason,
         created_at=now,
         updated_at=now,
     )
@@ -1524,3 +1561,144 @@ def get_subject_dossier(
             for ae in adverse_events
         ],
     }
+
+
+class ClinicalLogCreate(BaseModel):
+    entry_type: Literal[
+        "medication_administered",
+        "symptom_reported",
+        "vital_sign",
+        "adverse_event",
+        "general_note",
+    ]
+    substance_name: str | None = None
+    dose: str | None = None
+    route: str | None = None
+    observation_description: str
+    linked_visit_id: int | None = None
+    correction_of_entry_id: int | None = None
+    correction_reason: str | None = None
+    is_serious: bool = False
+    ae_severity: str = "mild"
+
+
+@router.get("/subjects/{subject_id}/clinical-log", response_model=list[ClinicalLogEntry])
+def list_subject_clinical_logs(
+    subject_id: int,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.SUBJECT_READ)),
+) -> list[ClinicalLogEntry]:
+    """Retrieve the append-only clinical progress logs for a participant."""
+    subject = session.get(Subject, subject_id)
+    if not subject:
+        raise HTTPException(status_code=404, detail=f"subject {subject_id} not found")
+    if user.is_site_scoped:
+        assert_site_visible(user, subject.site_id)
+
+    statement = (
+        select(ClinicalLogEntry)
+        .where(ClinicalLogEntry.subject_id == subject_id)
+        .order_by(ClinicalLogEntry.timestamp.desc())
+    )
+    return list(session.exec(statement).all())
+
+
+@router.post("/subjects/{subject_id}/clinical-log", response_model=ClinicalLogEntry, status_code=201)
+def append_subject_clinical_log(
+    subject_id: int,
+    body: ClinicalLogCreate,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.SUBJECT_WRITE)),
+) -> ClinicalLogEntry:
+    """Append an immutable clinical log entry. Auto-triggers Pharmacovigilance if Adverse Event."""
+    subject = session.get(Subject, subject_id)
+    if not subject:
+        raise HTTPException(status_code=404, detail=f"subject {subject_id} not found")
+    if user.is_site_scoped:
+        assert_site_visible(user, subject.site_id)
+
+    now = utcnow()
+    linked_ae_id = None
+
+    # Trigger pharmacovigilance workflow if adverse event
+    if body.entry_type == "adverse_event":
+        ae_count = len(
+            list(
+                session.exec(
+                    select(AdverseEvent).where(AdverseEvent.subject_id == subject.id)
+                ).all()
+            )
+        )
+        sub_suffix = (
+            subject.subject_code.split("-")[-1]
+            if "-" in subject.subject_code
+            else str(subject.id)
+        )
+        ae_number = f"AE-{sub_suffix}-{ae_count + 1:02d}"
+
+        ae = AdverseEvent(
+            trial_id=subject.trial_id,
+            site_id=subject.site_id,
+            subject_id=subject.id,
+            ae_number=ae_number,
+            term_verbatim=body.observation_description[:250],
+            description=body.observation_description,
+            onset_date=now.date(),
+            severity=body.ae_severity.lower(),
+            is_serious=body.is_serious,
+            causality="possible" if body.is_serious else "unrelated",
+            outcome="recovering",
+            reported_by_user_id=user.id,
+            reported_date=now.date(),
+            reported_to_ec=False,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(ae)
+        session.flush()
+        linked_ae_id = ae.id
+
+        audit.record(
+            session,
+            user=user,
+            action=AuditAction.CREATE,
+            entity_type="adverse_events",
+            entity_id=ae.id,
+            entity_label=ae.ae_number,
+            reason=f"Auto-triggered AE from clinical progress log: {ae.term_verbatim}",
+            trial_id=subject.trial_id,
+        )
+
+    log_entry = ClinicalLogEntry(
+        subject_id=subject.id,
+        trial_id=subject.trial_id,
+        site_id=subject.site_id,
+        entry_type=body.entry_type,
+        substance_name=body.substance_name,
+        dose=body.dose,
+        route=body.route,
+        observation_description=body.observation_description,
+        linked_visit_id=body.linked_visit_id,
+        linked_ae_id=linked_ae_id,
+        correction_of_entry_id=body.correction_of_entry_id,
+        correction_reason=body.correction_reason,
+        entered_by_user_id=user.id,
+        entered_by_name=user.full_name,
+        timestamp=now,
+    )
+    session.add(log_entry)
+    session.flush()
+
+    audit.record(
+        session,
+        user=user,
+        action=AuditAction.CREATE,
+        entity_type="clinical_logs",
+        entity_id=log_entry.id,
+        entity_label=f"{subject.subject_code} - {body.entry_type}",
+        reason=f"Clinical progress log appended for participant {subject.subject_code}",
+        trial_id=subject.trial_id,
+    )
+    session.commit()
+    session.refresh(log_entry)
+    return log_entry

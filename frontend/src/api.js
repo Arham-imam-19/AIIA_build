@@ -177,6 +177,15 @@ export const fetchSubjectDossier = (subjectId) =>
 export const createStructuredSubject = (body) =>
   api('/api/subjects', { method: 'POST', body })
 
+export const fetchSubjectClinicalLogs = (subjectId) =>
+  api(`/api/subjects/${subjectId}/clinical-log`)
+
+export const appendSubjectClinicalLog = (subjectId, body) =>
+  api(`/api/subjects/${subjectId}/clinical-log`, { method: 'POST', body })
+
+export const fetchCoordinatorSummary = (trialId) =>
+  api(`/api/coordinator/summary${trialId ? `?trial_id=${trialId}` : ''}`)
+
 export const createAdverseEvent = (body) =>
   api('/api/adverse-events', { method: 'POST', body })
 
