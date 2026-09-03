@@ -99,15 +99,5 @@ class AdverseEvent(SQLModel, table=True):
     reported_to_ec: bool = Field(default=False)
     reported_to_ec_date: date | None = Field(default=None)
 
-    # ---------------------------------------------------------------------
-    # Ethics Committee (IEC) Adjudication & Decision Workflow
-    # ---------------------------------------------------------------------
-    ec_decision: str | None = Field(default=None, max_length=40, index=True)
-    ec_decision_date: date | None = Field(default=None)
-    ec_decision_notes: str | None = Field(default=None, max_length=2000)
-    ec_reviewed_by_user_id: int | None = Field(
-        default=None, foreign_key="users.id", index=True
-    )
-
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)

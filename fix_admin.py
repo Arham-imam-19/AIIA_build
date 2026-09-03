@@ -1,118 +1,22 @@
-import { useEffect, useState } from 'react'
-import { fetchSites, fetchUsers, resetTrialData, updateUser } from '../api'
-import CreateTrialModal from '../components/CreateTrialModal'
-import CreateSiteModal from '../components/CreateSiteModal'
-import DataExportCenter from '../components/DataExportCenter'
-import DashboardLayout from './layout'
+﻿import re
 
-const ROLE_DISPLAY_NAMES = {
-  admin: 'Primary Administrator',
-  institution_admin: 'Institution Site Admin',
-  principal_investigator: 'Principal Investigator',
-  coordinator: 'Clinical Research Coordinator',
-  ethics_committee: 'Ethics Committee Member',
-  sponsor: 'Trial Sponsor / Monitor',
-  regulator: 'CDSCO Regulatory Inspector',
-  patient: 'Subject / Patient',
-}
+with open('frontend/src/dashboards/Admin.jsx', 'r', encoding='utf-8') as f:
+    content = f.read()
 
-export default function Admin(props) {
-  const [users, setUsers] = useState([])
-  const [sites, setSites] = useState([])
-  const [search, setSearch] = useState('')
-  const [roleFilter, setRoleFilter] = useState('')
-  const [siteFilter, setSiteFilter] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [showTrialModal, setShowTrialModal] = useState(false)
-  const [showSiteModal, setShowSiteModal] = useState(false)
-  const [showResetConfirm, setShowResetConfirm] = useState(false)
-  const [resettingUser, setResettingUser] = useState(null)
-  const [newPassword, setNewPassword] = useState('')
-  const [resetBusy, setResetBusy] = useState(false)
-  const [resetMsg, setResetMsg] = useState(null)
-  const [cleanSlateBusy, setCleanSlateBusy] = useState(false)
-  const [cleanSlateResult, setCleanSlateResult] = useState(null)
-  const [activeTab, setActiveTab] = useState('governance')
+# 1. Exclude patient roles from users
+content = content.replace(
+    "setUsers(res.items || [])",
+    "setUsers((res.items || []).filter(u => u.role !== 'patient'))"
+)
 
-  const tab1Blocks = props.dashboard?.blocks?.filter(b => ['ndct_gates', 'audit_tail', 'sae_reporting'].includes(b.key)) || []
-  const tab2Blocks = props.dashboard?.blocks?.filter(b => ['sites'].includes(b.key)) || []
+# 2. Add activeTab state
+content = content.replace(
+    "const [cleanSlateResult, setCleanSlateResult] = useState(null)",
+    "const [cleanSlateResult, setCleanSlateResult] = useState(null)\n  const [activeTab, setActiveTab] = useState('governance')\n\n  const tab1Blocks = props.dashboard?.blocks?.filter(b => ['ndct_gates', 'audit_tail', 'sae_reporting'].includes(b.key)) || []\n  const tab2Blocks = props.dashboard?.blocks?.filter(b => ['sites'].includes(b.key)) || []"
+)
 
-  function loadUsers() {
-    setLoading(true)
-    fetchUsers({
-      search: search || undefined,
-      role: roleFilter || undefined,
-      site_id: siteFilter || undefined,
-      limit: 100,
-    })
-      .then((res) => {
-        setUsers((res.items || []).filter(u => u.role !== 'patient'))
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
-  }
-
-  function loadSites() {
-    fetchSites()
-      .then((res) => setSites(res.items || []))
-      .catch(() => {})
-  }
-
-  useEffect(() => {
-    loadUsers()
-  }, [search, roleFilter, siteFilter])
-
-  useEffect(() => {
-    loadSites()
-  }, [])
-
-  async function handleCleanSlateReset() {
-    setCleanSlateBusy(true)
-    setCleanSlateResult(null)
-    try {
-      const res = await resetTrialData()
-      setCleanSlateResult(res)
-      loadUsers()
-      props.onRefresh?.()
-    } catch (err) {
-      alert(`Clean slate reset failed: ${err.message}`)
-    } finally {
-      setCleanSlateBusy(false)
-    }
-  }
-
-  async function handleToggleActive(user) {
-    try {
-      await updateUser(user.id, { is_active: !user.is_active })
-      loadUsers()
-      props.onRefresh?.()
-    } catch (err) {
-      alert(`Failed to update user status: ${err.message}`)
-    }
-  }
-
-  async function handleResetPassword(e) {
-    e.preventDefault()
-    if (!resettingUser || !newPassword) return
-    setResetBusy(true)
-    setResetMsg(null)
-    try {
-      await updateUser(resettingUser.id, { password: newPassword })
-      setResetMsg('Password successfully updated.')
-      setTimeout(() => {
-        setResettingUser(null)
-        setNewPassword('')
-        setResetMsg(null)
-      }, 1500)
-    } catch (err) {
-      setResetMsg(`Error: ${err.message}`)
-    } finally {
-      setResetBusy(false)
-    }
-  }
-
-  const siteMap = Object.fromEntries(sites.map((s) => [s.id, s.name]))
-
+# 3. Rewrite the return block
+new_return = '''
   return (
     <div className="space-y-6">
       {/* Official Government Banner */}
@@ -136,19 +40,19 @@ export default function Admin(props) {
       <div className="flex border-b border-slate-300 bg-white shadow-sm">
         <button
           onClick={() => setActiveTab('governance')}
-          className={`px-5 py-3 text-[11px] font-bold uppercase tracking-wider ${activeTab === 'governance' ? 'border-b-2 border-slate-900 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+          className={px-5 py-3 text-[11px] font-bold uppercase tracking-wider }
         >
           System Governance
         </button>
         <button
           onClick={() => setActiveTab('personnel')}
-          className={`px-5 py-3 text-[11px] font-bold uppercase tracking-wider ${activeTab === 'personnel' ? 'border-b-2 border-slate-900 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+          className={px-5 py-3 text-[11px] font-bold uppercase tracking-wider }
         >
           Personnel & Sites
         </button>
         <button
           onClick={() => setActiveTab('advanced')}
-          className={`px-5 py-3 text-[11px] font-bold uppercase tracking-wider ${activeTab === 'advanced' ? 'border-b-2 border-slate-900 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+          className={px-5 py-3 text-[11px] font-bold uppercase tracking-wider }
         >
           Advanced Actions
         </button>
@@ -300,16 +204,12 @@ export default function Admin(props) {
                             {ROLE_DISPLAY_NAMES[u.role] || u.role}
                           </td>
                           <td className="border-r border-slate-200 px-3.5 py-2.5 text-slate-700">
-                            {u.site_id ? siteMap[u.site_id] || `Site #${u.site_id}` : 'Global (Multi-Centric)'}
+                            {u.site_id ? siteMap[u.site_id] || Site # : 'Global (Multi-Centric)'}
                           </td>
                           <td className="border-r border-slate-200 px-3.5 py-2.5">
                             <button
                               onClick={() => handleToggleActive(u)}
-                              className={`border px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                                u.is_active
-                                  ? 'border-emerald-600 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                                  : 'border-red-600 bg-red-50 text-red-800 hover:bg-red-100'
-                              }`}
+                              className={order px-2.5 py-0.5 text-[10px] font-bold uppercase }
                             >
                               {u.is_active ? 'Active' : 'Suspended'}
                             </button>
@@ -357,137 +257,12 @@ export default function Admin(props) {
       )}
 
       {/* Create Trial Modal */}
-      {showTrialModal && (
-        <CreateTrialModal
-          onClose={() => setShowTrialModal(false)}
-          onSuccess={() => {
-            loadSites()
-            props.onRefresh?.()
-          }}
-        />
-      )}
+'''
 
-      {/* Create Site Modal */}
-      {showSiteModal && (
-        <CreateSiteModal
-          onClose={() => setShowSiteModal(false)}
-          onSuccess={() => {
-            loadSites()
-            props.onRefresh?.()
-          }}
-        />
-      )}
+start_idx = content.find("  return (")
+end_idx = content.find("      {/* Create Trial Modal */}")
+if start_idx != -1 and end_idx != -1:
+    content = content[:start_idx] + new_return + content[end_idx+34:]
 
-      {/* Clean Slate Confirmation Modal */}
-      {showResetConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
-          <div className="w-full max-w-lg border border-slate-400 bg-white p-6 shadow-xl">
-            <h3 className="text-base font-bold text-slate-900 border-b border-slate-200 pb-2">
-              Confirm Production Clean Slate Reset
-            </h3>
-            <p className="text-xs text-slate-600 mt-2">
-              This administrative action clears all synthetic participant records and simulated clinical visits to prepare the CTMS portal for 100% real subject intake.
-            </p>
-
-            {cleanSlateResult ? (
-              <div className="mt-4 border border-emerald-600 bg-emerald-50 p-4 text-xs text-emerald-900 space-y-2">
-                <p className="font-bold">RESET COMPLETED SUCCESSFULLY</p>
-                <p>&bull; Cleared {cleanSlateResult.cleared_subjects} synthetic participant dossiers.</p>
-                <p>&bull; Cleared {cleanSlateResult.cleared_visits} study visit records.</p>
-                <p>&bull; Cleared {cleanSlateResult.cleared_adverse_events} adverse events.</p>
-                <p>&bull; Preserved all registered hospital sites, user accounts, and 21 CFR Part 11 audit trails.</p>
-                <div className="pt-2">
-                  <button
-                    onClick={() => {
-                      setShowResetConfirm(false)
-                      setCleanSlateResult(null)
-                    }}
-                    className="border border-emerald-700 bg-emerald-700 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-800"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4 space-y-3 text-xs">
-                <div className="border border-amber-300 bg-amber-50 p-3 text-amber-900 text-[11px]">
-                  <strong>Notice:</strong> All synthetic participant records, visits, adverse events, and e-consents will be permanently purged. Core trial definitions, registered hospital sites, user login accounts, and statutory audit logs will be preserved.
-                </div>
-                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
-                  <button
-                    type="button"
-                    onClick={() => setShowResetConfirm(false)}
-                    className="border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    disabled={cleanSlateBusy}
-                    onClick={handleCleanSlateReset}
-                    className="border border-red-700 bg-red-700 px-4 py-2 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-50"
-                  >
-                    {cleanSlateBusy ? 'Executing Reset...' : 'Execute Clean Slate Reset'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Password Reset Modal */}
-      {resettingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
-          <div className="w-full max-w-md border border-slate-400 bg-white p-6 shadow-xl">
-            <h3 className="text-base font-bold text-slate-900 border-b border-slate-200 pb-2">
-              Reset Password: {resettingUser.full_name}
-            </h3>
-            <p className="text-xs text-slate-600 mt-2">
-              Enter a new secure password for {resettingUser.email}.
-            </p>
-
-            {resetMsg && (
-              <div className="mt-3 border border-blue-400 bg-blue-50 p-2.5 text-xs text-blue-900">
-                {resetMsg}
-              </div>
-            )}
-
-            <form onSubmit={handleResetPassword} className="mt-4 space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-800">
-                  New Password <span className="text-red-600">*</span>
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Enter new password"
-                  className="mt-1 w-full border border-slate-300 bg-white p-2 font-mono text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setResettingUser(null)}
-                  className="border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={resetBusy}
-                  className="border border-slate-800 bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-black disabled:opacity-50"
-                >
-                  {resetBusy ? 'Updating...' : 'Update Password'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+with open('frontend/src/dashboards/Admin.jsx', 'w', encoding='utf-8') as f:
+    f.write(content)

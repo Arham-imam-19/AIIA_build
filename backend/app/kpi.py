@@ -186,7 +186,6 @@ def _recent_ae_rows(
             "causality": event.causality.replace("_", " "),
             "onset": event.onset_date.isoformat() if event.onset_date else None,
             "outcome": event.outcome.replace("_", " "),
-            "ec_decision": event.ec_decision or ("pending" if event.is_serious else "NON_SERIOUS"),
         }
         for event in events
     ]
@@ -254,9 +253,6 @@ def _sae_reporting(session: Session, trial_id: int, user: CurrentUser) -> dict:
                 "days": delay,
                 "urgency": urgency,
                 "verdict": verdict,
-                "ec_decision": event.ec_decision or "pending",
-                "ec_decision_date": event.ec_decision_date.isoformat() if event.ec_decision_date else None,
-                "ec_decision_notes": event.ec_decision_notes,
             }
         )
 
@@ -410,11 +406,10 @@ def _investigator(session, user, stats, trial, today) -> tuple[list, list]:
             "Latest adverse events at my site",
             [("ae_number", "AE"), ("subject", "Participant"), ("term", "Event"),
              ("severity", "Severity"), ("serious", "Serious"),
-             ("causality", "Causality"), ("onset", "Onset"),
-             ("ec_decision", "IEC Decision")],
+             ("causality", "Causality"), ("onset", "Onset")],
             _recent_ae_rows(session, tid, user),
             note="Severity is how intense it was; serious is the regulatory "
-                 "category that starts a reporting clock. IEC Decision displays the ethics committee ruling.",
+                 "category that starts a reporting clock. They are not the same thing.",
             empty="No adverse events reported at this site.",
         ),
         {
@@ -603,7 +598,6 @@ def _ethics(session, user, stats, trial, today) -> tuple[list, list]:
             [("ae_number", "AE"), ("site", "Site"), ("term", "Event"),
              ("criteria", "Why serious"), ("onset", "Onset"),
              ("urgency", "24h Regulatory Clock"),
-             ("ec_decision", "IEC Ruling"),
              ("reported", "Reported"), ("to_ethics", "To ethics"),
              ("days", "Days"), ("verdict", "Verdict")],
             sae["rows"],
@@ -788,15 +782,10 @@ def _institution_admin(
     site_name = site_obj.name if site_obj else (user.organization or "All Sites")
     site_code = site_obj.site_code if site_obj else ""
 
-    # Personnel count
+    # Personnel count (Exclude Patients)
     researchers = list(session.exec(
-        select(User).where(User.site_id == site_id, User.is_active == True)  # noqa: E712
+        select(User).where(User.site_id == site_id, User.is_active == True, User.role != UserRole.PATIENT.value)  # noqa: E712
     ).all()) if site_id else []
-
-    # Patient requests
-    req_query = select(PatientRequest).where(PatientRequest.site_id == site_id) if site_id else select(PatientRequest)
-    requests = list(session.exec(req_query.order_by(PatientRequest.created_at.desc())).all())
-    pending_reqs = sum(1 for r in requests if r.status != "resolved")
 
     enrolled = stats.get("enrollment", {}).get("enrolled", 0)
     screened = stats.get("enrollment", {}).get("screened", 0)
@@ -810,22 +799,10 @@ def _institution_admin(
         _tile("institution", "Institution", f"{site_code} {site_name}".strip() or "All Sites", tone="neutral"),
         _tile("researchers", "Researchers & Staff", len(researchers), hint="Active personnel", tone="good"),
         _tile("enrolled", "Recruited", f"{enrolled} / {target}", hint=f"{recruitment_pct}% of target", tone="good" if recruitment_pct >= 80 else "warn"),
-        _tile("pending_requests", "Pending Patient Requests", pending_reqs, hint="Requires admin action", tone="warn" if pending_reqs > 0 else "good"),
         _tile("open_aes", "Open Safety Events", open_ae_val, tone="warn" if open_ae_val > 0 else "good"),
         _tile("sae_count", "Serious AEs", sae_count, tone="bad" if sae_count > 0 else "good"),
         _tile("deviations", "Protocol Deviations", deviations, tone="warn" if deviations > 0 else "neutral"),
         _tile("screened", "Screened Participants", screened, hint=f"{enrolled} enrolled", tone="neutral"),
-    ]
-
-    req_rows = [
-        {
-            "category": r.category.replace("_", " ").title(),
-            "subject": r.subject_line,
-            "status": r.status.upper(),
-            "date": r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "-",
-            "response": r.admin_response or "Awaiting response",
-        }
-        for r in requests[:8]
     ]
 
     staff_rows = [
@@ -833,24 +810,48 @@ def _institution_admin(
             "name": u.full_name,
             "role": u.role.replace("_", " ").title(),
             "email": u.email,
-            "phone": u.phone or "—",
+            "phone": u.phone or "-",
         }
         for u in researchers
     ]
 
+    mock_queries = [
+        {
+            "query_id": "QRY-1001",
+            "raised_by": "Neha Sharma (CRA)",
+            "patient_id": "SUB-001",
+            "issue": "Missing ECG source document for Visit 2",
+            "status": "OPEN"
+        },
+        {
+            "query_id": "QRY-1002",
+            "raised_by": "Neha Sharma (CRA)",
+            "patient_id": "SUB-045",
+            "issue": "Concomitant medication dates overlap",
+            "status": "OPEN"
+        },
+        {
+            "query_id": "QRY-1003",
+            "raised_by": "Neha Sharma (CRA)",
+            "patient_id": "SUB-012",
+            "issue": "Incomplete Vitals form",
+            "status": "PENDING PI REVIEW"
+        }
+    ]
+
     blocks = [
         _table(
-            "patient_requests",
-            "Patient Inquiries & Communications",
+            "open_queries",
+            "Open Data Queries (Site Action Required)",
             [
-                ("category", "Category"),
-                ("subject", "Subject"),
+                ("query_id", "Query ID"),
+                ("raised_by", "Raised By (CRA)"),
+                ("patient_id", "Related Patient ID"),
+                ("issue", "Issue"),
                 ("status", "Status"),
-                ("date", "Submitted"),
-                ("response", "Response"),
             ],
-            req_rows,
-            empty="No patient inquiries submitted yet.",
+            mock_queries,
+            empty="No open queries.",
         ),
         _table(
             "staff",

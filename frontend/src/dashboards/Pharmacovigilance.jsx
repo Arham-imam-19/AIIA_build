@@ -1,105 +1,93 @@
-import React, { useState, useEffect } from 'react'
+import { useState } from 'react'
+import DashboardLayout from './layout'
 import { api } from '../api'
 
-export default function Pharmacovigilance() {
-  const [aes, setAes] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [code, setCode] = useState('')
-  const [activeEvent, setActiveEvent] = useState(null)
-  const [busy, setBusy] = useState(false)
+export default function Pharmacovigilance(props) {
+  const [meddraModal, setMeddraModal] = useState(false)
+  const [eventId, setEventId] = useState(1)
+  const [pt, setPt] = useState('Nausea')
+  const [error, setError] = useState(null)
 
-  async function load() {
-    setLoading(true)
-    try {
-      const res = await api('/api/adverse-events?size=100')
-      setAes(res.items || [])
-    } catch(e) {}
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [])
-
-  async function applyCode(e) {
+  const codeMeddra = async (e) => {
     e.preventDefault()
-    setBusy(true)
+    setError(null)
     try {
-      await api(`/api/adverse-events/${activeEvent.id}/code`, {
+      await api(`/api/adverse-events/${eventId}/meddra`, {
         method: 'PATCH',
-        body: { meddra_code: code }
+        body: {
+          meddra_llt: pt,
+          meddra_llt_code: "10028813",
+          meddra_pt: pt,
+          meddra_pt_code: "10028813",
+          meddra_soc: "Gastrointestinal disorders",
+          meddra_soc_code: "10017947"
+        }
       })
-      alert('MedDRA code successfully applied!')
-      setActiveEvent(null)
-      setCode('')
-      await load()
-    } catch(err) {
-      alert('Failed: ' + err.message)
+      setMeddraModal(false)
+      alert("Event coded successfully in MedDRA dictionary.")
+    } catch (err) {
+      setError(err.message)
     }
-    setBusy(false)
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between rounded-lg border border-indigo-200 bg-indigo-50 p-4 shadow-sm">
-        <div>
-          <h2 className="text-xl font-bold text-indigo-800">Pharmacovigilance (NPvCC) Medical Coding</h2>
-          <p className="text-sm text-indigo-600">Map raw clinical symptoms to the official MedDRA dictionary.</p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 rounded-xl border border-slate-200 bg-white p-5 shadow-sm overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-left text-xs">
-            <thead>
-              <tr className="bg-slate-50 text-slate-600">
-                <th className="px-3 py-2">Event</th>
-                <th className="px-3 py-2">Symptom (Verbatim)</th>
-                <th className="px-3 py-2">Severity</th>
-                <th className="px-3 py-2">MedDRA Code</th>
-                <th className="px-3 py-2">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {aes.map(ae => (
-                <tr key={ae.id} className="hover:bg-slate-50">
-                  <td className="px-3 py-2 font-mono">AE-{ae.id}</td>
-                  <td className="px-3 py-2 font-bold">{ae.term_verbatim}</td>
-                  <td className="px-3 py-2">{ae.severity}</td>
-                  <td className="px-3 py-2 font-mono text-indigo-600">{ae.meddra_code || 'UNCODED'}</td>
-                  <td className="px-3 py-2">
-                    <button 
-                      onClick={() => setActiveEvent(ae)}
-                      className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-[10px] font-bold hover:bg-indigo-200"
-                    >
-                      CODE
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {activeEvent && (
-          <div className="rounded-xl border-2 border-indigo-500 bg-indigo-50 p-5 shadow-sm h-fit">
-            <h3 className="font-bold text-indigo-900 mb-2">Coding AE-{activeEvent.id}</h3>
-            <p className="text-sm text-indigo-800 mb-4 font-medium">"{activeEvent.term_verbatim}"</p>
-            <form onSubmit={applyCode}>
-              <label className="block text-xs font-bold text-indigo-700 mb-1">Enter WHO MedDRA Code</label>
-              <input 
-                type="text" 
-                required 
-                value={code} 
-                onChange={e => setCode(e.target.value)}
-                placeholder="e.g. 10019211" 
-                className="w-full px-3 py-2 border border-indigo-300 rounded mb-4"
-              />
-              <button disabled={busy} type="submit" className="w-full bg-indigo-600 text-white font-bold py-2 rounded hover:bg-indigo-700">
-                {busy ? 'Saving...' : 'Apply Code'}
-              </button>
-            </form>
+    <div>
+      <div className="flex gap-4 mb-6">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl shadow-sm flex items-center gap-3">
+          <span className="text-2xl">⏳</span>
+          <div>
+            <div className="text-sm font-bold uppercase tracking-wider">NDCT 2019 Regulatory Timer</div>
+            <div className="text-xs">14h 23m remaining to report SAE-01-014 to CDSCO.</div>
           </div>
-        )}
+        </div>
       </div>
+
+      <div className="mb-8 p-6 bg-white border border-slate-200 rounded-xl shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900 mb-4">AE Triage Inbox</h2>
+        <table className="w-full text-left text-sm text-slate-600">
+          <thead className="bg-slate-50 text-xs uppercase font-medium text-slate-500">
+            <tr>
+              <th className="px-4 py-3">Event ID</th>
+              <th className="px-4 py-3">Reported Term</th>
+              <th className="px-4 py-3">MedDRA Code</th>
+              <th className="px-4 py-3">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            <tr>
+              <td className="px-4 py-3 font-mono">AE-01-014-01</td>
+              <td className="px-4 py-3">&quot;Patient threw up&quot;</td>
+              <td className="px-4 py-3"><span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-medium">Uncoded</span></td>
+              <td className="px-4 py-3">
+                <button onClick={() => setMeddraModal(true)} className="text-aiia-600 hover:text-aiia-700 font-medium">Code (MedDRA)</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {meddraModal && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50">
+          <form onSubmit={codeMeddra} className="bg-white p-6 rounded-xl shadow-xl max-w-md w-full">
+            <h3 className="text-lg font-bold text-slate-900 mb-4">MedDRA Dictionary Coding</h3>
+            {error && <div className="mb-4 text-red-600 text-sm bg-red-50 p-2 rounded">{error}</div>}
+
+            <label className="block text-sm font-medium text-slate-700 mb-1">Select Preferred Term (PT)</label>
+            <select value={pt} onChange={e => setPt(e.target.value)} className="w-full border border-slate-300 rounded p-2 mb-6 text-sm">
+              <option value="Nausea">Nausea (10028813)</option>
+              <option value="Vomiting">Vomiting (10047700)</option>
+              <option value="Headache">Headache (10019211)</option>
+            </select>
+
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setMeddraModal(false)} className="px-4 py-2 text-sm text-slate-600 font-medium hover:bg-slate-50 rounded">Cancel</button>
+              <button type="submit" className="px-4 py-2 text-sm bg-blue-600 text-white font-medium rounded hover:bg-blue-700">Apply Code</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <DashboardLayout {...props} />
     </div>
   )
 }

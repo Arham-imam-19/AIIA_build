@@ -56,10 +56,13 @@ DEMO_ROLE_ORDER = (
     UserRole.INSTITUTION_ADMIN.value,
     UserRole.PRINCIPAL_INVESTIGATOR.value,
     UserRole.COORDINATOR.value,
+    UserRole.MONITOR.value,
     UserRole.PATIENT.value,
     UserRole.SPONSOR.value,
     UserRole.ETHICS_COMMITTEE.value,
+    UserRole.PHARMACOVIGILANCE.value,
     UserRole.REGULATOR.value,
+    UserRole.DSMB.value,
 )
 
 

@@ -1,54 +1,56 @@
-import React, { useState, useEffect } from 'react'
-import { api, fetchTrials } from '../api'
+import { useState } from 'react'
+import DashboardLayout from './layout'
+import { api } from '../api'
 
-export default function DSMB() {
-  const [trial, setTrial] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [busy, setBusy] = useState(false)
-  
-  async function load() {
-    setLoading(true)
-    try {
-      const res = await fetchTrials()
-      if (res.items && res.items.length > 0) setTrial(res.items[0])
-    } catch(e) {}
-    setLoading(false)
-  }
-  
-  useEffect(() => { load() }, [])
+export default function DSMB(props) {
+  const [decision, setDecision] = useState('CONTINUE')
+  const [error, setError] = useState(null)
 
-  async function haltTrial() {
-    if(!confirm('EMERGENCY: Are you sure you want to halt the trial globally?')) return;
-    setBusy(true)
+  const logDecision = async (e) => {
+    e.preventDefault()
+    setError(null)
     try {
-      await api(`/api/trials/${trial.id}/halt`, { method: 'POST' })
-      alert('TRIAL SUCCESSFULLY HALTED.')
-      await load()
-    } catch(e) {
-      alert('Failed to halt: ' + e.message)
+      await api('/api/trials/1/dsmb-decision', {
+        method: 'PATCH',
+        body: {
+          decision: decision,
+          notes: "Routine quarterly safety review."
+        }
+      })
+      alert(`Decision to ${decision} officially logged in audit trail.`)
+    } catch (err) {
+      setError(err.message)
     }
-    setBusy(false)
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-4 shadow-sm">
-        <div>
-          <h2 className="text-xl font-bold text-red-800">DSMB Master Control</h2>
-          <p className="text-sm text-red-600">You have global authority to halt this trial if statistical safety bounds are breached.</p>
-        </div>
+    <div>
+      <div className="mb-8 p-6 bg-white border border-slate-200 rounded-xl shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900 mb-4">Trial Continuation Decision Logger</h2>
+        <form onSubmit={logDecision} className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+          <p className="text-sm text-slate-600 mb-4">Based on the aggregate safety analytics, please log your board&apos;s official decision.</p>
+          {error && <div className="mb-4 text-red-600 text-sm">{error}</div>}
+          <div className="flex gap-6 mb-6">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="radio" name="decision" value="CONTINUE" checked={decision === 'CONTINUE'} onChange={e => setDecision(e.target.value)} />
+              Continue Trial
+            </label>
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="radio" name="decision" value="MODIFY" checked={decision === 'MODIFY'} onChange={e => setDecision(e.target.value)} />
+              Modify Protocol
+            </label>
+            <label className="flex items-center gap-2 text-sm font-medium text-red-700">
+              <input type="radio" name="decision" value="HALT" checked={decision === 'HALT'} onChange={e => setDecision(e.target.value)} />
+              Halt Trial (Emergency)
+            </label>
+          </div>
+          <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+            Submit Official Decision
+          </button>
+        </form>
       </div>
 
-      <div className="rounded-xl border-2 border-slate-200 bg-white p-8 text-center shadow-sm">
-        <h3 className="text-2xl font-bold text-slate-800 mb-4">Trial Status: {trial?.status ? trial.status.toUpperCase() : 'LOADING...'}</h3>
-        <button 
-          onClick={haltTrial}
-          disabled={busy || trial?.status === 'suspended'}
-          className="bg-red-600 text-white text-2xl font-black py-6 px-12 rounded-xl shadow-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-        >
-          🚨 EMERGENCY HALT TRIAL
-        </button>
-      </div>
+      <DashboardLayout {...props} />
     </div>
   )
 }

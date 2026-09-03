@@ -31,7 +31,6 @@ from app.enums import (
     VisitStatus,
     values,
 )
-from app.models.clinical_log import ClinicalLogEntry
 from app.models.econsent import EConsent
 from app.models.patient_request import PatientRequest
 from app.models.site import Site
@@ -48,7 +47,6 @@ __all__ = [
     "Subject",
     "Visit",
     "AdverseEvent",
-    "ClinicalLogEntry",
     "PatientRequest",
     "EConsent",
     "AuditLog",

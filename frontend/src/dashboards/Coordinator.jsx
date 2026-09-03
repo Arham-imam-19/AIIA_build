@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchTrials, fetchCoordinatorSummary } from '../api'
+import { fetchTrials } from '../api'
 import DashboardLayout from './layout'
 import ParticipantIntakeModal from '../components/ParticipantIntakeModal'
 import ReportAdverseEventModal from '../components/ReportAdverseEventModal'
@@ -47,41 +47,73 @@ export default function Coordinator(props) {
   const [showAeModal, setShowAeModal] = useState(false)
   const [showDeviationModal, setShowDeviationModal] = useState(false)
   const [selectedSubjectId, setSelectedSubjectId] = useState(null)
-  const [summaryData, setSummaryData] = useState(null)
-
-  const loadSummary = () => {
-    fetchCoordinatorSummary()
-      .then((data) => {
-        if (data?.tiles?.length) setSummaryData(data)
-      })
-      .catch(() => {})
-  }
-
-  useEffect(() => {
-    loadSummary()
-  }, [])
-
-  useEffect(() => {
-    loadSummary()
-  }, [props.dashboard, props.lastEvent])
-
-  const handleRefreshAll = () => {
-    loadSummary()
-    props.onRefresh?.()
-  }
-
-  const activeDashboard = summaryData?.tiles ? {
-    ...props.dashboard,
-    tiles: summaryData.tiles,
-  } : props.dashboard
 
   return (
     <div className="space-y-4">
       <SiteComplianceStatusBanner />
+      <div className="flex gap-4">
+        <div className="bg-white border border-slate-200 text-slate-700 px-4 py-3 rounded-xl shadow-sm flex items-center gap-3 w-1/3">
+          <span className="text-2xl">📅</span>
+          <div>
+            <div className="text-sm font-bold uppercase tracking-wider text-slate-900">Visit Calendar</div>
+            <div className="text-xs">3 patients due for Week-2 checkup today.</div>
+          </div>
+        </div>
+        <div className="bg-white border border-slate-200 text-slate-700 px-4 py-3 rounded-xl shadow-sm flex items-center gap-3 w-1/3">
+          <span className="text-2xl">📋</span>
+          <div>
+            <div className="text-sm font-bold uppercase tracking-wider text-slate-900">Task Inbox</div>
+            <div className="text-xs text-amber-600 font-medium">2 overdue data entry tasks.</div>
+          </div>
+        </div>
+        <div className="bg-white border border-dashed border-slate-300 text-slate-500 px-4 py-3 rounded-xl flex items-center justify-center gap-3 w-1/3 cursor-pointer hover:bg-slate-50" onClick={() => alert("Mock: Uploaded Source Document (e.g. PDF Lab Results)")}>
+          <span className="text-xl">📄</span>
+          <div className="text-sm font-medium">Drag & Drop Source Documents (PDF/Images)</div>
+        </div>
+      </div>
+      {/* Clinical Site Actions Center */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-aiia-600"></span>
+              Site Clinical Actions & Intake Center
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Execute structured CDASH participant intake, MedDRA safety reports, and protocol deviations.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowIntakeModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-aiia-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-aiia-700 transition"
+            >
+              📝 Screen New Participant
+            </button>
+            <button
+              onClick={() => setShowAeModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-700 transition"
+            >
+              🚨 Report Adverse Event
+            </button>
+            <button
+              onClick={() => setShowDeviationModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-700 transition"
+            >
+              ⚠️ Log Protocol Deviation
+            </button>
+            <button
+              onClick={() => setSelectedSubjectId(1)}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 transition"
+            >
+              🔍 Inspect Participant Dossier
+            </button>
+          </div>
+        </div>
+      </div>
 
       <DashboardLayout
         {...props}
-        dashboard={activeDashboard}
         wide={['upcoming', 'screening']}
         note="Your worklist for the next two weeks. An overdue visit becomes a protocol deviation if it slips outside its window, so these dates are the ones that matter."
       />
@@ -90,19 +122,19 @@ export default function Coordinator(props) {
       {showIntakeModal && (
         <ParticipantIntakeModal
           onClose={() => setShowIntakeModal(false)}
-          onSuccess={handleRefreshAll}
+          onSuccess={props.onRefresh}
         />
       )}
       {showAeModal && (
         <ReportAdverseEventModal
           onClose={() => setShowAeModal(false)}
-          onSuccess={handleRefreshAll}
+          onSuccess={props.onRefresh}
         />
       )}
       {showDeviationModal && (
         <LogProtocolDeviationModal
           onClose={() => setShowDeviationModal(false)}
-          onSuccess={handleRefreshAll}
+          onSuccess={props.onRefresh}
         />
       )}
       {selectedSubjectId && (
