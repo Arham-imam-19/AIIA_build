@@ -17,6 +17,9 @@ const ROLE_BLURB = {
   sponsor: 'funds the trial and watches progress across all sites',
   ethics_committee: 'reviews safety events and protocol deviations',
   regulator: 'inspects CTRI registration and the audit trail',
+  monitor: 'Independent CRA: performs Source Data Verification (SDV)',
+  pharmacovigilance: 'NPvCC: codes adverse events to MedDRA dictionary',
+  dsmb: 'Data & Safety Monitoring Board: emergency trial halting authority',
 }
 
 export default function Login({ patientPortal = false }) {

@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import { fetchAuditLogs } from '../api'
 import DashboardLayout from './layout'
+import AnalyticsCharts from './AnalyticsCharts'
 import DataExportCenter from '../components/DataExportCenter'
 
 function AuditDiffViewer({ entry }) {
@@ -316,6 +317,8 @@ export default function Regulator(props) {
       </div>
 
       <DataExportCenter />
+
+      <AnalyticsCharts />
 
       <DashboardLayout
         {...props}

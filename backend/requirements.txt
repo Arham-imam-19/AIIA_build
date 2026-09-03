@@ -43,3 +43,9 @@ httpx==0.28.1
 # Feature 18: de-identified demo safety-case PDF generation and verification
 reportlab==4.2.5
 pypdf==5.1.0
+
+# Phase 3: Data Harmonizer
+rapidfuzz==3.9.3
+python-multipart==0.0.9
+pandas==2.2.2
+

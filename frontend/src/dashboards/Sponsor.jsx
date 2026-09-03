@@ -2,6 +2,7 @@
 // is always the same - is this trial on track, across every site?
 
 import DashboardLayout from './layout'
+import AnalyticsCharts from './AnalyticsCharts'
 import DataExportCenter from '../components/DataExportCenter'
 
 export default function Sponsor(props) {
@@ -18,6 +19,8 @@ export default function Sponsor(props) {
       </div>
 
       <DataExportCenter />
+
+      <AnalyticsCharts />
 
       <DashboardLayout
         {...props}

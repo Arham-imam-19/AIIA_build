@@ -1,6 +1,9 @@
 // Role -> screen. The token decides which one renders; there is no way to ask
 // for another role's dashboard, because the role is not a parameter anywhere.
 
+import DSMB from './DSMB'
+import Pharmacovigilance from './Pharmacovigilance'
+import Monitor from './Monitor'
 import Admin from './Admin'
 import Coordinator from './Coordinator'
 import Ethics from './Ethics'
@@ -19,6 +22,9 @@ export const DASHBOARDS = {
   sponsor: Sponsor,
   ethics_committee: Ethics,
   regulator: Regulator,
+  dsmb: DSMB,
+  pharmacovigilance: Pharmacovigilance,
+  monitor: Monitor,
 }
 
 export const FALLBACK = Sponsor

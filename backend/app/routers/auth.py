@@ -35,6 +35,9 @@ DEMO_ROLE_ORDER = [
     UserRole.SPONSOR.value,
     UserRole.ETHICS_COMMITTEE.value,
     UserRole.REGULATOR.value,
+    UserRole.MONITOR.value,
+    UserRole.PHARMACOVIGILANCE.value,
+    UserRole.DSMB.value,
 ]
 
 

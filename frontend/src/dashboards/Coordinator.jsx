@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchTrials } from '../api'
 import DashboardLayout from './layout'
+import DataExportCenter from '../components/DataExportCenter'
 import ParticipantIntakeModal from '../components/ParticipantIntakeModal'
 import ReportAdverseEventModal from '../components/ReportAdverseEventModal'
 import LogProtocolDeviationModal from '../components/LogProtocolDeviationModal'
@@ -92,6 +93,8 @@ export default function Coordinator(props) {
           </div>
         </div>
       </div>
+
+      <DataExportCenter />
 
       <DashboardLayout
         {...props}

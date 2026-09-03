@@ -153,7 +153,7 @@ export default function DataExportCenter() {
         </div>
       )}
 
-      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Card 1: CDISC SDTM ZIP */}
         <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-slate-50/50 p-4 transition-all hover:border-indigo-300 dark:border-slate-800 dark:bg-slate-800/40">
           <div>
@@ -220,6 +220,28 @@ export default function DataExportCenter() {
             className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition"
           >
             🔥 Inspect FHIR R4 Bundle
+          </button>
+        </div>
+
+        {/* Card 4: CDISC Import Pipeline */}
+        <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-aiia-50/50 p-4 transition-all hover:border-aiia-300 dark:border-slate-800 dark:bg-slate-800/40">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-900 dark:text-white">CDISC AI Harmonizer</span>
+              <span className="rounded bg-aiia-100 px-1.5 py-0.5 text-[10px] font-mono font-bold text-aiia-800 dark:bg-aiia-900 dark:text-aiia-200">
+                IMPORT (CSV)
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+              Inbound pipeline using <strong>RapidFuzz ML</strong> to automatically map messy external hospital spreadsheets to strict CDISC SDTM target fields while redacting PII.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => window.location.href = '#'}
+            className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg bg-aiia-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-aiia-700 transition"
+          >
+            📥 Go to Ingestion Pipeline
           </button>
         </div>
       </div>

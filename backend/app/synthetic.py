@@ -671,6 +671,21 @@ def _build_users() -> list[dict]:
             UserRole.ADMIN.value,
             "AIIA Clinical Data Management Unit",
         ),
+        (
+            "Dr. Ramesh Gupta",
+            UserRole.MONITOR.value,
+            "Independent Clinical Monitor (CRA)",
+        ),
+        (
+            "Dr. Sneha Patil",
+            UserRole.PHARMACOVIGILANCE.value,
+            "National Pharmacovigilance Coordination Centre (NPvCC)",
+        ),
+        (
+            "Dr. Rajesh Iyer",
+            UserRole.DSMB.value,
+            "Data and Safety Monitoring Board (DSMB)",
+        ),
     ]
     for name, role, organization in oversight:
         users.append(

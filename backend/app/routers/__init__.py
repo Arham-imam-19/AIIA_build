@@ -19,6 +19,7 @@ to a named user.
 
 from app.routers import (
     auth,
+    harmonization,
     compliance,
     dashboard,
     econsent,
@@ -36,6 +37,7 @@ ALL_ROUTERS = (
     # Auth first so /api/auth/login appears at the top of the generated docs -
     # it is the first thing anybody reading them needs.
     auth.router,
+    harmonization.router,
     dashboard.router,
     trials.router,
     subjects.router,

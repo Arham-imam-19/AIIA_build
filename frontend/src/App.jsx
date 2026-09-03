@@ -12,6 +12,8 @@ import { useEffect, useRef, useState } from 'react'
 import { AuthProvider, useAuth } from './auth'
 import CreateUserPage from './pages/CreateUserPage'
 import InfrastructurePage from './pages/InfrastructurePage'
+import HarmonizationPage from './pages/HarmonizationPage'
+import ExportPage from './pages/ExportPage'
 import Login from './Login'
 import RbacMatrix from './RbacMatrix'
 import Shell from './Shell'
@@ -57,7 +59,11 @@ function SignedIn() {
 
   return (
     <Shell view={view} setView={setView} live={live}>
-      {view === 'infrastructure' ? (
+      {view === 'cdisc_export' ? (
+        <ExportPage />
+      ) : view === 'cdisc_ingest' ? (
+        <HarmonizationPage />
+      ) : view === 'infrastructure' ? (
         <InfrastructurePage onNavigateDashboard={() => setView('dashboard')} />
       ) : view === 'create_account' ? (
         <CreateUserPage onNavigateDashboard={() => setView('dashboard')} />

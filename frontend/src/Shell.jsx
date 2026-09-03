@@ -58,6 +58,16 @@ export default function Shell({ view, setView, live, children }) {
 
   const navItems = [
     ['dashboard', 'Dashboard'],
+    ...((user.role === 'admin')
+      ? [
+          ['cdisc_ingest', 'CDISC Harmonizer (Import)'],
+        ]
+      : []),
+    ...((user.permissions?.includes('export') || user.role === 'sponsor' || user.role === 'regulator' || user.role === 'coordinator' || user.role === 'admin')
+      ? [
+          ['cdisc_export', 'CDISC Harmonizer (Export)'],
+        ]
+      : []),
     ...(user.role === 'admin'
       ? [
           ['infrastructure', 'Clinical Infrastructure & Actions'],
