@@ -152,6 +152,12 @@ export default function Admin(props) {
             >
               Clinical Infrastructure &amp; Actions &rarr;
             </button>
+            <button
+              onClick={() => setShowResetConfirm(true)}
+              className="border border-red-500 bg-red-50 px-4 py-2 text-xs font-semibold text-red-800 hover:bg-red-100 transition"
+            >
+              Reset Test Data (Clean Slate)
+            </button>
           </div>
         </div>
 
@@ -437,6 +443,67 @@ export default function Admin(props) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Clean Slate Confirmation Modal */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
+          <div className="w-full max-w-lg border border-slate-400 bg-white p-6 shadow-xl">
+            <h3 className="text-base font-bold text-slate-900 border-b border-slate-200 pb-2">
+              Confirm Production Clean Slate Reset
+            </h3>
+            <p className="text-xs text-slate-600 mt-2">
+              This administrative action clears all synthetic participant records, running clinical progress logs, study visits, and adverse events across all sites and trials to prepare the CTMS portal for 100% real subject intake.
+            </p>
+
+            {cleanSlateResult ? (
+              <div className="mt-4 border border-emerald-600 bg-emerald-50 p-4 text-xs text-emerald-900 space-y-2">
+                <p className="font-bold">RESET COMPLETED SUCCESSFULLY</p>
+                <p>&bull; Cleared {cleanSlateResult.cleared_subjects} synthetic participant dossiers.</p>
+                <p>&bull; Cleared {cleanSlateResult.cleared_visits} study visit records.</p>
+                <p>&bull; Cleared {cleanSlateResult.cleared_clinical_logs || 0} clinical progress logs.</p>
+                <p>&bull; Cleared {cleanSlateResult.cleared_adverse_events} adverse events.</p>
+                <p>&bull; Cleared {cleanSlateResult.cleared_econsents || 0} electronic consents.</p>
+                <p>&bull; Cleared {cleanSlateResult.cleared_patient_accounts || 0} synthetic patient logins.</p>
+                <p>&bull; Preserved {cleanSlateResult.preserved_sites} registered hospital sites and {cleanSlateResult.preserved_staff_users} authorized staff accounts.</p>
+                <div className="pt-2">
+                  <button
+                    onClick={() => {
+                      setShowResetConfirm(false)
+                      setCleanSlateResult(null)
+                    }}
+                    className="border border-emerald-700 bg-emerald-700 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-800"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3 text-xs">
+                <div className="border border-amber-300 bg-amber-50 p-3 text-amber-900 text-[11px]">
+                  <strong>Notice:</strong> All synthetic participant records, visits, clinical logs, adverse events, and e-consents across all trials and sites will be permanently purged. Core trial protocols, registered hospital sites, staff accounts, and statutory 21 CFR Part 11 audit logs will be preserved.
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setShowResetConfirm(false)}
+                    className="border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={cleanSlateBusy}
+                    onClick={handleCleanSlateReset}
+                    className="border border-red-700 bg-red-700 px-4 py-2 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-50"
+                  >
+                    {cleanSlateBusy ? 'Executing Reset...' : 'Execute Clean Slate Reset'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
