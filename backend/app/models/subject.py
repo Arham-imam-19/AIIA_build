@@ -2,8 +2,9 @@
 
 from datetime import date, datetime
 
-from sqlmodel import Field, SQLModel, Column
+import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlmodel import Column, Field, SQLModel
 
 from app.models.base import utcnow
 
@@ -61,7 +62,10 @@ class Subject(SQLModel, table=True):
     # --- Ayurveda-specific baseline. One of enums.Prakriti; Phase 6 expands
     # --- this into a full per-dosha assessment.
     prakriti: str | None = Field(default=None, max_length=30, index=True)
-    suppqual: dict = Field(default_factory=dict, sa_column=Column(JSONB))
+    suppqual: dict = Field(
+        default_factory=dict,
+        sa_column=Column(sa.JSON().with_variant(JSONB, "postgresql")),
+    )
 
     # --- Exits.
     completed_date: date | None = Field(default=None)
