@@ -4,6 +4,7 @@ import CreateTrialModal from '../components/CreateTrialModal'
 import CreateSiteModal from '../components/CreateSiteModal'
 import DataExportCenter from '../components/DataExportCenter'
 import DashboardLayout from './layout'
+import { Block } from '../blocks'
 
 const ROLE_DISPLAY_NAMES = {
   admin: 'Primary Administrator',
@@ -15,6 +16,36 @@ const ROLE_DISPLAY_NAMES = {
   regulator: 'CDSCO Regulatory Inspector',
   patient: 'Subject / Patient',
 }
+
+const mockProtocols = [
+  {
+    id: 'AIIA-ASH-2026-01',
+    name: 'AIIA-ASH-2026-01: Ashwagandha Efficacy',
+    gates: [
+      { label: 'CTRI Registration', ok: true, detail: 'CTRI/2026/01/010001' },
+      { label: 'Ethics Approval', ok: true, detail: 'Approved 10-Jan-2026' },
+      { label: 'DCGI Clearance', ok: true, detail: 'Clearance Granted' },
+      { label: 'Insurance Cover', ok: true, detail: 'Active' },
+    ],
+  },
+  {
+    id: 'AIIA-TRP-2026-02',
+    name: 'AIIA-TRP-2026-02: Triphala for Digestion',
+    gates: [
+      { label: 'CTRI Registration', ok: false, detail: 'Pending Submission' },
+      { label: 'Ethics Approval', ok: true, detail: 'Approved 15-Feb-2026' },
+      { label: 'DCGI Clearance', ok: false, detail: 'Awaiting Review' },
+      { label: 'Insurance Cover', ok: true, detail: 'Active' },
+    ],
+  },
+]
+
+const customTiles = [
+  { key: 'total_protocols', label: 'Total Configured Protocols', value: 5, tone: 'neutral' },
+  { key: 'missing_ctri', label: 'Protocols Missing CTRI', value: 1, tone: 'warn' },
+  { key: 'total_sites', label: 'Total Active Sites', value: 12, tone: 'good' },
+  { key: 'audit_entries', label: 'System Audit Entries', value: '1,402', tone: 'neutral' },
+]
 
 export default function Admin(props) {
   const [users, setUsers] = useState([])
@@ -33,9 +64,23 @@ export default function Admin(props) {
   const [cleanSlateBusy, setCleanSlateBusy] = useState(false)
   const [cleanSlateResult, setCleanSlateResult] = useState(null)
   const [activeTab, setActiveTab] = useState('governance')
+  
+  const [selectedProtocol, setSelectedProtocol] = useState(mockProtocols[0].id)
+  const activeProtocol = mockProtocols.find(p => p.id === selectedProtocol) || mockProtocols[0]
 
-  const tab1Blocks = props.dashboard?.blocks?.filter(b => ['ndct_gates', 'audit_tail', 'sae_reporting'].includes(b.key)) || []
-  const tab2Blocks = props.dashboard?.blocks?.filter(b => ['sites'].includes(b.key)) || []
+  const ndctBlock = {
+    kind: 'checklist',
+    key: 'ndct_gates',
+    title: `NDCT Rules 2019 Gates - ${activeProtocol.id}`,
+    passed: activeProtocol.gates.filter(g => g.ok).length,
+    total: activeProtocol.gates.length,
+    items: activeProtocol.gates,
+  }
+
+  const originalBlocks = props.dashboard?.blocks || []
+  const otherBlocks = originalBlocks.filter(b => ['audit_tail', 'sae_reporting'].includes(b.key))
+  const tab1Blocks = [ndctBlock, ...otherBlocks]
+  const tab2Blocks = originalBlocks.filter(b => ['sites'].includes(b.key))
 
   function loadUsers() {
     setLoading(true)
@@ -158,10 +203,35 @@ export default function Admin(props) {
         <div className="space-y-6">
           <DashboardLayout
             {...props}
-            dashboard={{ ...props.dashboard, blocks: tab1Blocks }}
-            wide={['audit_tail', 'ndct_gates']}
+            dashboard={{ 
+              ...props.dashboard, 
+              tiles: customTiles,
+              blocks: [] 
+            }}
             note="Central Regulatory Oversight: The Primary Administrator has statutory administrative access across all participating sites under 21 CFR Part 11 and NDCT Rules 2019."
           />
+
+          <div className="border border-slate-300 bg-white p-4 shadow-sm">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-2">
+              Select Trial Protocol to Inspect Gates
+            </label>
+            <select
+              value={selectedProtocol}
+              onChange={e => setSelectedProtocol(e.target.value)}
+              className="w-full max-w-md border border-slate-300 p-2 text-sm text-slate-900 focus:border-slate-800 focus:outline-none"
+            >
+              {mockProtocols.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {tab1Blocks.map((block) => (
+              <Block key={block.key} block={block} wide={['audit_tail', 'ndct_gates'].includes(block.key)} />
+            ))}
+          </div>
+          
           <DataExportCenter />
         </div>
       )}
