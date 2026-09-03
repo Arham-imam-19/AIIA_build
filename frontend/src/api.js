@@ -186,6 +186,24 @@ export const appendSubjectClinicalLog = (subjectId, body) =>
 export const fetchCoordinatorSummary = (trialId) =>
   api(`/api/coordinator/summary${trialId ? `?trial_id=${trialId}` : ''}`)
 
+export const fetchSponsorAnalytics = (trialId) =>
+  api(`/api/sponsor/analytics${trialId ? `?trial_id=${trialId}` : ''}`)
+
+export const fetchSponsorMilestones = (trialId) =>
+  api(`/api/sponsor/regulatory-milestones${trialId ? `?trial_id=${trialId}` : ''}`)
+
+export const fetchSponsorSaeQueue = (trialId) =>
+  api(`/api/sponsor/sae-queue${trialId ? `?trial_id=${trialId}` : ''}`)
+
+export const fetchInstituteDrilldown = (siteId) =>
+  api(`/api/sponsor/institutes/${siteId}/drilldown`)
+
+export const fetchEthicsDocket = (trialId) =>
+  api(`/api/ethics/sae-docket${trialId ? `?trial_id=${trialId}` : ''}`)
+
+export const submitSaeEthicsDecision = (eventId, body) =>
+  api(`/api/ethics/sae-docket/${eventId}/adjudicate`, { method: 'POST', body })
+
 export const createAdverseEvent = (body) =>
   api('/api/adverse-events', { method: 'POST', body })
 

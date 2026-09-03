@@ -186,6 +186,7 @@ def _recent_ae_rows(
             "causality": event.causality.replace("_", " "),
             "onset": event.onset_date.isoformat() if event.onset_date else None,
             "outcome": event.outcome.replace("_", " "),
+            "ec_decision": event.ec_decision or ("pending" if event.is_serious else "NON_SERIOUS"),
         }
         for event in events
     ]
@@ -253,6 +254,9 @@ def _sae_reporting(session: Session, trial_id: int, user: CurrentUser) -> dict:
                 "days": delay,
                 "urgency": urgency,
                 "verdict": verdict,
+                "ec_decision": event.ec_decision or "pending",
+                "ec_decision_date": event.ec_decision_date.isoformat() if event.ec_decision_date else None,
+                "ec_decision_notes": event.ec_decision_notes,
             }
         )
 
@@ -406,10 +410,11 @@ def _investigator(session, user, stats, trial, today) -> tuple[list, list]:
             "Latest adverse events at my site",
             [("ae_number", "AE"), ("subject", "Participant"), ("term", "Event"),
              ("severity", "Severity"), ("serious", "Serious"),
-             ("causality", "Causality"), ("onset", "Onset")],
+             ("causality", "Causality"), ("onset", "Onset"),
+             ("ec_decision", "IEC Decision")],
             _recent_ae_rows(session, tid, user),
             note="Severity is how intense it was; serious is the regulatory "
-                 "category that starts a reporting clock. They are not the same thing.",
+                 "category that starts a reporting clock. IEC Decision displays the ethics committee ruling.",
             empty="No adverse events reported at this site.",
         ),
         {
@@ -598,6 +603,7 @@ def _ethics(session, user, stats, trial, today) -> tuple[list, list]:
             [("ae_number", "AE"), ("site", "Site"), ("term", "Event"),
              ("criteria", "Why serious"), ("onset", "Onset"),
              ("urgency", "24h Regulatory Clock"),
+             ("ec_decision", "IEC Ruling"),
              ("reported", "Reported"), ("to_ethics", "To ethics"),
              ("days", "Days"), ("verdict", "Verdict")],
             sae["rows"],

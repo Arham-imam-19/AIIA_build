@@ -1485,6 +1485,19 @@ def get_subject_dossier(
     # Adverse Events
     for ae in adverse_events:
         ae_date = ae.onset_date or subject.screening_date or date.today()
+        ae_details = {
+            "MedDRA Preferred Term": ae.meddra_pt_term or ae.term_verbatim,
+            "MedDRA SOC": ae.meddra_soc or "General disorders",
+            "Severity": (ae.severity or "MILD").upper(),
+            "Seriousness": "YES (SAE - 24h Clock Active)" if ae.is_serious else "NO (Non-Serious)",
+            "Causality Assessment": (ae.causality or "UNRELATED").upper(),
+            "Outcome": (ae.outcome or "RECOVERING").upper(),
+            "Action Taken": ae.action_taken or "Dose Unchanged",
+            "Ethics Committee (IEC) Ruling": (ae.ec_decision or "PENDING REVIEW").upper(),
+        }
+        if ae.ec_decision_notes:
+            ae_details["IEC Committee Directive"] = ae.ec_decision_notes
+
         timeline_events.append({
             "id": f"evt-ae-{ae.id}",
             "event_type": "adverse_event",
@@ -1492,15 +1505,7 @@ def get_subject_dossier(
             "timestamp": f"{ae_date}T14:15:00Z",
             "actor": "Investigator Safety Review",
             "badge": "danger" if ae.is_serious else "warning",
-            "details": {
-                "MedDRA Preferred Term": ae.meddra_pt_term or ae.term_verbatim,
-                "MedDRA SOC": ae.meddra_soc or "General disorders",
-                "Severity": (ae.severity or "MILD").upper(),
-                "Seriousness": "YES (SAE - 24h Clock Active)" if ae.is_serious else "NO (Non-Serious)",
-                "Causality Assessment": (ae.causality or "UNRELATED").upper(),
-                "Outcome": (ae.outcome or "RECOVERING").upper(),
-                "Action Taken": ae.action_taken or "Dose Unchanged",
-            },
+            "details": ae_details,
         })
 
     # Audit Trail records specifically on this subject
@@ -1557,6 +1562,9 @@ def get_subject_dossier(
                 "is_serious": ae.is_serious,
                 "causality": ae.causality,
                 "outcome": ae.outcome,
+                "ec_decision": ae.ec_decision or "pending",
+                "ec_decision_date": str(ae.ec_decision_date) if ae.ec_decision_date else None,
+                "ec_decision_notes": ae.ec_decision_notes,
             }
             for ae in adverse_events
         ],

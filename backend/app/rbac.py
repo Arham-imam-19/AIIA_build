@@ -177,6 +177,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.REGULATORY_WRITE,
             _P.ACTIVATION_WRITE,
             _P.ECONSENT_READ,
+            _P.AUDIT_READ,
         }
     ),
     UserRole.ETHICS_COMMITTEE.value: frozenset(

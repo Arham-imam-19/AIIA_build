@@ -103,10 +103,31 @@ function Cell({ value }) {
       </span>
     )
   }
-  if (valStr === 'NON_SERIOUS') {
+  if (valStr === 'accepted' || valStr === 'IEC_ACCEPTED') {
     return (
-      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-600">
-        Routine (Non-Serious)
+      <span className="inline-flex items-center gap-1 rounded border border-emerald-500 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800">
+        ✅ IEC Cleared
+      </span>
+    )
+  }
+  if (valStr === 'rejected' || valStr === 'IEC_REJECTED') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded border border-rose-500 bg-rose-100 px-2 py-0.5 text-xs font-bold text-rose-800">
+        ❌ IEC Rejected
+      </span>
+    )
+  }
+  if (valStr === 'action_required') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded border border-amber-500 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">
+        ⚠️ Action Required
+      </span>
+    )
+  }
+  if (valStr === 'pending' || valStr === 'IEC_PENDING') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded border border-slate-300 bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+        ⏳ Pending IEC Review
       </span>
     )
   }
@@ -179,7 +200,13 @@ function Table({ block, wide }) {
             </thead>
             <tbody>
               {rows.map((row, i) => (
-                <tr key={i} className="border-t border-slate-100 align-top">
+                <tr
+                  key={i}
+                  onClick={() => block.onRowClick?.(row)}
+                  className={`border-t border-slate-100 align-top ${
+                    block.onRowClick ? 'cursor-pointer hover:bg-slate-50/80 transition-colors' : ''
+                  }`}
+                >
                   {/* Iterate the columns, not the row's own keys: a row carries
                       more fields than a given role is shown. */}
                   {block.columns.map((col) => (

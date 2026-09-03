@@ -302,6 +302,76 @@ export default function PatientDetailPage({ subjectId, onBack, onRefresh }) {
             </div>
           </div>
         </div>
+
+        {/* Adverse Events & IEC Ethics Committee Rulings */}
+        {dossier.adverse_events && dossier.adverse_events.length > 0 && (
+          <div className="border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+              <span className="font-bold uppercase tracking-wider text-slate-800 text-xs flex items-center gap-2">
+                <span>🚨</span>
+                <span>Reported Adverse Events &amp; Ethics Committee (IEC) Adjudications</span>
+              </span>
+              <span className="text-[11px] font-mono text-slate-500">
+                {dossier.adverse_events.length} Event(s) on file
+              </span>
+            </div>
+
+            <div className="space-y-2.5">
+              {dossier.adverse_events.map((ae) => {
+                const isAccepted = ae.ec_decision === 'accepted'
+                const isRejected = ae.ec_decision === 'rejected'
+                const isActionReq = ae.ec_decision === 'action_required'
+
+                return (
+                  <div key={ae.id} className="border border-slate-200 bg-white p-3 text-xs space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
+                      <div className="flex items-center gap-2 font-mono">
+                        <span className="font-bold text-slate-900">{ae.ae_number}</span>
+                        <span className="text-slate-400">&bull;</span>
+                        <span className="font-sans font-semibold text-slate-800">{ae.term_verbatim}</span>
+                        {ae.is_serious && (
+                          <span className="bg-rose-100 border border-rose-300 text-rose-800 text-[10px] font-bold px-1.5 py-0.5 uppercase">
+                            Serious (SAE)
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] font-mono text-slate-500">
+                        Onset: {ae.onset_date} &bull; Severity: <span className="uppercase font-semibold">{ae.severity}</span>
+                      </div>
+                    </div>
+
+                    {/* IEC Decision Banner */}
+                    <div className={`p-2 border flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+                      isAccepted
+                        ? 'border-emerald-300 bg-emerald-50/80 text-emerald-900'
+                        : isRejected
+                        ? 'border-rose-300 bg-rose-50 text-rose-900'
+                        : isActionReq
+                        ? 'border-amber-300 bg-amber-50 text-amber-900'
+                        : 'border-slate-300 bg-slate-100 text-slate-800'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs">
+                          {isAccepted ? '✅ IEC RULING: CLEARED / ACCEPTED' : isRejected ? '❌ IEC RULING: REJECTED / PROTOCOL HALTED' : isActionReq ? '⚠️ IEC QUERY: ACTION REQUIRED' : '⏳ IEC RULING: PENDING COMMITTEE REVIEW'}
+                        </span>
+                        {ae.ec_decision_date && (
+                          <span className="text-[10px] font-mono text-slate-600">
+                            (Ruled: {ae.ec_decision_date})
+                          </span>
+                        )}
+                      </div>
+                      {ae.ec_decision_notes && (
+                        <div className="text-[11px] font-mono italic">
+                          Directive: &ldquo;{ae.ec_decision_notes}&rdquo;
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ========================================================================= */}
