@@ -6,7 +6,7 @@
 // anywhere in this system.
 
 import { useEffect, useState } from 'react'
-import { demoUsers, health, patientDemoUsers } from './api'
+import { demoUsers, health } from './api'
 import { useAuth } from './auth'
 
 const ROLE_BLURB = {
@@ -22,7 +22,7 @@ const ROLE_BLURB = {
   dsmb: 'Data & Safety Monitoring Board: emergency trial halting authority',
 }
 
-export default function Login({ patientPortal = false }) {
+export default function Login() {
   const { signIn, state } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -32,8 +32,7 @@ export default function Login({ patientPortal = false }) {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    const loadDemoUsers = patientPortal ? patientDemoUsers : demoUsers
-    loadDemoUsers()
+    demoUsers()
       .then((data) => {
         setDemo(data)
         if (data.users.length) {
@@ -46,7 +45,7 @@ export default function Login({ patientPortal = false }) {
     health()
       .then(setStatus)
       .catch(() => setStatus(null))
-  }, [patientPortal])
+  }, [])
 
   // The persona buttons pass their credentials in explicitly. Calling
   // setPassword() and then reading `password` in the same handler would send the
@@ -56,7 +55,7 @@ export default function Login({ patientPortal = false }) {
     setBusy(true)
     setError(null)
     try {
-      await signIn(asEmail, asPassword, patientPortal)
+      await signIn(asEmail, asPassword)
     } catch (err) {
       setError(err.detail || err.message)
     } finally {
@@ -71,7 +70,7 @@ export default function Login({ patientPortal = false }) {
       <div className="w-full max-w-md">
         <div className="mb-6 text-center">
           <h1 className="text-lg font-semibold tracking-tight text-slate-900">
-            {patientPortal ? 'Patient Portal' : 'Staff Portal'}
+            Clinical Trials Management Portal
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             Ayurveda CTMS &middot; Ministry of Ayush &middot; SIH26046
@@ -153,9 +152,7 @@ export default function Login({ patientPortal = false }) {
                         {user.role_label}
                       </span>
                       <span className="text-xs text-slate-400">
-                        {patientPortal
-                          ? 'trial participant: view schedule & message hospital admin'
-                          : ROLE_BLURB[user.role]}
+                        {ROLE_BLURB[user.role]}
                       </span>
                     </div>
                     <div className="mt-0.5 font-mono text-xs text-slate-500">
@@ -192,14 +189,6 @@ export default function Login({ patientPortal = false }) {
 
         <p className="mt-6 text-center text-xs text-slate-400">
           All data in this system is synthetic. No real patient data.
-        </p>
-        <p className="mt-3 text-center text-sm">
-          <a
-            href={patientPortal ? '/' : '/patient-login'}
-            className="text-aiia-600 hover:text-aiia-700 hover:underline"
-          >
-            {patientPortal ? 'Go to staff portal' : 'Go to patient portal'}
-          </a>
         </p>
       </div>
     </div>

@@ -9,7 +9,6 @@ import Coordinator from './Coordinator'
 import Ethics from './Ethics'
 import InstitutionAdmin from './InstitutionAdmin'
 import Investigator from './Investigator'
-import Patient from './Patient'
 import Regulator from './Regulator'
 import Sponsor from './Sponsor'
 
@@ -18,7 +17,6 @@ export const DASHBOARDS = {
   institution_admin: InstitutionAdmin,
   principal_investigator: Investigator,
   coordinator: Coordinator,
-  patient: Patient,
   sponsor: Sponsor,
   ethics_committee: Ethics,
   regulator: Regulator,

@@ -40,10 +40,8 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  const signIn = useCallback(async (email, password, patientPortal = false) => {
-    const result = patientPortal
-      ? await api.patientLogin(email, password)
-      : await api.login(email, password)
+  const signIn = useCallback(async (email, password) => {
+    const result = await api.login(email, password)
     api.saveSession(result.access_token, result.user)
     setUser(result.user)
     setToken(result.access_token)
