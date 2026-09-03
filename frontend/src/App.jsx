@@ -1,12 +1,5 @@
 // Phase 2: log in, get the dashboard your role is entitled to, watch it update
 // itself.
-//
-// There is no role switcher and no ?role= anywhere. The dashboard that renders
-// is decided by the token, which is signed by the server - so the only way to see
-// the Sponsor's screen is to log in as the Sponsor.
-//
-// Phase 1's landing page proved the chain React -> FastAPI -> PostgreSQL. That
-// job is now done by the login screen's status hints and the footer.
 
 import { useEffect, useRef, useState } from 'react'
 import { AuthProvider, useAuth } from './auth'
@@ -23,9 +16,7 @@ import Shell from './Shell'
 import { DASHBOARDS, FALLBACK } from './dashboards'
 import { useLiveDashboard } from './useLiveDashboard'
 
-// Which tiles changed since the last message, so they can flash. Comparing
-// values rather than trusting the event means a tile only lights up if its
-// number actually moved.
+// Which tiles changed since the last message, so they can flash.
 function useChangedTiles(dashboard) {
   const previous = useRef(null)
   const [changed, setChanged] = useState(new Set())
@@ -42,7 +33,6 @@ function useChangedTiles(dashboard) {
       previous.current = now
       if (moved.size === 0) return
       setChanged(moved)
-      // Clear the highlight so the next change is visible as a change.
       const timer = setTimeout(() => setChanged(new Set()), 2500)
       return () => clearTimeout(timer)
     }
@@ -103,7 +93,7 @@ function SignedIn() {
                 }}
                 className="border border-slate-900 bg-slate-900 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white hover:bg-slate-800"
               >
-                View Patient Detail & Log &rarr;
+                View Patient Detail &amp; Log &rarr;
               </button>
             </div>
           </div>
@@ -177,6 +167,7 @@ function SignedIn() {
 
 function Gate() {
   const { state } = useAuth()
+  const patientPortal = window.location.pathname === '/patient-login'
   if (state === 'checking') {
     return (
       <div className="flex min-h-full items-center justify-center text-sm text-slate-400">
@@ -184,7 +175,7 @@ function Gate() {
       </div>
     )
   }
-  return state === 'signed-in' ? <SignedIn /> : <Login />
+  return state === 'signed-in' ? <SignedIn /> : <Login patientPortal={patientPortal} />
 }
 
 export default function App() {

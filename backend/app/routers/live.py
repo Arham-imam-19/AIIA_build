@@ -32,7 +32,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket
 from fastapi.encoders import jsonable_encoder
 from sqlmodel import Session
 
-from app.db import get_engine, get_session
+from app.db import get_session
 from app.enums import UserRole
 from app.events import bus, now_iso
 from app.kpi import build_dashboard
@@ -117,15 +117,23 @@ async def _send(websocket: WebSocket, message: dict) -> None:
 
 async def _send_snapshot(
     websocket: WebSocket,
+    session: Session,
     user: CurrentUser,
     trial_id: int | None,
     *,
     reason: str,
     event: dict | None = None,
 ) -> None:
-    """Recompute this user's dashboard and send it."""
-    with Session(get_engine()) as session:
-        payload = build_dashboard(session, user, trial_id)
+    """Recompute this user's dashboard and send it.
+
+    `session.rollback()` first because a read-only session sits inside one long
+    transaction, and on PostgreSQL that means it would keep seeing the world as it
+    was when the socket opened. Rolling back starts a fresh transaction, so the
+    next query sees rows other people have committed since. Nothing of ours is
+    ever pending here, so there is nothing to lose.
+    """
+    session.rollback()
+    payload = build_dashboard(session, user, trial_id)
     await _send(
         websocket,
         {
@@ -143,6 +151,7 @@ async def dashboard_socket(
     websocket: WebSocket,
     token: str | None = Query(None, description="the access token from /api/auth/login"),
     trial_id: int | None = Query(None),
+    session: Session = Depends(get_session),
 ) -> None:
     # Accept first, so we can send a readable reason before closing. A socket
     # rejected at the handshake gives the browser nothing but "connection failed".
@@ -160,8 +169,7 @@ async def dashboard_socket(
         return
 
     try:
-        with Session(get_engine()) as auth_session:
-            user = await user_from_token(token, auth_session)
+        user = await user_from_token(token, session)
     except HTTPException as exc:
         await _send(websocket, {"type": "error", "detail": exc.detail})
         await websocket.close(code=CLOSE_UNAUTHENTICATED)
@@ -195,7 +203,7 @@ async def dashboard_socket(
                 "heartbeat_seconds": HEARTBEAT_SECONDS,
             },
         )
-        await _send_snapshot(websocket, user, trial_id, reason="connected")
+        await _send_snapshot(websocket, session, user, trial_id, reason="connected")
 
         # Wait on two things at once: an event from the bus, and anything the
         # browser sends (which includes the disconnect notice). Whichever arrives
@@ -222,7 +230,7 @@ async def dashboard_socket(
                     # Any inbound message means "send me the numbers again". Used by
                     # the UI's refresh button, and handy for debugging by hand.
                     await _send_snapshot(
-                        websocket, user, trial_id, reason="refresh"
+                        websocket, session, user, trial_id, reason="refresh"
                     )
 
                 if wait_event in done:
@@ -231,6 +239,7 @@ async def dashboard_socket(
                     if _visible_to(user, event):
                         await _send_snapshot(
                             websocket,
+                            session,
                             user,
                             trial_id,
                             reason="event",

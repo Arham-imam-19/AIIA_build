@@ -34,9 +34,6 @@ def get_engine() -> Engine:
             echo=False,
             # Recycle connections before Postgres drops them as idle.
             pool_pre_ping=True,
-            pool_size=25,
-            max_overflow=50,
-            pool_recycle=1800,
             connect_args=connect_args,
         )
     return _engine

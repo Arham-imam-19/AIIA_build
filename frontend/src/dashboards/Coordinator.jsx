@@ -79,6 +79,47 @@ export default function Coordinator(props) {
     <div className="space-y-4">
       <SiteComplianceStatusBanner />
 
+      {/* Clinical Site Actions Center */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="flex h-2 w-2 rounded-full bg-aiia-600"></span>
+              Site Clinical Actions &amp; Intake Center
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Execute structured CDASH participant intake, MedDRA safety reports, and protocol deviations.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowIntakeModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-aiia-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-aiia-700 transition"
+            >
+              📝 Screen New Participant
+            </button>
+            <button
+              onClick={() => setShowAeModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-700 transition"
+            >
+              🚨 Report Adverse Event
+            </button>
+            <button
+              onClick={() => setShowDeviationModal(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-700 transition"
+            >
+              ⚠️ Log Protocol Deviation
+            </button>
+            <button
+              onClick={() => setSelectedSubjectId(1)}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 transition"
+            >
+              🔍 Inspect Participant Dossier
+            </button>
+          </div>
+        </div>
+      </div>
+
       <DashboardLayout
         {...props}
         dashboard={activeDashboard}

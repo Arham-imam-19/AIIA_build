@@ -20,7 +20,7 @@ function GovernmentPortalHeader({ trial }) {
               GOVERNMENT OF INDIA &bull; MINISTRY OF AYUSH
             </div>
             <h1 className="text-base sm:text-lg font-bold uppercase tracking-wide text-white font-serif">
-              Institutional Ethics Committee (IEC) &bull; Clinical Safety & Protocol Oversight
+              Institutional Ethics Committee (IEC) &bull; Clinical Safety &amp; Protocol Oversight
             </h1>
             <p className="text-xs text-slate-300 font-mono mt-0.5">
               Protocol: <span className="font-bold text-amber-300">{trial?.protocol_number || 'AIIA-ASH-2026-01'}</span> &bull; {trial?.short_title || trial?.title || 'National Ayurveda Clinical Trial'}
@@ -34,7 +34,7 @@ function GovernmentPortalHeader({ trial }) {
               Statutory Gate
             </span>
             <span className="text-xs font-mono font-bold text-emerald-400">
-              NDCT Rules 2019 (Rule 22 & 42)
+              NDCT Rules 2019 (Rule 22 &amp; 42)
             </span>
           </div>
           <span className="inline-block border border-purple-400 bg-purple-950/80 px-2.5 py-1 text-[11px] font-mono text-purple-200 uppercase font-semibold">
@@ -100,7 +100,7 @@ function ProtocolClearanceCard({ trial, onUpdated }) {
         <div>
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2">
             <span>📋</span>
-            <span>Study Protocol Ethics Approval & Clearance Certificate</span>
+            <span>Study Protocol Ethics Approval &amp; Clearance Certificate</span>
           </h2>
           <p className="text-xs text-slate-500">
             Rule 22 Gate: Screening and enrollment are blocked across all sites unless active IEC approval is registered.
@@ -338,7 +338,7 @@ function SaeAdjudicationDocket({ docket, onAdjudicate, onQuickDecision }) {
                         </button>
                         <button
                           onClick={() => onAdjudicate(sae)}
-                          title="Open Full Hearing & Directive Modal"
+                          title="Open Full Hearing &amp; Directive Modal"
                           className="px-2.5 py-1 text-xs font-bold border border-slate-700 bg-slate-800 text-white hover:bg-slate-900 transition"
                         >
                           ⚖️ Adjudicate
@@ -442,7 +442,7 @@ export default function Ethics(props) {
             </span>
             <div>
               <h2 className="text-xs sm:text-sm font-bold text-emerald-950 uppercase tracking-wider">
-                All Safety Signals & Serious Adverse Events Evaluated
+                All Safety Signals &amp; Serious Adverse Events Evaluated
               </h2>
               <p className="text-[11px] text-emerald-800 mt-0.5">
                 All {docket.total_sae_count || 0} registered Serious Adverse Events have formal Ethics Committee rulings on record.

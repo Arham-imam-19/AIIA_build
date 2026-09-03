@@ -1,4 +1,6 @@
-// Institution Administrator: manages hospital site operations, coordinates researchers,
+﻿import re
+
+content = '''// Institution Administrator: manages hospital site operations, coordinates researchers,
 // monitors local recruitment & safety, and resolves data queries.
 
 import { useState } from 'react'
@@ -131,3 +133,7 @@ export default function InstitutionAdmin(props) {
     </div>
   )
 }
+'''
+
+with open('frontend/src/dashboards/InstitutionAdmin.jsx', 'w', encoding='utf-8') as f:
+    f.write(content)

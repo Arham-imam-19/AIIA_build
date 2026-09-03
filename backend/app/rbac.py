@@ -102,7 +102,6 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
         _P.USER_READ,
         _P.USER_MANAGE,
         _P.INSTITUTION_MANAGE,
-        _P.EXPORT,
             _P.AUDIT_READ,
     }),
     UserRole.INSTITUTION_ADMIN.value: frozenset(
@@ -116,7 +115,6 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.USER_READ,
             _P.USER_MANAGE,
             _P.PATIENT_REQUEST_READ,
-            _P.EXPORT,
             _P.PATIENT_REQUEST_RESPOND,
             _P.ECONSENT_READ,
         }
@@ -126,6 +124,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.TRIAL_READ,
             _P.SITE_READ,
             _P.SUBJECT_READ,
+            _P.SUBJECT_WRITE,
             _P.VISIT_READ,
             _P.VISIT_WRITE,
             _P.AE_READ,
@@ -133,7 +132,6 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.COMPLIANCE_READ,
             _P.USER_READ,
             _P.PATIENT_REQUEST_READ,
-            _P.EXPORT,
             _P.ECONSENT_READ,
         }
     ),
@@ -148,7 +146,6 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.AE_READ,
             _P.AE_WRITE,
             _P.PATIENT_REQUEST_READ,
-            _P.EXPORT,
             _P.ECONSENT_READ,
         }
     ),
@@ -177,7 +174,6 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.REGULATORY_WRITE,
             _P.ACTIVATION_WRITE,
             _P.ECONSENT_READ,
-            _P.AUDIT_READ,
         }
     ),
     UserRole.ETHICS_COMMITTEE.value: frozenset(
@@ -228,7 +224,6 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.SITE_READ,
             _P.VISIT_READ,
             _P.PATIENT_REQUEST_READ,
-            _P.EXPORT,
             _P.PATIENT_REQUEST_WRITE,
             _P.ECONSENT_READ,
             _P.ECONSENT_SIGN,

@@ -46,18 +46,18 @@ export default function Sponsor(props) {
   return (
     <div className="space-y-6">
       {/* Sponsor Governance & Inspection Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/80 px-5 py-3 text-xs text-blue-950 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-none border-2 border-slate-700 bg-slate-900 px-5 py-3 text-xs text-white shadow-sm">
         <div className="flex items-center gap-2 font-medium">
-          <span className="flex h-2.5 w-2.5 rounded-full bg-blue-600 animate-pulse"></span>
-          <span>🔒 DPDP Act 2023 & ICH E6 GCP: Blinded Sponsor Executive Oversight Mode</span>
-          <span className="text-blue-700 hidden md:inline">
+          <span className="flex h-2.5 w-2.5 rounded-full bg-blue-400 animate-pulse"></span>
+          <span className="font-bold text-amber-300">🔒 DPDP Act 2023 &amp; ICH E6 GCP: Blinded Sponsor Executive Oversight Mode</span>
+          <span className="text-slate-300 hidden md:inline">
             (Participant PII is masked; system is strictly read-only)
           </span>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={handleOpenPortfolioAudit}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 shadow-sm hover:bg-blue-100 transition"
+            className="inline-flex items-center gap-1.5 rounded-none border border-slate-600 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-100 shadow-sm hover:bg-slate-700 transition"
           >
             <span>📜</span>
             <span>View Inspection Audit Trail</span>

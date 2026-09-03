@@ -174,9 +174,6 @@ export const updateEthicsApproval = (trialId, body) =>
 export const fetchSubjectDossier = (subjectId) =>
   api(`/api/subjects/${subjectId}/dossier`)
 
-export const createStructuredSubject = (body) =>
-  api('/api/subjects', { method: 'POST', body })
-
 export const fetchSubjectClinicalLogs = (subjectId) =>
   api(`/api/subjects/${subjectId}/clinical-log`)
 
@@ -203,6 +200,9 @@ export const fetchEthicsDocket = (trialId) =>
 
 export const submitSaeEthicsDecision = (eventId, body) =>
   api(`/api/ethics/sae-docket/${eventId}/adjudicate`, { method: 'POST', body })
+
+export const createStructuredSubject = (body) =>
+  api('/api/subjects', { method: 'POST', body })
 
 export const createAdverseEvent = (body) =>
   api('/api/adverse-events', { method: 'POST', body })

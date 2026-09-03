@@ -103,6 +103,13 @@ function Cell({ value }) {
       </span>
     )
   }
+  if (valStr === 'NON_SERIOUS') {
+    return (
+      <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-600">
+        Routine (Non-Serious)
+      </span>
+    )
+  }
   if (valStr === 'accepted' || valStr === 'IEC_ACCEPTED') {
     return (
       <span className="inline-flex items-center gap-1 rounded border border-emerald-500 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800">
