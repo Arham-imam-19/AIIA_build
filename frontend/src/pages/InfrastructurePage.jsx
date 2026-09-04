@@ -6,6 +6,7 @@ import CreateTrialModal from '../components/CreateTrialModal'
 export default function InfrastructurePage({ onNavigateDashboard }) {
   const [trials, setTrials] = useState([])
   const [sites, setSites] = useState([])
+  const [siteProtocolFilter, setSiteProtocolFilter] = useState('all')
   const [loading, setLoading] = useState(false)
   const [showTrialModal, setShowTrialModal] = useState(false)
   const [showSiteModal, setShowSiteModal] = useState(false)
@@ -27,6 +28,38 @@ export default function InfrastructurePage({ onNavigateDashboard }) {
   useEffect(() => {
     loadData()
   }, [])
+
+  // Trial lookup map for protocol numbers and titles
+  const trialMap = Object.fromEntries(trials.map((t) => [t.id, t]))
+
+  // Deduplicate and group physical research centers by site_code
+  const distinctCentersMap = new Map()
+  for (const s of sites) {
+    if (!distinctCentersMap.has(s.site_code)) {
+      distinctCentersMap.set(s.site_code, {
+        ...s,
+        total_target_enrollment: s.target_enrollment || 0,
+        protocol_ids: s.trial_id ? [s.trial_id] : [],
+      })
+    } else {
+      const entry = distinctCentersMap.get(s.site_code)
+      entry.total_target_enrollment += (s.target_enrollment || 0)
+      if (s.trial_id && !entry.protocol_ids.includes(s.trial_id)) {
+        entry.protocol_ids.push(s.trial_id)
+      }
+      if (s.status === 'recruiting' || (s.status === 'activated' && entry.status !== 'recruiting')) {
+        entry.status = s.status
+      }
+      if (!entry.pi_email && s.pi_email) entry.pi_email = s.pi_email
+      if (!entry.contact_phone && s.contact_phone) entry.contact_phone = s.contact_phone
+    }
+  }
+  const distinctCenters = Array.from(distinctCentersMap.values())
+
+  // Sites to display based on selected protocol scope
+  const displaySites = siteProtocolFilter === 'all'
+    ? distinctCenters
+    : sites.filter((s) => String(s.trial_id) === String(siteProtocolFilter))
 
   async function handleCleanSlateReset() {
     setCleanSlateBusy(true)
@@ -86,18 +119,42 @@ export default function InfrastructurePage({ onNavigateDashboard }) {
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              1. Participating Hospital &amp; Research Centers Registry ({sites.length} Active Sites)
+              1. Participating Hospital &amp; Research Centers Registry ({displaySites.length} {siteProtocolFilter === 'all' ? 'Distinct Centers' : 'Active Sites'})
             </h3>
             <p className="text-[11px] text-slate-500">
               Official hospital sites authorized for GCP-ASU clinical trial participant recruitment and monitoring.
             </p>
           </div>
-          <button
-            onClick={() => setShowSiteModal(true)}
-            className="border border-slate-400 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-100"
-          >
-            + Add New Site
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5">
+            {trials.length > 0 && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <label htmlFor="protocol-site-filter" className="font-semibold text-slate-600">
+                  Protocol Scope:
+                </label>
+                <select
+                  id="protocol-site-filter"
+                  value={siteProtocolFilter}
+                  onChange={(e) => setSiteProtocolFilter(e.target.value)}
+                  className="border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 shadow-sm focus:border-slate-800 focus:outline-none"
+                >
+                  <option value="all">
+                    All Distinct Research Centers ({distinctCenters.length})
+                  </option>
+                  {trials.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      Protocol: {t.protocol_number} &mdash; {t.title?.slice(0, 32)}{t.title?.length > 32 ? '...' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <button
+              onClick={() => setShowSiteModal(true)}
+              className="border border-slate-400 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+            >
+              + Add New Site
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 border border-slate-300 overflow-x-auto">
@@ -120,41 +177,77 @@ export default function InfrastructurePage({ onNavigateDashboard }) {
                     Loading participating hospital sites...
                   </td>
                 </tr>
-              ) : sites.length === 0 ? (
+              ) : displaySites.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
-                    No participating hospital sites currently registered.
+                    No participating hospital sites found for the selected scope.
                   </td>
                 </tr>
               ) : (
-                sites.map((s) => (
-                  <tr key={s.id} className="hover:bg-slate-50">
-                    <td className="border-r border-slate-200 px-3.5 py-2.5 font-mono font-bold text-slate-900">
-                      {s.site_code}
-                    </td>
-                    <td className="border-r border-slate-200 px-3.5 py-2.5 font-semibold text-slate-900">
-                      {s.name}
-                    </td>
-                    <td className="border-r border-slate-200 px-3.5 py-2.5 text-slate-700">
-                      {s.city}, {s.state}
-                    </td>
-                    <td className="border-r border-slate-200 px-3.5 py-2.5 text-slate-800">
-                      <div className="font-semibold">{s.pi_name}</div>
-                      {s.pi_email && <div className="font-mono text-[11px] text-slate-500">{s.pi_email}</div>}
-                    </td>
-                    <td className="border-r border-slate-200 px-3.5 py-2.5 font-mono text-[11px] text-slate-600">
-                      {s.contact_phone || '—'}
-                    </td>
-                    <td className="border-r border-slate-200 px-3.5 py-2.5 font-bold text-slate-900">
-                      {s.target_enrollment} subjects
-                    </td>
-                    <td className="px-3.5 py-2.5">
-                      <span className="border border-emerald-600 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-800">
-                        {s.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                displaySites.map((s) => {
+                  const isAllScope = siteProtocolFilter === 'all'
+                  const pIds = s.protocol_ids || (s.trial_id ? [s.trial_id] : [])
+                  const quota = isAllScope ? (s.total_target_enrollment ?? s.target_enrollment) : s.target_enrollment
+
+                  return (
+                    <tr key={isAllScope ? s.site_code : s.id} className="hover:bg-slate-50">
+                      <td className="border-r border-slate-200 px-3.5 py-2.5 font-mono font-bold text-slate-900">
+                        {s.site_code}
+                      </td>
+                      <td className="border-r border-slate-200 px-3.5 py-2.5 font-semibold text-slate-900">
+                        <div>{s.name}</div>
+                        {isAllScope && pIds.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {pIds.map((pId) => {
+                              const tr = trialMap[pId]
+                              return (
+                                <span
+                                  key={pId}
+                                  title={tr ? tr.title : undefined}
+                                  className="inline-block border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[9px] font-mono font-semibold text-slate-600"
+                                >
+                                  {tr ? tr.protocol_number : `Protocol #${pId}`}
+                                </span>
+                              )
+                            })}
+                          </div>
+                        )}
+                        {!isAllScope && trialMap[s.trial_id] && (
+                          <div className="mt-0.5 text-[10px] font-mono text-slate-500">
+                            Protocol: {trialMap[s.trial_id].protocol_number}
+                          </div>
+                        )}
+                      </td>
+                      <td className="border-r border-slate-200 px-3.5 py-2.5 text-slate-700">
+                        {s.city}, {s.state}
+                      </td>
+                      <td className="border-r border-slate-200 px-3.5 py-2.5 text-slate-800">
+                        <div className="font-semibold">{s.pi_name}</div>
+                        {s.pi_email && <div className="font-mono text-[11px] text-slate-500">{s.pi_email}</div>}
+                      </td>
+                      <td className="border-r border-slate-200 px-3.5 py-2.5 font-mono text-[11px] text-slate-600">
+                        {s.contact_phone || '—'}
+                      </td>
+                      <td className="border-r border-slate-200 px-3.5 py-2.5 font-bold text-slate-900">
+                        <div>{quota} subjects</div>
+                        {isAllScope && pIds.length > 1 && (
+                          <div className="text-[10px] font-normal text-slate-500 mt-0.5">
+                            Cumulative ({pIds.length} protocols)
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3.5 py-2.5">
+                        <span className={`border px-2 py-0.5 text-[10px] font-bold uppercase ${
+                          s.status === 'recruiting'
+                            ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
+                            : 'border-slate-400 bg-slate-100 text-slate-800'
+                        }`}>
+                          {s.status}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>

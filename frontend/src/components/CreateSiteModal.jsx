@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { createSite, fetchTrials } from '../api'
+import { createSite, fetchTrials, fetchSites } from '../api'
 
 export default function CreateSiteModal({ onClose, onSuccess }) {
   const [trials, setTrials] = useState([])
@@ -16,11 +16,20 @@ export default function CreateSiteModal({ onClose, onSuccess }) {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    fetchTrials()
-      .then((res) => {
-        if (res.items?.length) {
-          setTrials(res.items)
-          setTrialId(res.items[0].id)
+    Promise.all([fetchTrials(), fetchSites()])
+      .then(([tRes, sRes]) => {
+        if (tRes.items?.length) {
+          setTrials(tRes.items)
+          setTrialId(tRes.items[0].id)
+        }
+        if (sRes.items?.length) {
+          const numericCodes = sRes.items
+            .map((s) => parseInt(s.site_code, 10))
+            .filter((n) => !isNaN(n))
+          if (numericCodes.length > 0) {
+            const nextCode = Math.max(...numericCodes) + 1
+            setSiteCode(String(nextCode).padStart(2, '0'))
+          }
         }
       })
       .catch(() => {})

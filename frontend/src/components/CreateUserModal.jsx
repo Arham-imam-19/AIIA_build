@@ -194,11 +194,20 @@ export default function CreateUserModal({ onClose, onSuccess }) {
                 className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs font-medium text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                 required
               >
-                {sites.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.site_code}) — {s.city}
-                  </option>
-                ))}
+                {(() => {
+                  const seen = new Set()
+                  return sites
+                    .filter((s) => {
+                      if (seen.has(s.site_code)) return false
+                      seen.add(s.site_code)
+                      return true
+                    })
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.site_code}) — {s.city}
+                      </option>
+                    ))
+                })()}
               </select>
             </div>
           )}
