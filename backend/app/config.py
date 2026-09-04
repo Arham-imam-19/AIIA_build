@@ -19,6 +19,8 @@ DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql+psycopg://aiia:aiia@db:5432/aiia_ctms",
 )
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
 
 # Used from Phase 2 onward to push live KPI updates over WebSocket.
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
@@ -47,7 +49,8 @@ DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "aiia2026")
 # Development-only conveniences: the /api/auth/demo-users endpoint that lists the
 # personas and their shared password, and the one-click persona buttons on the
 # login screen. Both switch off automatically when APP_ENV is not development.
-IS_DEVELOPMENT = APP_ENV == "development"
+ENABLE_DEMO_USERS = os.getenv("ENABLE_DEMO_USERS", "true").lower() == "true"
+IS_DEVELOPMENT = APP_ENV == "development" or ENABLE_DEMO_USERS
 
 # Browser origins allowed to call this API. The Vite dev server proxies /api to
 # the backend, so in the normal setup this list is a safety net rather than a

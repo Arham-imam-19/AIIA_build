@@ -32,6 +32,9 @@ done
 echo "[entrypoint] applying migrations (alembic upgrade head)"
 alembic upgrade head
 
+echo "[entrypoint] seeding demo data if empty"
+python scripts/seed.py || true
+
 echo "[entrypoint] starting API on :8000"
 # exec replaces this shell with uvicorn, so Ctrl-C and `docker compose stop`
 # reach the server directly instead of being swallowed by the script.
