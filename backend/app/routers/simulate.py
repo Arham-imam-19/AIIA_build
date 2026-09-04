@@ -601,12 +601,54 @@ async def simulate_overdue_sae(
     if not (user.can(Permission.AE_WRITE) or user.can(Permission.AE_READ) or user.role in {"sponsor", "admin"}):
         raise HTTPException(status_code=403, detail="Not authorized to simulate adverse events")
     body = body or SimulateRequest()
-    trial = _trial(session, body.trial_id)
-    site = _site(session, trial, user, body.site_id)
-    subject = _random_enrolled_subject(session, site)
+
+    # Locate a trial and site with existing subjects if not explicitly specified
+    if body.trial_id is not None:
+        trial = _trial(session, body.trial_id)
+    else:
+        trial = session.exec(
+            select(Trial).join(Subject, Subject.trial_id == Trial.id).limit(1)
+        ).first() or _trial(session, None)
+
+    if body.site_id is not None:
+        site = _site(session, trial, user, body.site_id)
+    else:
+        site = session.exec(
+            select(Site).join(Subject, Subject.site_id == Site.id).where(Site.trial_id == trial.id).limit(1)
+        ).first() or _site(session, trial, user, None)
+
+    # Prefer enrolled subject, fallback to screened subject, or any subject in system
+    subject = session.exec(
+        select(Subject).where(Subject.site_id == site.id, Subject.enrollment_date.is_not(None))
+    ).first()
+    if not subject:
+        subject = session.exec(
+            select(Subject).where(Subject.site_id == site.id)
+        ).first()
+    if not subject:
+        subject = session.exec(select(Subject)).first()
+        if subject:
+            site = session.get(Site, subject.site_id)
+            trial = session.get(Trial, subject.trial_id)
 
     now = utcnow()
     yesterday = (now - timedelta(hours=26)).date()
+
+    if not subject:
+        subject = Subject(
+            trial_id=trial.id,
+            site_id=site.id,
+            subject_code=_next_subject_code(session, site),
+            initials="DM",
+            date_of_birth=date(1990, 1, 1),
+            gender="male",
+            screening_date=yesterday,
+            enrollment_date=yesterday,
+            status=SubjectStatus.ENROLLED.value,
+        )
+        session.add(subject)
+        session.flush()
+
     template = random.choice(synthetic.SAE_CATALOGUE)
     number = _next_ae_number(session, trial)
 
