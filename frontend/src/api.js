@@ -300,6 +300,15 @@ export async function downloadSafetyReport(eventId, token = savedToken()) {
   return filename
 }
 
+export const fetchDsmbDecisions = (trialId) =>
+  api(`/api/trials/${trialId}/dsmb-decisions`)
+
+export const submitDsmbDecision = (trialId, body) =>
+  api(`/api/trials/${trialId}/dsmb-decision`, { method: 'POST', body })
+
+export const acknowledgeDsmbDecision = (decisionId) =>
+  api(`/api/dsmb-decisions/${decisionId}/acknowledge`, { method: 'POST' })
+
 // The WebSocket cannot send an Authorization header, so the token rides in the
 // query string instead. Same server-side check either way.
 export function liveUrl(token) {

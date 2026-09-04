@@ -32,6 +32,7 @@ from app.enums import (
     values,
 )
 from app.models.clinical_log import ClinicalLogEntry
+from app.models.dsmb import DsmbDecision
 from app.models.econsent import EConsent
 from app.models.patient_request import PatientRequest
 from app.models.site import Site
@@ -47,6 +48,7 @@ __all__ = [
     "User",
     "Subject",
     "ClinicalLogEntry",
+    "DsmbDecision",
     "Visit",
     "AdverseEvent",
     "PatientRequest",

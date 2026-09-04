@@ -236,6 +236,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
     UserRole.DSMB.value: frozenset(
         {
             _P.TRIAL_READ,
+            _P.SITE_READ,
             _P.AE_READ,
             _P.HALT_TRIAL,
         }
