@@ -149,10 +149,11 @@ export default function Admin(props) {
   const auditLogs = auditBlock?.rows || []
   const auditColumns = auditBlock?.columns || []
 
+  const uniqueSitesCount = new Set(sites.map((s) => s.site_code)).size
   const customTiles = [
     { key: 'total_protocols', label: 'Total Configured Protocols', value: trials.length, tone: 'neutral' },
     { key: 'missing_ctri', label: 'Protocols Missing CTRI', value: trials.filter(t => !t.ctri_number).length, tone: 'warn' },
-    { key: 'total_sites', label: 'Total Active Sites', value: sites.length, tone: 'good' },
+    { key: 'total_sites', label: 'Total Active Sites', value: uniqueSitesCount, tone: 'good' },
     { key: 'audit_entries', label: 'System Audit Entries', value: props.dashboard?.tiles?.find(t => t.key === 'audit_entries')?.value || auditLogs.length || 0, tone: 'neutral' },
   ]
 
@@ -575,11 +576,20 @@ export default function Admin(props) {
                     className="w-full border border-slate-300 bg-white p-2 text-xs font-medium text-slate-900 focus:border-slate-800 focus:outline-none"
                   >
                     <option value="">All Participating Sites</option>
-                    {sites.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.site_code})
-                      </option>
-                    ))}
+                    {(() => {
+                      const seen = new Set()
+                      return sites
+                        .filter((s) => {
+                          if (seen.has(s.site_code)) return false
+                          seen.add(s.site_code)
+                          return true
+                        })
+                        .map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} ({s.site_code})
+                          </option>
+                        ))
+                    })()}
                   </select>
                 </div>
               </div>

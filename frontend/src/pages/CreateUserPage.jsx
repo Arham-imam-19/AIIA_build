@@ -277,11 +277,21 @@ export default function CreateUserPage({ onNavigateDashboard }) {
               {!selectedRoleConfig?.requiresSite && (
                 <option value="">Global (Multi-Centric) - All Sites</option>
               )}
-              {selectedRoleConfig?.requiresSite && sites.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} (Site Code: {s.site_code}) &mdash; {s.city}, {s.state}
-                </option>
-              ))}
+              {selectedRoleConfig?.requiresSite &&
+                (() => {
+                  const seen = new Set()
+                  return sites
+                    .filter((s) => {
+                      if (seen.has(s.site_code)) return false
+                      seen.add(s.site_code)
+                      return true
+                    })
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} (Site Code: {s.site_code}) &mdash; {s.city}, {s.state}
+                      </option>
+                    ))
+                })()}
             </select>
           </div>
         </fieldset>
