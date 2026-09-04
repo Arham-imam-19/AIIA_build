@@ -170,7 +170,6 @@ function SignedIn() {
 
 function Gate() {
   const { state } = useAuth()
-  const patientPortal = window.location.pathname === '/patient-login'
   if (state === 'checking') {
     return (
       <div className="flex min-h-full items-center justify-center text-sm text-slate-400">
@@ -178,7 +177,7 @@ function Gate() {
       </div>
     )
   }
-  return state === 'signed-in' ? <SignedIn /> : <Login patientPortal={patientPortal} />
+  return state === 'signed-in' ? <SignedIn /> : <Login />
 }
 
 export default function App() {
