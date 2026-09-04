@@ -1,15 +1,22 @@
 """HTTP routers, grouped along the same seams as the project's features.
 
     auth.py        log in, log out, who am I         (Phase 2)
+    admin.py       IT Admin control plane, clean slate reset
     trials.py      the trial and its sites          (who is running what, where)
     subjects.py    participants and their visits    (the enrolment funnel)
     safety.py      adverse events                   (Feature 2 extends this)
+    ethics.py      Ethics Committee SAE adjudication docket
+    sponsor.py     Sponsor live oversight analytics & milestones
     compliance.py  the audit trail                  (Feature 3 extends this)
     stats.py       the aggregate numbers the dashboards draw
     dashboard.py   one role-shaped payload per persona, plus the RBAC matrix
     live.py        the WebSocket that pushes a fresh dashboard on every change
     simulate.py    demo tooling that writes real rows so the live update is real
     patient_requests.py patient inquiries and communications
+    econsent.py    e-consent signatures & certificates
+    exports.py     CDISC & FHIR data exports
+    harmonization.py CDISC ingestion & mapping
+    ingest.py      Coordinator CDISC AI ingestion pipeline
 
 Phase 1 was read-only. Phase 2 added authentication, so every endpoint above now
 needs a token, and the first writes appear - in `simulate.py`, each one paired with
@@ -18,16 +25,20 @@ to a named user.
 """
 
 from app.routers import (
-    ingest,
+    admin,
     auth,
+    harmonization,
     compliance,
     dashboard,
     econsent,
+    ethics,
     exports,
+    ingest,
     live,
     patient_requests,
     safety,
     simulate,
+    sponsor,
     stats,
     subjects,
     trials,
@@ -37,7 +48,11 @@ ALL_ROUTERS = (
     # Auth first so /api/auth/login appears at the top of the generated docs -
     # it is the first thing anybody reading them needs.
     auth.router,
+    admin.router,
+    harmonization.router,
     dashboard.router,
+    ethics.router,
+    sponsor.router,
     trials.router,
     subjects.router,
     safety.router,

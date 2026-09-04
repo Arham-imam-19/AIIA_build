@@ -174,6 +174,33 @@ export const updateEthicsApproval = (trialId, body) =>
 export const fetchSubjectDossier = (subjectId) =>
   api(`/api/subjects/${subjectId}/dossier`)
 
+export const fetchSubjectClinicalLogs = (subjectId) =>
+  api(`/api/subjects/${subjectId}/clinical-log`)
+
+export const appendSubjectClinicalLog = (subjectId, body) =>
+  api(`/api/subjects/${subjectId}/clinical-log`, { method: 'POST', body })
+
+export const fetchCoordinatorSummary = (trialId) =>
+  api(`/api/coordinator/summary${trialId ? `?trial_id=${trialId}` : ''}`)
+
+export const fetchSponsorAnalytics = (trialId) =>
+  api(`/api/sponsor/analytics${trialId ? `?trial_id=${trialId}` : ''}`)
+
+export const fetchSponsorMilestones = (trialId) =>
+  api(`/api/sponsor/regulatory-milestones${trialId ? `?trial_id=${trialId}` : ''}`)
+
+export const fetchSponsorSaeQueue = (trialId) =>
+  api(`/api/sponsor/sae-queue${trialId ? `?trial_id=${trialId}` : ''}`)
+
+export const fetchInstituteDrilldown = (siteId) =>
+  api(`/api/sponsor/institutes/${siteId}/drilldown`)
+
+export const fetchEthicsDocket = (trialId) =>
+  api(`/api/ethics/sae-docket${trialId ? `?trial_id=${trialId}` : ''}`)
+
+export const submitSaeEthicsDecision = (eventId, body) =>
+  api(`/api/ethics/sae-docket/${eventId}/adjudicate`, { method: 'POST', body })
+
 export const createStructuredSubject = (body) =>
   api('/api/subjects', { method: 'POST', body })
 

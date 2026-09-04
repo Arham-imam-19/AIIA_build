@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { fetchTrials } from '../api'
+import { fetchTrials, fetchCoordinatorSummary } from '../api'
 import DashboardLayout from './layout'
 import ParticipantIntakeModal from '../components/ParticipantIntakeModal'
 import ReportAdverseEventModal from '../components/ReportAdverseEventModal'
@@ -98,6 +98,33 @@ export default function Coordinator(props) {
   const [showAeModal, setShowAeModal] = useState(false)
   const [showDeviationModal, setShowDeviationModal] = useState(false)
   const [selectedSubjectId, setSelectedSubjectId] = useState(null)
+  const [summaryData, setSummaryData] = useState(null)
+
+  const loadSummary = () => {
+    fetchCoordinatorSummary()
+      .then((data) => {
+        if (data?.tiles?.length) setSummaryData(data)
+      })
+      .catch(() => {})
+  }
+
+  useEffect(() => {
+    loadSummary()
+  }, [])
+
+  useEffect(() => {
+    loadSummary()
+  }, [props.dashboard, props.lastEvent])
+
+  const handleRefreshAll = () => {
+    loadSummary()
+    props.onRefresh?.()
+  }
+
+  const activeDashboard = summaryData?.tiles ? {
+    ...props.dashboard,
+    tiles: summaryData.tiles,
+  } : props.dashboard
 
   // ── Ingestion pipeline state ──────────────────────────────────────────
   const [ingestResults, setIngestResults] = useState(null)
@@ -156,6 +183,7 @@ export default function Coordinator(props) {
     setIngestResults(null)
     setApprovals({})
     setToast('Batch Ingestion Verified: Screened records committed to CDISC registry under 21 CFR Part 11.')
+    handleRefreshAll()
     setTimeout(() => setToast(null), 6000)
   }
 
@@ -192,7 +220,7 @@ export default function Coordinator(props) {
           <div>
             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <span className="flex h-2 w-2 rounded-full bg-aiia-600"></span>
-              Site Clinical Actions & Intake Center
+              Site Clinical Actions &amp; Intake Center
             </h3>
             <p className="text-xs text-slate-500 mt-1">
               Execute structured CDASH participant intake, MedDRA safety reports, and protocol deviations.
@@ -218,7 +246,7 @@ export default function Coordinator(props) {
       {/* ── Intake & Source Document Automation ──────────────────────── */}
       <div className="space-y-4">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">Intake & Source Document Automation</h2>
+          <h2 className="text-lg font-bold text-slate-800">Intake &amp; Source Document Automation</h2>
           <p className="text-sm text-slate-500">Automated ingestion tools powered by AI and deterministic matching.</p>
         </div>
 
@@ -238,104 +266,130 @@ export default function Coordinator(props) {
             <button className="mt-2 bg-slate-900 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-slate-800 transition">
               Select PDF
             </button>
-            <input ref={pdfRef} type="file" accept=".pdf,.txt" className="hidden"
-              onChange={e => { if (e.target.files[0]) handleUpload(e.target.files[0], '/api/ingest/parse-pdf'); e.target.value = '' }} />
+            <input
+              ref={pdfRef}
+              type="file"
+              accept=".pdf,.txt"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.[0]) handleUpload(e.target.files[0], '/api/ingest/source-document')
+              }}
+            />
           </div>
 
           {/* ── Dropzone B: CSV ────────────────────────────────────── */}
           <div
-            className="bg-white border-2 border-dashed border-aiia-300 text-slate-700 p-8 rounded-xl flex flex-col items-center justify-center gap-4 w-full cursor-pointer hover:bg-slate-50 transition-colors"
+            className="bg-white border-2 border-dashed border-emerald-300 text-slate-700 p-8 rounded-xl flex flex-col items-center justify-center gap-4 w-full cursor-pointer hover:bg-slate-50 transition-colors"
             onClick={() => csvRef.current?.click()}
           >
-            <span className="text-4xl text-aiia-600">📁</span>
+            <span className="text-4xl text-emerald-600">📊</span>
             <div className="text-center">
-              <div className="text-base font-bold uppercase tracking-wider text-slate-900 mb-2">Bulk Screening Log Import (CSV)</div>
+              <div className="text-base font-bold uppercase tracking-wider text-slate-900 mb-2">CDISC CDASH Batch Screening Ingest (CSV)</div>
               <div className="text-sm text-slate-500 max-w-sm mx-auto">
-                Upload weekly site screening logs. Automatically syncs screen failures to Sponsor KPIs.
+                Upload raw site screening spreadsheets. Fuzzy matching maps headers to CDISC ODM DM/IE domain.
               </div>
             </div>
-            <button className="mt-2 bg-aiia-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-aiia-700 transition">
-              Upload CSV
+            <button className="mt-2 bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-emerald-800 transition">
+              Select CSV / Excel
             </button>
-            <input ref={csvRef} type="file" accept=".csv" className="hidden"
-              onChange={e => { if (e.target.files[0]) handleUpload(e.target.files[0], '/api/ingest/harmonize-screening'); e.target.value = '' }} />
+            <input
+              ref={csvRef}
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.[0]) handleUpload(e.target.files[0], '/api/ingest/screening-csv')
+              }}
+            />
           </div>
         </div>
-
-        {/* ── Loading pulse banner ──────────────────────────────────── */}
-        {isIngesting && (
-          <div className="flex items-center justify-center gap-3 bg-aiia-50 border border-aiia-200 rounded-xl px-6 py-4 animate-pulse">
-            <Spinner />
-            <span className="text-sm font-semibold text-aiia-700">Harmonizing via RapidFuzz + Groq Llama-3.1 Hybrid Pipeline...</span>
-          </div>
-        )}
-
-        {ingestError && (
-          <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-3 text-sm font-semibold text-red-700">
-            ❌ {ingestError}
-          </div>
-        )}
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════
-         INGESTION REVIEW & STANDARDIZATION QUEUE
-         ══════════════════════════════════════════════════════════════ */}
-      {ingestResults && (
-        <div className="border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden">
+      {/* Loading overlay */}
+      {isIngesting && (
+        <div className="bg-white border border-aiia-200 rounded-xl p-8 flex items-center justify-center gap-3 text-aiia-800 font-medium shadow-sm">
+          <Spinner />
+          <span>Processing Document &bull; Normalizing Terms &bull; Redacting PII &bull; Harmonizing to CDISC SDTM...</span>
+        </div>
+      )}
+
+      {/* Error display */}
+      {ingestError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-5 py-4 rounded-xl text-sm flex items-center gap-3">
+          <span className="text-lg">❌</span>
+          <div>
+            <strong>Ingestion Error:</strong> {ingestError}
+          </div>
+        </div>
+      )}
+
+      {/* ── Batch Verification & Staging Table ───────────────────────── */}
+      {ingestResults && ingestResults.records && (
+        <div className="border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden space-y-0">
           {/* Header */}
-          <div className="bg-slate-900 text-white p-5">
-            <h3 className="text-sm font-bold uppercase tracking-wider mb-3">Ingestion Review & Standardization Queue</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              <div className="bg-white/10 rounded-lg px-3 py-2">
-                <div className="text-2xl font-extrabold">{summary.total_records}</div>
-                <div className="text-[11px] uppercase tracking-wider opacity-80">Total Processed</div>
+          <div className="bg-slate-900 text-white p-5 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="text-xs text-aiia-300 font-mono font-bold uppercase tracking-wider">
+                {ingestResults.source_type} Pipeline &bull; Job #{ingestResults.job_id}
               </div>
-              <div className="bg-emerald-500/20 rounded-lg px-3 py-2">
-                <div className="text-2xl font-extrabold text-emerald-300">{summary.passed}</div>
-                <div className="text-[11px] uppercase tracking-wider opacity-80">Passed Screening</div>
-              </div>
-              <div className="bg-red-500/20 rounded-lg px-3 py-2">
-                <div className="text-2xl font-extrabold text-red-300">{summary.failed}</div>
-                <div className="text-[11px] uppercase tracking-wider opacity-80">Screen Failures</div>
-              </div>
-              <div className="bg-blue-500/20 rounded-lg px-3 py-2">
-                <div className="text-2xl font-extrabold text-blue-300">{summary.avg_confidence}%</div>
-                <div className="text-[11px] uppercase tracking-wider opacity-80">Avg Confidence</div>
-              </div>
+              <h3 className="text-lg font-bold mt-1">Batch Ingestion Verification &amp; Harmonization Review</h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Review extracted fields and fuzzy match scores before committing to primary trial database.
+              </p>
             </div>
+            {summary && (
+              <div className="flex items-center gap-3 text-xs">
+                <span className="bg-slate-800 border border-slate-700 px-3 py-1.5 rounded font-mono">
+                  Total: <strong className="text-white">{summary.total_screened}</strong>
+                </span>
+                <span className="bg-emerald-950 border border-emerald-800 text-emerald-300 px-3 py-1.5 rounded font-mono">
+                  Passed: <strong>{summary.passed}</strong>
+                </span>
+                <span className="bg-red-950 border border-red-800 text-red-300 px-3 py-1.5 rounded font-mono">
+                  Failed: <strong>{summary.screen_failures}</strong>
+                </span>
+                <span className="bg-aiia-950 border border-aiia-800 text-aiia-300 px-3 py-1.5 rounded font-mono">
+                  Avg Conf: <strong>{summary.average_confidence_pct}%</strong>
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Review Table */}
+          {/* Table */}
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-700">
-              <thead className="bg-slate-100 text-[11px] uppercase font-semibold text-slate-500 border-b border-slate-200">
+            <table className="w-full text-left text-xs text-slate-700">
+              <thead className="bg-slate-50 text-[11px] uppercase font-bold text-slate-500 border-b border-slate-200">
                 <tr>
-                  <th className="px-3 py-3 border-r border-slate-200">Subject ID</th>
-                  <th className="px-3 py-3 border-r border-slate-200">Raw Note / Symptom</th>
-                  <th className="px-3 py-3 border-r border-slate-200">CDISC / MedDRA Standard</th>
-                  <th className="px-3 py-3 border-r border-slate-200">Engine / Method</th>
-                  <th className="px-3 py-3 border-r border-slate-200">Confidence Score</th>
-                  <th className="px-3 py-3 border-r border-slate-200">Screening Outcome</th>
+                  <th className="px-3 py-3 border-r border-slate-200">De-ID Code</th>
+                  <th className="px-3 py-3 border-r border-slate-200">Age / Sex</th>
+                  <th className="px-3 py-3 border-r border-slate-200">Dosha (Prakriti)</th>
+                  <th className="px-3 py-3 border-r border-slate-200">Chief Complaint</th>
+                  <th className="px-3 py-3 border-r border-slate-200">Vital Signs</th>
+                  <th className="px-3 py-3 border-r border-slate-200">CDISC Match Quality</th>
+                  <th className="px-3 py-3 border-r border-slate-200">Outcome</th>
                   <th className="px-3 py-3 text-center">Approve</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {ingestResults.records.map((rec, idx) => (
-                  <tr key={idx} className={`hover:bg-slate-50 ${approvals[idx] ? '' : 'opacity-40'}`}>
-                    <td className="px-3 py-3 border-r border-slate-100 font-mono text-xs font-bold">{rec.subject_id}</td>
-                    <td className="px-3 py-3 border-r border-slate-100 italic text-slate-600 max-w-[200px] truncate">{rec.raw_symptom}</td>
-                    <td className="px-3 py-3 border-r border-slate-100 font-bold text-emerald-700">{rec.harmonized_term}</td>
-                    <td className="px-3 py-3 border-r border-slate-100">
-                      <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase border ${
-                        rec.method === 'RapidFuzz'
-                          ? 'bg-blue-50 text-blue-700 border-blue-200'
-                          : 'bg-purple-50 text-purple-700 border-purple-200'
-                      }`}>
-                        {rec.method === 'RapidFuzz' ? 'Deterministic (RapidFuzz)' : 'Semantic AI (Groq Llama 3.1)'}
-                      </span>
+                  <tr key={idx} className={`hover:bg-slate-50 ${!approvals[idx] ? 'opacity-40 bg-slate-50' : ''}`}>
+                    <td className="px-3 py-3 font-mono font-bold text-slate-900 border-r border-slate-100">
+                      {rec.subject_code}
                     </td>
                     <td className="px-3 py-3 border-r border-slate-100">
-                      <ConfBadge value={rec.confidence} />
+                      {rec.age ? `${rec.age}y` : '—'} / {rec.sex || '—'}
+                    </td>
+                    <td className="px-3 py-3 border-r border-slate-100 font-medium">
+                      {rec.prakriti || '—'}
+                    </td>
+                    <td className="px-3 py-3 border-r border-slate-100 max-w-xs truncate" title={rec.chief_complaint}>
+                      {rec.chief_complaint || '—'}
+                    </td>
+                    <td className="px-3 py-3 font-mono text-[11px] border-r border-slate-100">
+                      {rec.vitals ? `BP: ${rec.vitals.blood_pressure || '—'} | HR: ${rec.vitals.heart_rate || '—'}` : '—'}
+                    </td>
+                    <td className="px-3 py-3 border-r border-slate-100">
+                      <ConfBadge value={rec.confidence_pct || 90} />
                     </td>
                     <td className="px-3 py-3 border-r border-slate-100">
                       <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
@@ -370,7 +424,7 @@ export default function Coordinator(props) {
                 Discard Batch
               </button>
               <button onClick={handleApprove} className="px-5 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition shadow-sm">
-                Approve & Sync to Site KPIs
+                Approve &amp; Sync to Site KPIs
               </button>
             </div>
           </div>
@@ -382,16 +436,37 @@ export default function Coordinator(props) {
         <OpenDataQueries />
         <DashboardLayout
           {...props}
+          dashboard={activeDashboard}
           wide={['upcoming', 'screening']}
           note="Your worklist for the next two weeks. An overdue visit becomes a protocol deviation if it slips outside its window, so these dates are the ones that matter."
         />
       </div>
 
       {/* ── Modals ───────────────────────────────────────────────────── */}
-      {showIntakeModal && <ParticipantIntakeModal onClose={() => setShowIntakeModal(false)} onSuccess={props.onRefresh} />}
-      {showAeModal && <ReportAdverseEventModal onClose={() => setShowAeModal(false)} onSuccess={props.onRefresh} />}
-      {showDeviationModal && <LogProtocolDeviationModal onClose={() => setShowDeviationModal(false)} onSuccess={props.onRefresh} />}
-      {selectedSubjectId && <ParticipantDossierModal subjectId={selectedSubjectId} onClose={() => setSelectedSubjectId(null)} />}
+      {showIntakeModal && (
+        <ParticipantIntakeModal
+          onClose={() => setShowIntakeModal(false)}
+          onSuccess={handleRefreshAll}
+        />
+      )}
+      {showAeModal && (
+        <ReportAdverseEventModal
+          onClose={() => setShowAeModal(false)}
+          onSuccess={handleRefreshAll}
+        />
+      )}
+      {showDeviationModal && (
+        <LogProtocolDeviationModal
+          onClose={() => setShowDeviationModal(false)}
+          onSuccess={handleRefreshAll}
+        />
+      )}
+      {selectedSubjectId && (
+        <ParticipantDossierModal
+          subjectId={selectedSubjectId}
+          onClose={() => setSelectedSubjectId(null)}
+        />
+      )}
     </div>
   )
 }

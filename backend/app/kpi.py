@@ -186,6 +186,7 @@ def _recent_ae_rows(
             "causality": event.causality.replace("_", " "),
             "onset": event.onset_date.isoformat() if event.onset_date else None,
             "outcome": event.outcome.replace("_", " "),
+            "ec_decision": event.ec_decision or ("pending" if event.is_serious else "NON_SERIOUS"),
         }
         for event in events
     ]
@@ -253,6 +254,9 @@ def _sae_reporting(session: Session, trial_id: int, user: CurrentUser) -> dict:
                 "days": delay,
                 "urgency": urgency,
                 "verdict": verdict,
+                "ec_decision": event.ec_decision or "pending",
+                "ec_decision_date": event.ec_decision_date.isoformat() if event.ec_decision_date else None,
+                "ec_decision_notes": event.ec_decision_notes,
             }
         )
 
@@ -599,6 +603,7 @@ def _ethics(session, user, stats, trial, today) -> tuple[list, list]:
              ("criteria", "Why serious"), ("onset", "Onset"),
              ("urgency", "24h Regulatory Clock"),
              ("reported", "Reported"), ("to_ethics", "To ethics"),
+             ("ec_decision", "IEC Decision"),
              ("days", "Days"), ("verdict", "Verdict")],
             sae["rows"],
             note=f"The window used here is {SAE_REPORTING_WINDOW_DAYS} days. Phase 5 "
@@ -740,7 +745,8 @@ def _regulator(session, user, stats, trial, today) -> tuple[list, list]:
                 "Serious adverse events",
                 [("ae_number", "AE"), ("site", "Site"), ("term", "Event"),
                  ("onset", "Onset"), ("urgency", "24h Regulatory Clock"),
-                 ("to_ethics", "To ethics"), ("days", "Days"), ("verdict", "Verdict")],
+                 ("to_ethics", "To ethics"), ("ec_decision", "IEC Decision"),
+                 ("days", "Days"), ("verdict", "Verdict")],
                 sae["rows"],
                 empty="No serious adverse events reported.",
             ),

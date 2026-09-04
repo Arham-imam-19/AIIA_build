@@ -58,10 +58,26 @@ export default function Shell({ view, setView, live, children }) {
 
   const navItems = [
     ['dashboard', 'Dashboard'],
+    ...((user.role === 'coordinator' || user.permissions?.includes('subject:write'))
+      ? [
+          ['screen_participant', 'Screen New Participant'],
+        ]
+      : []),
+    ...((user.role === 'coordinator' || user.role === 'principal_investigator' || user.role === 'institution_admin' || user.permissions?.includes('subject:read'))
+      ? [
+          ['view_participants', 'View Participants'],
+        ]
+      : []),
     ...(user.role === 'admin'
       ? [
           ['infrastructure', 'Clinical Infrastructure & Actions'],
           ['create_account', '+ Create New Account'],
+          ['cdisc_ingest', 'CDISC Harmonizer (Import)'],
+        ]
+      : []),
+    ...((user.role !== 'sponsor' && (user.permissions?.includes('export') || user.role === 'regulator' || user.role === 'coordinator' || user.role === 'admin'))
+      ? [
+          ['cdisc_export', 'CDISC Harmonizer (Export)'],
         ]
       : []),
     ['access', 'Access Rules & Matrix'],

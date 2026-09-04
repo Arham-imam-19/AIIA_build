@@ -2,7 +2,9 @@
 
 from datetime import date, datetime
 
-from sqlmodel import Field, SQLModel
+import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlmodel import Column, Field, SQLModel
 
 from app.models.base import utcnow
 
@@ -60,6 +62,38 @@ class Subject(SQLModel, table=True):
     # --- Ayurveda-specific baseline. One of enums.Prakriti; Phase 6 expands
     # --- this into a full per-dosha assessment.
     prakriti: str | None = Field(default=None, max_length=30, index=True)
+    suppqual: dict = Field(
+        default_factory=dict,
+        sa_column=Column(sa.JSON().with_variant(JSONB, "postgresql")),
+    )
+
+    # --- Eligibility
+    inclusion_criteria: dict = Field(
+        default_factory=dict,
+        sa_column=Column(sa.JSON().with_variant(JSONB, "postgresql")),
+    )
+    exclusion_criteria: dict = Field(
+        default_factory=dict,
+        sa_column=Column(sa.JSON().with_variant(JSONB, "postgresql")),
+    )
+    eligibility_outcome: str | None = Field(default=None, max_length=50)
+    protocol_version: str | None = Field(default=None, max_length=30)
+    
+    # --- Consent
+    icf_version: str | None = Field(default=None, max_length=30)
+    consent_date: datetime | None = Field(default=None)
+    consent_obtained_by: str | None = Field(default=None, max_length=100)
+    withdrawal_of_consent: bool = Field(default=False)
+    
+    # --- Demographics (Additional)
+    ethnicity: str | None = Field(default=None, max_length=50)
+
+    # --- Randomization (Additional)
+    randomized_by: str | None = Field(default=None, max_length=100)
+
+    # --- Audit Metadata (Additional)
+    created_by_id: int | None = Field(default=None, foreign_key="users.id", index=True)
+    updated_by_id: int | None = Field(default=None, foreign_key="users.id", index=True)
 
     # --- Exits.
     completed_date: date | None = Field(default=None)

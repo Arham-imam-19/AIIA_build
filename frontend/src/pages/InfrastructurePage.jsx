@@ -324,8 +324,11 @@ export default function InfrastructurePage({ onNavigateDashboard }) {
                 <p className="font-bold">RESET COMPLETED SUCCESSFULLY</p>
                 <p>&bull; Cleared {cleanSlateResult.cleared_subjects} synthetic participant dossiers.</p>
                 <p>&bull; Cleared {cleanSlateResult.cleared_visits} study visit records.</p>
+                <p>&bull; Cleared {cleanSlateResult.cleared_clinical_logs || 0} clinical progress logs.</p>
                 <p>&bull; Cleared {cleanSlateResult.cleared_adverse_events} adverse events.</p>
-                <p>&bull; Preserved all registered hospital sites, user accounts, and 21 CFR Part 11 audit trails.</p>
+                <p>&bull; Cleared {cleanSlateResult.cleared_econsents || 0} electronic consents.</p>
+                <p>&bull; Cleared {cleanSlateResult.cleared_patient_accounts || 0} synthetic patient logins.</p>
+                <p>&bull; Preserved {cleanSlateResult.preserved_sites} registered hospital sites and {cleanSlateResult.preserved_staff_users} authorized staff accounts.</p>
                 <div className="pt-2">
                   <button
                     onClick={() => {
@@ -341,7 +344,7 @@ export default function InfrastructurePage({ onNavigateDashboard }) {
             ) : (
               <div className="mt-4 space-y-3 text-xs">
                 <div className="border border-amber-300 bg-amber-50 p-3 text-amber-900 text-[11px]">
-                  <strong>Notice:</strong> All synthetic participant records, visits, adverse events, and e-consents will be permanently purged. Core trial definitions, registered hospital sites, user login accounts, and statutory audit logs will be preserved.
+                  <strong>Notice:</strong> All synthetic participant records, visits, clinical logs, adverse events, and e-consents across all trials and sites will be permanently purged. Core trial protocols, registered hospital sites, staff accounts, and statutory 21 CFR Part 11 audit logs will be preserved.
                 </div>
                 <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
                   <button

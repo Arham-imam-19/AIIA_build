@@ -170,6 +170,13 @@ class AdverseEventPublic(SQLModel):
     reported_date: date | None = None
     reported_to_ec: bool = False
     reported_to_ec_date: date | None = None
+
+    # Ethics Committee (IEC) Decision & Adjudication
+    ec_decision: str | None = None
+    ec_decision_date: date | None = None
+    ec_decision_notes: str | None = None
+    ec_reviewed_by_user_id: int | None = None
+
     created_at: datetime
     updated_at: datetime
 
@@ -404,8 +411,68 @@ def code_adverse_event(
         reason=f"MedDRA coding assigned: {body.meddra_pt_term}",
         trial_id=event.trial_id,
     )
-    session.commit()
     session.refresh(event)
     
+    return _hydrate_adverse_event(event)
+
+
+class AdverseEventEthicsDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision: str  # "accepted", "rejected", "action_required", "pending"
+    notes: str | None = None
+    decision_date: date | None = None
+
+
+@router.patch("/adverse-events/{event_id}/ethics-decision", response_model=AdverseEventPublic)
+def record_adverse_event_ethics_decision(
+    event_id: int,
+    body: AdverseEventEthicsDecision,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.ETHICS_WRITE)),
+) -> AdverseEventPublic:
+    """Record an official Ethics Committee (IEC) review decision for an adverse event."""
+    event = session.get(AdverseEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail=f"Adverse event {event_id} not found")
+
+    old_decision = event.ec_decision
+    now = utcnow()
+    clean_decision = body.decision.lower().strip()
+    if clean_decision not in {"accepted", "rejected", "action_required", "pending"}:
+        raise HTTPException(
+            status_code=422,
+            detail="Decision must be one of: 'accepted', 'rejected', 'action_required', 'pending'",
+        )
+
+    event.ec_decision = clean_decision
+    event.ec_decision_date = body.decision_date or now.date()
+    event.ec_decision_notes = body.notes.strip() if body.notes else None
+    event.ec_reviewed_by_user_id = user.id
+    event.updated_at = now
+
+    session.add(event)
+    session.flush()
+
+    audit.record(
+        session,
+        user=user,
+        action=AuditAction.UPDATE,
+        entity_type="adverse_events",
+        entity_id=event.id,
+        entity_label=event.ae_number,
+        field_name="ec_decision",
+        old_value=old_decision,
+        new_value=json.dumps({
+            "ec_decision": event.ec_decision,
+            "ec_decision_date": str(event.ec_decision_date),
+            "ec_decision_notes": event.ec_decision_notes,
+        }),
+        reason=f"IEC Ruling recorded: {event.ec_decision.upper()}. Directive: {event.ec_decision_notes or 'Standard Monitoring'}",
+        trial_id=event.trial_id,
+    )
+    session.commit()
+    session.refresh(event)
+
     return _hydrate_adverse_event(event)
 

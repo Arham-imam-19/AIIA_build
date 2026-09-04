@@ -8,11 +8,15 @@ import { Block } from '../blocks'
 const ROLE_DISPLAY_NAMES = {
   admin: 'Primary System Administrator',
   institution_admin: 'Institution Site Admin',
+  principal_investigator: 'Principal Investigator',
+  coordinator: 'Clinical Research Coordinator',
+  ethics_committee: 'Ethics Committee Member',
   sponsor: 'Trial Sponsor (Director / Funder)',
-  regulator: 'Regulator (CDSCO)',
-  pharmacovigilance: 'Pharmacovigilance (NPvCC)',
+  regulator: 'CDSCO Regulatory Inspector',
   dsmb: 'Data and Safety Monitoring Board (DSMB)',
-  monitor: 'Monitor',
+  pharmacovigilance: 'Pharmacovigilance Officer (NPvCC)',
+  monitor: 'Clinical Trial Monitor (CRA)',
+  patient: 'Enrolled Trial Participant',
 }
 
 const mockProtocols = [
@@ -55,6 +59,10 @@ export default function Admin(props) {
   const [showTrialModal, setShowTrialModal] = useState(false)
   const [showSiteModal, setShowSiteModal] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [resettingUser, setResettingUser] = useState(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [resetBusy, setResetBusy] = useState(false)
+  const [resetMsg, setResetMsg] = useState(null)
   const [cleanSlateBusy, setCleanSlateBusy] = useState(false)
   const [cleanSlateResult, setCleanSlateResult] = useState(null)
   const [activeTab, setActiveTab] = useState('governance')
@@ -77,7 +85,6 @@ export default function Admin(props) {
   const auditLogs = auditBlock?.rows || []
   const auditColumns = auditBlock?.columns || []
 
-  // HARD DELETE: 'Serious adverse events' Table (sae_reporting)
   const genericTab1Blocks = originalBlocks.filter(b => !['audit_tail', 'sae_reporting', 'sites'].includes(b.key))
   const tab2Blocks = originalBlocks.filter(b => ['sites'].includes(b.key))
 
@@ -135,6 +142,26 @@ export default function Admin(props) {
     }
   }
 
+  async function handleResetPassword(e) {
+    e.preventDefault()
+    if (!resettingUser || !newPassword) return
+    setResetBusy(true)
+    setResetMsg(null)
+    try {
+      await updateUser(resettingUser.id, { password: newPassword })
+      setResetMsg('Password successfully updated!')
+      setNewPassword('')
+      setTimeout(() => {
+        setResettingUser(null)
+        setResetMsg(null)
+      }, 1500)
+    } catch (err) {
+      setResetMsg(`Failed to update password: ${err.message}`)
+    } finally {
+      setResetBusy(false)
+    }
+  }
+
   const siteMap = Object.fromEntries(sites.map((s) => [s.id, s.name]))
 
   return (
@@ -160,24 +187,25 @@ export default function Admin(props) {
       <div className="flex border-b border-slate-300 bg-white shadow-sm">
         <button
           onClick={() => setActiveTab('governance')}
-          className={`px-5 py-3 text-[11px] font-bold uppercase tracking-wider ${activeTab === 'governance' ? 'border-b-2 border-slate-900 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+          className={`px-5 py-3 text-[11px] font-bold uppercase tracking-wider transition ${activeTab === 'governance' ? 'border-b-2 border-slate-900 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
         >
           System Governance
         </button>
         <button
           onClick={() => setActiveTab('personnel')}
-          className={`px-5 py-3 text-[11px] font-bold uppercase tracking-wider ${activeTab === 'personnel' ? 'border-b-2 border-slate-900 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+          className={`px-5 py-3 text-[11px] font-bold uppercase tracking-wider transition ${activeTab === 'personnel' ? 'border-b-2 border-slate-900 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
         >
-          Personnel & Sites
+          Personnel &amp; Sites
         </button>
         <button
           onClick={() => setActiveTab('advanced')}
-          className={`px-5 py-3 text-[11px] font-bold uppercase tracking-wider ${activeTab === 'advanced' ? 'border-b-2 border-slate-900 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+          className={`px-5 py-3 text-[11px] font-bold uppercase tracking-wider transition ${activeTab === 'advanced' ? 'border-b-2 border-slate-900 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
         >
-          Advanced Actions
+          Advanced Actions &amp; Clean Slate
         </button>
       </div>
 
+      {/* Tab 1: System Governance */}
       {activeTab === 'governance' && (
         <div className="space-y-6">
           <DashboardLayout
@@ -208,28 +236,29 @@ export default function Admin(props) {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Block block={ndctBlock} wide={true} />
             
+            {/* Custom Audit Logs Table with Role Filter */}
             {auditBlock && (
-              <div className="col-span-full rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 className="mb-1 text-sm font-semibold text-slate-800">System Access Audit Log</h3>
-                <p className="mb-4 text-xs text-slate-500">21 CFR Part 11 Compliant Electronic Audit Trail.</p>
+              <div className="col-span-full rounded-none border border-slate-300 bg-white p-5 shadow-sm">
+                <h3 className="mb-1 text-sm font-bold text-slate-800">{auditBlock.title || 'System Access Audit Log'}</h3>
+                <p className="mb-4 text-xs text-slate-500">{auditBlock.note || '21 CFR Part 11 Compliant Electronic Audit Trail.'}</p>
                 <div className="-mx-1 overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full text-xs">
                     <thead>
-                      <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
+                      <tr className="text-left text-[11px] font-bold uppercase tracking-wide text-slate-600 bg-slate-100 border-b border-slate-200">
                         {auditColumns.map(col => (
-                          <th key={col.key} className="whitespace-nowrap px-1 pb-2 font-medium">
+                          <th key={col.key} className="whitespace-nowrap px-3 py-2">
                             {col.label}
                           </th>
                         ))}
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-slate-100">
                       {auditLogs
                         .filter(log => ['admin', 'institution admin', 'institution site admin', 'sponsor', 'pharmacovigilance', 'regulator', 'monitor'].includes((log.role || '').toLowerCase()))
                         .map((log, index) => (
-                        <tr key={index} className="border-t border-slate-100 align-top">
+                        <tr key={index} className="hover:bg-slate-50">
                           {auditColumns.map(col => (
-                            <td key={col.key} className="px-1 py-2 text-slate-700" style={{ maxWidth: '22rem' }}>
+                            <td key={col.key} className="px-3 py-2 text-slate-700 font-mono text-[11px]" style={{ maxWidth: '22rem' }}>
                               {log[col.key]}
                             </td>
                           ))}
@@ -245,10 +274,10 @@ export default function Admin(props) {
               <Block key={block.key} block={block} wide={['ndct_gates'].includes(block.key)} />
             ))}
           </div>
-          
         </div>
       )}
 
+      {/* Tab 2: Personnel & Sites */}
       {activeTab === 'personnel' && (
         <div className="space-y-6">
           <div className="border border-slate-300 bg-white p-5 shadow-sm">
@@ -273,6 +302,12 @@ export default function Admin(props) {
                   className="border border-slate-400 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-200 transition"
                 >
                   Clinical Infrastructure &amp; Actions &rarr;
+                </button>
+                <button
+                  onClick={() => setShowResetConfirm(true)}
+                  className="border border-red-500 bg-red-50 px-4 py-2 text-xs font-semibold text-red-800 hover:bg-red-100 transition"
+                >
+                  Reset Test Data (Clean Slate)
                 </button>
               </div>
             </div>
@@ -346,24 +381,25 @@ export default function Admin(props) {
                       <th className="border-r border-slate-300 px-3.5 py-2.5">Statutory Role</th>
                       <th className="border-r border-slate-300 px-3.5 py-2.5">Designated Center</th>
                       <th className="border-r border-slate-300 px-3.5 py-2.5">Account Status</th>
-                      <th className="border-slate-300 px-3.5 py-2.5">Last Authentication</th>
+                      <th className="border-r border-slate-300 px-3.5 py-2.5">Last Authentication</th>
+                      <th className="px-3.5 py-2.5 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {loading ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                        <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
                           Loading user directory from database...
                         </td>
                       </tr>
                     ) : users.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                        <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
                           No registered user accounts match the selected criteria.
                         </td>
                       </tr>
                     ) : (
-                      users.filter(u => ['institution_admin', 'sponsor', 'admin', 'regulator', 'pharmacovigilance', 'dsmb', 'monitor'].includes(u.role)).map((u) => (
+                      users.filter(u => u.role !== 'patient').map((u) => (
                         <tr key={u.id} className="hover:bg-slate-50">
                           <td className="border-r border-slate-200 px-3.5 py-2.5">
                             <div className="font-bold text-slate-900">
@@ -396,10 +432,18 @@ export default function Admin(props) {
                               {u.is_active ? 'Active' : 'Suspended'}
                             </button>
                           </td>
-                          <td className="border-slate-200 px-3.5 py-2.5 font-mono text-[11px] text-slate-600">
+                          <td className="border-r border-slate-200 px-3.5 py-2.5 font-mono text-[11px] text-slate-600">
                             {u.last_login_at
                               ? new Date(u.last_login_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
                               : 'Never'}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right">
+                            <button
+                              onClick={() => setResettingUser(u)}
+                              className="border border-slate-400 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-800 hover:bg-slate-100"
+                            >
+                              Reset Password
+                            </button>
                           </td>
                         </tr>
                       ))
@@ -418,12 +462,20 @@ export default function Admin(props) {
         </div>
       )}
 
+      {/* Tab 3: Advanced Actions & Clean Slate */}
       {activeTab === 'advanced' && (
         <div className="space-y-6">
           <div className="border border-slate-300 bg-white p-6 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900 border-b border-slate-200 pb-2">Production Data Reset &amp; Clean Slate Control</h3>
-            <p className="text-xs text-slate-600 mt-2">Administrative action to clear synthetic records.</p>
-            <button onClick={() => setShowResetConfirm(true)} className="mt-4 border border-red-700 bg-red-700 px-4 py-2 text-xs font-semibold text-white hover:bg-red-800 transition">
+            <h3 className="text-sm font-bold text-slate-900 border-b border-slate-200 pb-2">
+              Production Data Reset &amp; Clean Slate Control
+            </h3>
+            <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+              Administrative action to clear all synthetic participant records, clinical progress logs, study visits, and adverse events across all sites and trials to prepare the CTMS portal for 100% real subject intake.
+            </p>
+            <button 
+              onClick={() => setShowResetConfirm(true)} 
+              className="mt-4 border border-red-700 bg-red-700 px-5 py-2.5 text-xs font-bold text-white hover:bg-red-800 transition"
+            >
               Execute Clean Slate Reset
             </button>
           </div>
@@ -452,6 +504,59 @@ export default function Admin(props) {
         />
       )}
 
+      {/* Password Reset Modal */}
+      {resettingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
+          <div className="w-full max-w-md border border-slate-400 bg-white p-6 shadow-xl">
+            <h3 className="text-base font-bold text-slate-900 border-b border-slate-200 pb-2">
+              Reset Password: {resettingUser.full_name}
+            </h3>
+            <p className="text-xs text-slate-600 mt-2">
+              Enter a new secure password for {resettingUser.email}.
+            </p>
+
+            {resetMsg && (
+              <div className="mt-3 border border-blue-400 bg-blue-50 p-2.5 text-xs text-blue-900">
+                {resetMsg}
+              </div>
+            )}
+
+            <form onSubmit={handleResetPassword} className="mt-4 space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-800">
+                  New Password <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                  className="mt-1 w-full border border-slate-300 bg-white p-2 font-mono text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setResettingUser(null)}
+                  className="border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetBusy}
+                  className="border border-slate-800 bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-black disabled:opacity-50"
+                >
+                  {resetBusy ? 'Updating...' : 'Update Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Clean Slate Confirmation Modal */}
       {showResetConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
@@ -460,7 +565,7 @@ export default function Admin(props) {
               Confirm Production Clean Slate Reset
             </h3>
             <p className="text-xs text-slate-600 mt-2">
-              This administrative action clears all synthetic participant records and simulated clinical visits to prepare the CTMS portal for 100% real subject intake.
+              This administrative action clears all synthetic participant records, running clinical progress logs, study visits, and adverse events across all sites and trials to prepare the CTMS portal for 100% real subject intake.
             </p>
 
             {cleanSlateResult ? (
@@ -468,8 +573,11 @@ export default function Admin(props) {
                 <p className="font-bold">RESET COMPLETED SUCCESSFULLY</p>
                 <p>&bull; Cleared {cleanSlateResult.cleared_subjects} synthetic participant dossiers.</p>
                 <p>&bull; Cleared {cleanSlateResult.cleared_visits} study visit records.</p>
+                <p>&bull; Cleared {cleanSlateResult.cleared_clinical_logs || 0} clinical progress logs.</p>
                 <p>&bull; Cleared {cleanSlateResult.cleared_adverse_events} adverse events.</p>
-                <p>&bull; Preserved all registered hospital sites, user accounts, and 21 CFR Part 11 audit trails.</p>
+                <p>&bull; Cleared {cleanSlateResult.cleared_econsents || 0} electronic consents.</p>
+                <p>&bull; Cleared {cleanSlateResult.cleared_patient_accounts || 0} synthetic patient logins.</p>
+                <p>&bull; Preserved {cleanSlateResult.preserved_sites} registered hospital sites and {cleanSlateResult.preserved_staff_users} authorized staff accounts.</p>
                 <div className="pt-2">
                   <button
                     onClick={() => {
@@ -485,7 +593,7 @@ export default function Admin(props) {
             ) : (
               <div className="mt-4 space-y-3 text-xs">
                 <div className="border border-amber-300 bg-amber-50 p-3 text-amber-900 text-[11px]">
-                  <strong>Notice:</strong> All synthetic participant records, visits, adverse events, and e-consents will be permanently purged. Core trial definitions, registered hospital sites, user login accounts, and statutory audit logs will be preserved.
+                  <strong>Notice:</strong> All synthetic participant records, visits, clinical logs, adverse events, and e-consents across all trials and sites will be permanently purged. Core trial protocols, registered hospital sites, staff accounts, and statutory 21 CFR Part 11 audit logs will be preserved.
                 </div>
                 <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
                   <button
