@@ -1,0 +1,8 @@
+Subject_ID,Age_Years,Gender,Reported_Symptom,Eligibility_Status,Screening_Notes
+SUB-101,42,Female,nausea,PASSED,Met all inclusion criteria; vitals stable
+SUB-102,58,Male,severe migraine headache,PASSED,Normal ECG; chronic tension migraine noted
+SUB-103,31,Female,felt dizzy and threw up after meal,PASSED,Gastrointestinal upset resolved; baseline bloods normal
+SUB-104,68,Male,tummy ache with high fever,FAILED,Exceeds protocol age window (>65) and pyrexia
+SUB-105,25,Female,mild fatigue,PASSED,Cleared clinical screening; baseline vitals WNL
+SUB-106,49,Male,burning chest pain radiating to left arm,FAILED,Excluded: potential acute coronary syndrome
+SUB-107,38,Female,intermittent joint stiffness,PASSED,Mild Vata imbalance; meets arthritic trial inclusion

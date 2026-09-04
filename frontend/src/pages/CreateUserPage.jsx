@@ -1,47 +1,43 @@
 import { useEffect, useState } from 'react'
 import { createUser, fetchSites } from '../api'
 
+// STRICT DELEGATED ADMINISTRATION ROLES FOR PRIMARY ADMIN
 const AVAILABLE_ROLES = [
   {
-    role: 'principal_investigator',
-    label: 'Principal Investigator (PI)',
-    desc: 'Lead Clinical Physician. Authorized for clinical write operations, subject consent verification, and medical monitoring at assigned site.',
-    requiresSite: true,
-  },
-  {
-    role: 'coordinator',
-    label: 'Clinical Research Coordinator (CRC)',
-    desc: 'Study Coordinator. Manages subject screening, visit scheduling, vital logs, and CRF data entry.',
-    requiresSite: true,
-  },
-  {
     role: 'institution_admin',
-    label: 'Institution / Hospital Site Administrator',
+    label: 'Institution Site Admin',
     desc: 'Hospital Site Administrator. Oversees hospital site research infrastructure and site personnel.',
     requiresSite: true,
   },
   {
-    role: 'ethics_committee',
-    label: 'Institutional Ethics Committee (IEC)',
-    desc: 'Independent Ethics & Safety Reviewer. Oversees protocol deviations, SAE review, and ethical approvals.',
+    role: 'monitor',
+    label: 'Monitor',
+    desc: 'Independent auditor: performs Source Data Verification (SDV).',
     requiresSite: false,
   },
+
   {
     role: 'sponsor',
-    label: 'Trial Sponsor / Clinical Monitor (CRA)',
-    desc: 'Trial Sponsor & Monitoring Unit. Oversees recruitment metrics, cross-site compliance, and data exports.',
+    label: 'Sponsor (Director / Funder)',
+    desc: 'Trial Sponsor Unit. Oversees recruitment metrics, cross-site compliance, and data exports.',
     requiresSite: false,
   },
   {
     role: 'regulator',
-    label: 'Regulatory Inspector (CDSCO / Ministry of Ayush)',
+    label: 'Regulator (CDSCO)',
     desc: 'Statutory Regulatory Authority. Full audit inspection access under 21 CFR Part 11 and NDCT Rules 2019.',
     requiresSite: false,
   },
   {
-    role: 'admin',
-    label: 'Primary System Administrator',
-    desc: 'Central Administrator. Global provisioning, user role assignments, and system infrastructure control.',
+    role: 'pharmacovigilance',
+    label: 'Pharmacovigilance (NPvCC)',
+    desc: 'National Pharmacovigilance Coordination Centre. Monitors SAEs and SUSARs.',
+    requiresSite: false,
+  },
+  {
+    role: 'dsmb',
+    label: 'Data and Safety Monitoring Board (DSMB)',
+    desc: 'Independent Data and Safety Monitoring Board. Reviews unblinded safety and efficacy data.',
     requiresSite: false,
   },
 ]
@@ -98,6 +94,7 @@ export default function CreateUserPage({ onNavigateDashboard }) {
         organization: organization.trim() || undefined,
         phone: phone.trim() || undefined,
       })
+
       setSuccessMsg(`Account for "${fullName}" (${email}) successfully created with role "${selectedRoleConfig?.label}".`)
       setFullName('')
       setEmail('')
@@ -124,7 +121,7 @@ export default function CreateUserPage({ onNavigateDashboard }) {
               User Account Provisioning & Role Allocation
             </h2>
             <p className="mt-0.5 text-xs text-slate-600">
-              Official registration of authorized clinical research personnel, principal investigators, and regulatory monitors.
+              Official registration of Institution Administrators and Global Oversight Personnel (Sponsors, Regulators, NPvCC, DSMB). Local clinical staff must be provisioned by their respective Institution Site Admins.
             </p>
           </div>
           <button
@@ -264,77 +261,71 @@ export default function CreateUserPage({ onNavigateDashboard }) {
             )}
           </div>
 
-          {selectedRoleConfig?.requiresSite && (
-            <div className="mt-4">
-              <label className="block font-semibold text-slate-800">
-                Designated Hospital / Research Site <span className="text-red-600">*</span>
-              </label>
-              <select
-                value={siteId}
-                onChange={(e) => setSiteId(e.target.value)}
-                className="mt-1 w-full border border-slate-300 bg-white p-2.5 text-xs font-semibold text-slate-900 focus:border-slate-800 focus:outline-none"
-                required
-              >
-                {sites.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} (Site Code: {s.site_code}) — {s.city}, {s.state}
-                  </option>
-                ))}
-              </select>
-              <span className="text-[10px] text-slate-500">
-                Site-scoped roles will have clinical access strictly restricted to this participating institution.
-              </span>
-            </div>
-          )}
+          <div className="mt-4">
+            <label className="block font-semibold text-slate-800">
+              Designated Hospital / Research Site <span className="text-red-600">*</span>
+            </label>
+            <select
+              value={selectedRoleConfig?.requiresSite ? siteId : ''}
+              onChange={(e) => setSiteId(e.target.value)}
+              disabled={!selectedRoleConfig?.requiresSite}
+              className={`mt-1 w-full border border-slate-300 p-2.5 text-xs font-semibold text-slate-900 focus:border-slate-800 focus:outline-none ${
+                !selectedRoleConfig?.requiresSite ? 'bg-slate-100 opacity-70 cursor-not-allowed' : 'bg-white'
+              }`}
+              required
+            >
+              {!selectedRoleConfig?.requiresSite && (
+                <option value="">Global (Multi-Centric) - All Sites</option>
+              )}
+              {selectedRoleConfig?.requiresSite && sites.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} (Site Code: {s.site_code}) &mdash; {s.city}, {s.state}
+                </option>
+              ))}
+            </select>
+          </div>
         </fieldset>
 
-        {/* Section 3: Credentials & Statutory Audit */}
+        {/* Section 3: Credentials */}
         <fieldset className="border border-slate-200 p-4">
           <legend className="px-2 font-bold uppercase tracking-wider text-slate-700 text-[11px]">
-            3. Authentication Credentials & 21 CFR Part 11 Audit
+            3. Authentication Credentials
           </legend>
-
+          
           <div className="mt-2">
-            <div className="flex items-center justify-between">
-              <label className="font-semibold text-slate-800">
-                Initial Account Password <span className="text-red-600">*</span>
-              </label>
-              <button
-                type="button"
-                onClick={generatePassword}
-                className="text-[11px] font-bold text-slate-700 underline hover:text-slate-900"
-              >
-                Generate Random Password
-              </button>
-            </div>
-            <div className="mt-1 flex items-center gap-2">
+            <label className="block font-semibold text-slate-800">
+              Temporary Portal Password <span className="text-red-600">*</span>
+            </label>
+            <div className="mt-1 flex gap-2">
               <input
                 type={showPassword ? 'text' : 'password'}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full border border-slate-300 bg-white p-2.5 font-mono text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
+                className="w-full border border-slate-300 bg-white p-2.5 text-xs font-mono text-slate-900 focus:border-slate-800 focus:outline-none"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="border border-slate-300 bg-slate-100 px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                className="border border-slate-400 bg-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-800 hover:bg-slate-200"
               >
                 {showPassword ? 'Hide' : 'Show'}
               </button>
+              <button
+                type="button"
+                onClick={generatePassword}
+                className="border border-slate-800 bg-slate-900 px-3 py-2 text-[11px] font-semibold text-white hover:bg-black"
+              >
+                Generate
+              </button>
             </div>
-            <span className="text-[10px] text-slate-500">
-              Credentials will be salted and hashed using Argon2id / BCrypt before database storage.
-            </span>
-          </div>
-
-          <div className="mt-4 border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-700">
-            <strong>21 CFR Part 11 Audit Log Notice:</strong> Provisioning this account will record an immutable electronic signature log containing the Administrator ID, IP address, timestamp, and role assignments in accordance with CDSCO NDCT Rules 2019.
+            <p className="mt-1.5 text-[10px] text-slate-500">
+              The user will be required to change this temporary password upon first authentication to comply with 21 CFR Part 11 electronic signature rules.
+            </p>
           </div>
         </fieldset>
 
-        {/* Form Action Buttons */}
-        <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-slate-200">
+        <div className="border-t border-slate-300 bg-slate-50 p-4 -mx-6 -mb-6 mt-6 flex justify-end gap-3">
           <button
             type="button"
             onClick={onNavigateDashboard}
@@ -345,9 +336,9 @@ export default function CreateUserPage({ onNavigateDashboard }) {
           <button
             type="submit"
             disabled={busy}
-            className="border border-slate-800 bg-slate-900 px-6 py-2.5 text-xs font-semibold text-white hover:bg-black disabled:opacity-50"
+            className="border border-aiia-700 bg-aiia-600 px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-white hover:bg-aiia-700 disabled:opacity-50"
           >
-            {busy ? 'Processing Account...' : 'Submit & Provision Account'}
+            {busy ? 'Provisioning Account...' : 'Provision User Account'}
           </button>
         </div>
       </form>

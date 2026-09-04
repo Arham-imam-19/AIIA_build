@@ -1,0 +1,45 @@
+ALL INDIA INSTITUTE OF AYURVEDA (AIIA) - CENTRAL CTMS
+SITE 01: CLINICAL SCREENING & SOURCE VERIFICATION DOSSIER
+Protocol ID: AIIA-ASH-2026-01 | Date: 2026-09-04
+
+--------------------------------------------------------------------------------
+PATIENT 1: PT-201
+- Demographics: 34 Y / Female
+- Vitals: BP 118/78 mmHg, HR 72 bpm, SpO2 99%
+- Laboratory Panel: Hb 12.8 g/dL, LFT Normal, KFT Normal
+- Clinical Evaluation: No exclusion criteria met. Informed consent signed.
+- STATUS: PASSED (ELIGIBLE FOR RANDOMIZATION)
+
+--------------------------------------------------------------------------------
+PATIENT 2: PT-202
+- Demographics: 61 Y / Male
+- Vitals: BP 168/104 mmHg (Severe Stage 2 Hypertension)
+- Laboratory Panel: Serum Creatinine 1.8 mg/dL (Elevated)
+- Clinical Evaluation: Fails inclusion criteria (Uncontrolled Hypertension).
+- STATUS: FAILED (SCREEN FAILURE - EXCLUSION RULE 4.2)
+
+--------------------------------------------------------------------------------
+PATIENT 3: PT-203
+- Demographics: 45 Y / Male
+- Vitals: BP 122/80 mmHg, HR 76 bpm, SpO2 98%
+- Laboratory Panel: Fasting Blood Sugar 94 mg/dL
+- Clinical Evaluation: Eligible. Prakriti: Vata-Pitta dominant.
+- STATUS: PASSED (ELIGIBLE FOR RANDOMIZATION)
+
+--------------------------------------------------------------------------------
+PATIENT 4: PT-204
+- Demographics: 29 Y / Female
+- Vitals: BP 114/72 mmHg, HR 80 bpm
+- Laboratory Panel: Urine Beta-hCG Positive (Confirmed Pregnancy)
+- Clinical Evaluation: Fails protocol safety criteria (Pregnancy/Lactation).
+- STATUS: FAILED (SCREEN FAILURE - EXCLUSION RULE 1.1)
+
+--------------------------------------------------------------------------------
+PATIENT 5: PT-205
+- Demographics: 52 Y / Female
+- Vitals: BP 124/82 mmHg, HR 74 bpm, SpO2 99%
+- Laboratory Panel: All routine panels within normal clinical reference limits.
+- Clinical Evaluation: Bilateral knee pain matching trial scope.
+- STATUS: PASSED (ELIGIBLE FOR RANDOMIZATION)
+--------------------------------------------------------------------------------
+SUMMARY: 5 Screened | 3 Passed / Eligible | 2 Screen Failures

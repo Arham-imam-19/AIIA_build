@@ -43,3 +43,8 @@ httpx==0.28.1
 # Feature 18: de-identified demo safety-case PDF generation and verification
 reportlab==4.2.5
 pypdf==5.1.0
+
+pandas
+rapidfuzz
+groq
+python-multipart

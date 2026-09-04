@@ -14,7 +14,7 @@ const ROLE_BLURB = {
   institution_admin: 'manages hospital site, researchers & patient inquiries',
   principal_investigator: 'Lead Researcher: runs clinical trial at the site',
   coordinator: 'books visits, enters data & coordinates care',
-  monitor: 'Clinical Research Associate: verifies data and raises queries',
+  monitor: 'Independent auditor: performs Source Data Verification (SDV)',
   sponsor: 'funds the trial and watches progress across all sites',
   ethics_committee: 'reviews safety events and protocol deviations',
   pharmacovigilance: 'codes adverse events and tracks NDCT timelines',
@@ -150,7 +150,7 @@ export default function Login({ patientPortal = false }) {
                   >
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="text-sm font-medium text-slate-800">
-                        {user.role_label}
+                        {user.role === 'monitor' ? 'Monitor' : user.role_label}
                       </span>
                       <span className="text-xs text-slate-400">
                         {patientPortal

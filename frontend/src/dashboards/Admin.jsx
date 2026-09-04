@@ -6,13 +6,13 @@ import DashboardLayout from './layout'
 import { Block } from '../blocks'
 
 const ROLE_DISPLAY_NAMES = {
-  admin: 'Primary Administrator',
+  admin: 'Primary System Administrator',
   institution_admin: 'Institution Site Admin',
-  principal_investigator: 'Principal Investigator',
-  coordinator: 'Clinical Research Coordinator',
-  ethics_committee: 'Ethics Committee Member',
-  sponsor: 'Trial Sponsor / Monitor',
-  regulator: 'CDSCO Regulatory Inspector',
+  sponsor: 'Trial Sponsor (Director / Funder)',
+  regulator: 'Regulator (CDSCO)',
+  pharmacovigilance: 'Pharmacovigilance (NPvCC)',
+  dsmb: 'Data and Safety Monitoring Board (DSMB)',
+  monitor: 'Monitor',
 }
 
 const mockProtocols = [
@@ -73,12 +73,11 @@ export default function Admin(props) {
 
   const originalBlocks = props.dashboard?.blocks || []
   
-  // Extract audit logs specifically to render them manually with the EXACT requested filter
   const auditBlock = originalBlocks.find(b => b.key === 'audit_tail')
   const auditLogs = auditBlock?.rows || []
   const auditColumns = auditBlock?.columns || []
 
-  // HARD DELETE: 'Serious adverse events' Table (sae_reporting) completely removed
+  // HARD DELETE: 'Serious adverse events' Table (sae_reporting)
   const genericTab1Blocks = originalBlocks.filter(b => !['audit_tail', 'sae_reporting', 'sites'].includes(b.key))
   const tab2Blocks = originalBlocks.filter(b => ['sites'].includes(b.key))
 
@@ -209,11 +208,10 @@ export default function Admin(props) {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Block block={ndctBlock} wide={true} />
             
-            {/* Custom Audit Logs Table with EXACT Requested Filter */}
             {auditBlock && (
               <div className="col-span-full rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 className="mb-1 text-sm font-semibold text-slate-800">{auditBlock.title}</h3>
-                <p className="mb-4 text-xs text-slate-500">{auditBlock.note}</p>
+                <h3 className="mb-1 text-sm font-semibold text-slate-800">System Access Audit Log</h3>
+                <p className="mb-4 text-xs text-slate-500">21 CFR Part 11 Compliant Electronic Audit Trail.</p>
                 <div className="-mx-1 overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -226,7 +224,9 @@ export default function Admin(props) {
                       </tr>
                     </thead>
                     <tbody>
-                      {auditLogs.filter(log => ['admin', 'institution admin', 'institution site admin'].includes(log.role.toLowerCase())).map((log, index) => (
+                      {auditLogs
+                        .filter(log => ['admin', 'institution admin', 'institution site admin', 'sponsor', 'pharmacovigilance', 'regulator', 'monitor'].includes((log.role || '').toLowerCase()))
+                        .map((log, index) => (
                         <tr key={index} className="border-t border-slate-100 align-top">
                           {auditColumns.map(col => (
                             <td key={col.key} className="px-1 py-2 text-slate-700" style={{ maxWidth: '22rem' }}>
@@ -246,7 +246,6 @@ export default function Admin(props) {
             ))}
           </div>
           
-          {/* Universal Clinical Data Interoperability & Export Center COMPLETELY DELETED */}
         </div>
       )}
 
@@ -347,25 +346,24 @@ export default function Admin(props) {
                       <th className="border-r border-slate-300 px-3.5 py-2.5">Statutory Role</th>
                       <th className="border-r border-slate-300 px-3.5 py-2.5">Designated Center</th>
                       <th className="border-r border-slate-300 px-3.5 py-2.5">Account Status</th>
-                      <th className="border-r border-slate-300 px-3.5 py-2.5">Last Authentication</th>
-                      <th className="px-3.5 py-2.5 text-right">Actions</th>
+                      <th className="border-slate-300 px-3.5 py-2.5">Last Authentication</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {loading ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                        <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
                           Loading user directory from database...
                         </td>
                       </tr>
                     ) : users.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                        <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
                           No registered user accounts match the selected criteria.
                         </td>
                       </tr>
                     ) : (
-                      users.filter(u => u.role !== 'patient').map((u) => (
+                      users.filter(u => ['institution_admin', 'sponsor', 'admin', 'regulator', 'pharmacovigilance', 'dsmb', 'monitor'].includes(u.role)).map((u) => (
                         <tr key={u.id} className="hover:bg-slate-50">
                           <td className="border-r border-slate-200 px-3.5 py-2.5">
                             <div className="font-bold text-slate-900">
@@ -398,18 +396,10 @@ export default function Admin(props) {
                               {u.is_active ? 'Active' : 'Suspended'}
                             </button>
                           </td>
-                          <td className="border-r border-slate-200 px-3.5 py-2.5 font-mono text-[11px] text-slate-600">
+                          <td className="border-slate-200 px-3.5 py-2.5 font-mono text-[11px] text-slate-600">
                             {u.last_login_at
                               ? new Date(u.last_login_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
                               : 'Never'}
-                          </td>
-                          <td className="px-3.5 py-2.5 text-right">
-                            <button
-                              onClick={() => alert("Password reset link securely dispatched to user's registered institutional email.")}
-                              className="border border-slate-400 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-800 hover:bg-slate-100"
-                            >
-                              Reset Password
-                            </button>
                           </td>
                         </tr>
                       ))

@@ -48,7 +48,7 @@ export function Tile({ tile, changed }) {
       }`}
     >
       <div
-        className={`truncate text-2xl font-semibold tabular-nums tracking-tight ${
+        className={`whitespace-normal break-words text-2xl font-semibold tabular-nums tracking-tight ${
           TONES[tile.tone] || TONES.neutral
         }`}
         title={String(tile.value)}

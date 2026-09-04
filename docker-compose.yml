@@ -12,6 +12,8 @@ services:
     image: postgres:16-alpine
     container_name: aiia_db
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-aiia}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aiia}
@@ -44,6 +46,8 @@ services:
     build: ./backend
     container_name: aiia_backend
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-aiia}:${POSTGRES_PASSWORD:-aiia}@db:5432/${POSTGRES_DB:-aiia_ctms}
       REDIS_URL: redis://redis:6379/0
@@ -68,6 +72,8 @@ services:
     build: ./frontend
     container_name: aiia_frontend
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       # Vite forwards /api and /ws calls to the backend, so the browser only ever
       # talks to one origin and we never fight CORS in the demo.

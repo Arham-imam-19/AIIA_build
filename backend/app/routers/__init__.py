@@ -18,6 +18,7 @@ to a named user.
 """
 
 from app.routers import (
+    ingest,
     auth,
     compliance,
     dashboard,
@@ -46,5 +47,6 @@ ALL_ROUTERS = (
     exports.router,
     stats.router,
     simulate.router,
+    ingest.router,
     live.router,
 )
