@@ -751,6 +751,7 @@ class CreateTrialRequest(SQLModel):
     design: str = "Randomized, Double-Blind, Parallel Group"
     sponsor_name: str = "All India Institute of Ayurveda"
     target_enrollment: int = 100
+    participating_site_ids: list[int] | None = None
 
 
 @router.post("/trials", response_model=Trial, status_code=201)
@@ -759,7 +760,7 @@ def create_trial(
     session: Session = Depends(get_session),
     user: CurrentUser = Depends(require(Permission.USER_MANAGE)),
 ) -> Trial:
-    """Primary Admin creates a new Clinical Trial protocol."""
+    """Primary Admin creates a new Clinical Trial protocol and associates participating institutions."""
     proto = body.protocol_number.strip().upper()
     existing = session.exec(select(Trial).where(Trial.protocol_number == proto)).first()
     if existing:
@@ -787,6 +788,46 @@ def create_trial(
     session.add(trial)
     session.flush()
 
+    # Associate selected participating institutions / sites with the new trial
+    institutions_to_clone: list[Site] = []
+    if body.participating_site_ids:
+        for sid in body.participating_site_ids:
+            site_obj = session.get(Site, sid)
+            if site_obj:
+                institutions_to_clone.append(site_obj)
+    else:
+        # If no site IDs passed, fetch all distinct existing institutions to make available
+        existing_sites = session.exec(select(Site)).all()
+        seen_codes: set[str] = set()
+        for s in existing_sites:
+            if s.site_code not in seen_codes:
+                seen_codes.add(s.site_code)
+                institutions_to_clone.append(s)
+
+    target_per_site = (
+        body.target_enrollment // max(len(institutions_to_clone), 1)
+        if institutions_to_clone
+        else body.target_enrollment
+    )
+
+    for inst in institutions_to_clone:
+        new_site = Site(
+            trial_id=trial.id,
+            site_code=inst.site_code,
+            name=inst.name,
+            city=inst.city,
+            state=inst.state,
+            country=inst.country or "India",
+            pi_name=inst.pi_name or "Designated Principal Investigator",
+            pi_email=inst.pi_email,
+            contact_phone=inst.contact_phone,
+            status="activated",
+            target_enrollment=target_per_site,
+            activation_date=now.date(),
+            created_at=now,
+        )
+        session.add(new_site)
+
     audit.record(
         session,
         user=user,
@@ -794,7 +835,7 @@ def create_trial(
         entity_type="trials",
         entity_id=trial.id,
         entity_label=trial.protocol_number,
-        reason=f"Clinical Trial Protocol {trial.protocol_number} created by Primary Admin",
+        reason=f"Clinical Trial Protocol {trial.protocol_number} created with {len(institutions_to_clone)} participating sites by Primary Admin",
         trial_id=trial.id,
     )
     session.commit()

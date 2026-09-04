@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchSites, fetchUsers, resetTrialData, updateUser } from '../api'
+import { fetchSites, fetchUsers, fetchTrials, resetTrialData, updateUser } from '../api'
 import CreateTrialModal from '../components/CreateTrialModal'
 import CreateSiteModal from '../components/CreateSiteModal'
 import DashboardLayout from './layout'
@@ -19,39 +19,46 @@ const ROLE_DISPLAY_NAMES = {
   patient: 'Enrolled Trial Participant',
 }
 
-const mockProtocols = [
-  {
-    id: 'AIIA-ASH-2026-01',
-    name: 'AIIA-ASH-2026-01: Ashwagandha Efficacy',
-    gates: [
-      { label: 'CTRI Registration', ok: true, detail: 'CTRI/2026/01/010001' },
-      { label: 'Ethics Approval', ok: true, detail: 'Approved 10-Jan-2026' },
-      { label: 'DCGI Clearance', ok: true, detail: 'Clearance Granted' },
-      { label: 'Insurance Cover', ok: true, detail: 'Active' },
-    ],
-  },
-  {
-    id: 'AIIA-TRP-2026-02',
-    name: 'AIIA-TRP-2026-02: Triphala for Digestion',
-    gates: [
-      { label: 'CTRI Registration', ok: false, detail: 'Pending Submission' },
-      { label: 'Ethics Approval', ok: true, detail: 'Approved 15-Feb-2026' },
-      { label: 'DCGI Clearance', ok: false, detail: 'Awaiting Review' },
-      { label: 'Insurance Cover', ok: true, detail: 'Active' },
-    ],
-  },
-]
+function getGatesForTrial(trial) {
+  if (!trial) return []
+  const hasCtri = Boolean(trial.ctri_number && trial.ctri_number.trim())
+  const hasEthics = trial.ethics_approval_status === 'approved'
+  const hasRegulatory = Boolean(trial.regulatory_approval_number && trial.regulatory_approval_number.trim()) || trial.phase === 'phase_4'
+  const isCovered = trial.status === 'active' || trial.status === 'recruiting' || trial.status === 'planning'
 
-const customTiles = [
-  { key: 'total_protocols', label: 'Total Configured Protocols', value: 5, tone: 'neutral' },
-  { key: 'missing_ctri', label: 'Protocols Missing CTRI', value: 1, tone: 'warn' },
-  { key: 'total_sites', label: 'Total Active Sites', value: 12, tone: 'good' },
-  { key: 'audit_entries', label: 'System Audit Entries', value: '1,402', tone: 'neutral' },
-]
+  return [
+    {
+      label: 'CTRI Registration (NDCT Rule 22)',
+      ok: hasCtri,
+      detail: hasCtri ? trial.ctri_number : 'Pending CTRI Registration',
+    },
+    {
+      label: 'Ethics Committee Approval (Rule 22 & 42)',
+      ok: hasEthics,
+      detail: hasEthics
+        ? trial.ethics_approval_number ? `Approved (${trial.ethics_approval_number})` : 'Approved'
+        : `Pending Review (${trial.ethics_approval_status ? trial.ethics_approval_status.toUpperCase() : 'PENDING'})`,
+    },
+    {
+      label: 'DCGI / Regulatory Clearance',
+      ok: hasRegulatory,
+      detail: hasRegulatory
+        ? trial.regulatory_approval_number || 'Clearance Granted'
+        : 'Awaiting DCGI Clearance',
+    },
+    {
+      label: 'Clinical Trial Insurance & Status',
+      ok: isCovered,
+      detail: isCovered ? `Active (${trial.status ? trial.status.toUpperCase() : 'PLANNING'})` : 'Inactive',
+    },
+  ]
+}
 
 export default function Admin(props) {
   const [users, setUsers] = useState([])
   const [sites, setSites] = useState([])
+  const [trials, setTrials] = useState([])
+  const [selectedProtocolId, setSelectedProtocolId] = useState(null)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
   const [siteFilter, setSiteFilter] = useState('')
@@ -66,27 +73,6 @@ export default function Admin(props) {
   const [cleanSlateBusy, setCleanSlateBusy] = useState(false)
   const [cleanSlateResult, setCleanSlateResult] = useState(null)
   const [activeTab, setActiveTab] = useState('governance')
-  
-  const [selectedProtocol, setSelectedProtocol] = useState(mockProtocols[0].id)
-  const activeProtocol = mockProtocols.find(p => p.id === selectedProtocol) || mockProtocols[0]
-
-  const ndctBlock = {
-    kind: 'checklist',
-    key: 'ndct_gates',
-    title: `NDCT Rules 2019 Gates - ${activeProtocol.id}`,
-    passed: activeProtocol.gates.filter(g => g.ok).length,
-    total: activeProtocol.gates.length,
-    items: activeProtocol.gates,
-  }
-
-  const originalBlocks = props.dashboard?.blocks || []
-  
-  const auditBlock = originalBlocks.find(b => b.key === 'audit_tail')
-  const auditLogs = auditBlock?.rows || []
-  const auditColumns = auditBlock?.columns || []
-
-  const genericTab1Blocks = originalBlocks.filter(b => !['audit_tail', 'sae_reporting', 'sites'].includes(b.key))
-  const tab2Blocks = originalBlocks.filter(b => ['sites'].includes(b.key))
 
   function loadUsers() {
     setLoading(true)
@@ -109,13 +95,54 @@ export default function Admin(props) {
       .catch(() => {})
   }
 
+  function loadTrials() {
+    fetchTrials()
+      .then((res) => {
+        const items = res.items || []
+        setTrials(items)
+        if (items.length > 0 && !selectedProtocolId) {
+          setSelectedProtocolId(items[0].id)
+        }
+      })
+      .catch(() => {})
+  }
+
   useEffect(() => {
     loadUsers()
   }, [search, roleFilter, siteFilter])
 
   useEffect(() => {
     loadSites()
+    loadTrials()
   }, [])
+
+  const activeTrial = trials.find(t => t.id === selectedProtocolId) || trials[0]
+  const activeGates = getGatesForTrial(activeTrial)
+
+  const ndctBlock = {
+    kind: 'checklist',
+    key: 'ndct_gates',
+    title: `NDCT Rules 2019 Gates - ${activeTrial?.protocol_number || 'Protocol Gates'}`,
+    passed: activeGates.filter(g => g.ok).length,
+    total: activeGates.length,
+    items: activeGates,
+  }
+
+  const customTiles = [
+    { key: 'total_protocols', label: 'Total Configured Protocols', value: trials.length || 2, tone: 'neutral' },
+    { key: 'missing_ctri', label: 'Protocols Missing CTRI', value: trials.filter(t => !t.ctri_number).length, tone: 'warn' },
+    { key: 'total_sites', label: 'Total Active Sites', value: sites.length || 5, tone: 'good' },
+    { key: 'audit_entries', label: 'System Audit Entries', value: '1,402', tone: 'neutral' },
+  ]
+
+  const originalBlocks = props.dashboard?.blocks || []
+  
+  const auditBlock = originalBlocks.find(b => b.key === 'audit_tail')
+  const auditLogs = auditBlock?.rows || []
+  const auditColumns = auditBlock?.columns || []
+
+  const genericTab1Blocks = originalBlocks.filter(b => !['audit_tail', 'sae_reporting', 'sites'].includes(b.key))
+  const tab2Blocks = originalBlocks.filter(b => ['sites'].includes(b.key))
 
   async function handleCleanSlateReset() {
     setCleanSlateBusy(true)
@@ -124,6 +151,7 @@ export default function Admin(props) {
       const res = await resetTrialData()
       setCleanSlateResult(res)
       loadUsers()
+      loadTrials()
       props.onRefresh?.()
     } catch (err) {
       alert(`Clean slate reset failed: ${err.message}`)
@@ -218,19 +246,30 @@ export default function Admin(props) {
             note="Central Regulatory Oversight: The Primary Administrator has statutory administrative access across all participating sites under 21 CFR Part 11 and NDCT Rules 2019."
           />
 
-          <div className="border border-slate-300 bg-white p-4 shadow-sm">
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-2">
-              Select Trial Protocol to Inspect Gates
-            </label>
-            <select
-              value={selectedProtocol}
-              onChange={e => setSelectedProtocol(e.target.value)}
-              className="w-full max-w-md border border-slate-300 p-2 text-sm text-slate-900 focus:border-slate-800 focus:outline-none"
+          <div className="border border-slate-300 bg-white p-4 shadow-sm flex flex-wrap items-center justify-between gap-3">
+            <div className="w-full max-w-lg">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                Select Trial Protocol to Inspect NDCT Gates
+              </label>
+              <select
+                value={selectedProtocolId || ''}
+                onChange={e => setSelectedProtocolId(Number(e.target.value))}
+                className="w-full border border-slate-300 p-2 text-xs font-semibold text-slate-900 focus:border-slate-800 focus:outline-none"
+              >
+                {trials.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.protocol_number}: {p.short_title || p.title} ({p.ethics_approval_status ? p.ethics_approval_status.toUpperCase() : 'PENDING'})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              onClick={() => setShowTrialModal(true)}
+              className="border border-slate-800 bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-black transition"
             >
-              {mockProtocols.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+              + Register New Protocol
+            </button>
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -296,6 +335,12 @@ export default function Admin(props) {
                   className="border border-slate-800 bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-black transition"
                 >
                   + Create New Account
+                </button>
+                <button
+                  onClick={() => setShowTrialModal(true)}
+                  className="border border-slate-600 bg-white px-4 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 transition"
+                >
+                  + Register Protocol
                 </button>
                 <button
                   onClick={() => props.onNavigateInfrastructure?.()}
@@ -488,6 +533,7 @@ export default function Admin(props) {
           onClose={() => setShowTrialModal(false)}
           onSuccess={() => {
             loadSites()
+            loadTrials()
             props.onRefresh?.()
           }}
         />

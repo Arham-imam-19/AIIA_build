@@ -7,9 +7,9 @@ import { fetchTrials, updateEthicsApproval, fetchEthicsDocket, submitSaeEthicsDe
 import DashboardLayout from './layout'
 import SaeEthicsReviewModal from '../components/SaeEthicsReviewModal'
 
-function GovernmentPortalHeader({ trial }) {
+function GovernmentPortalHeader({ trials, selectedTrialId, onSelectTrial, trial }) {
   return (
-    <div className="border-2 border-slate-800 bg-slate-900 text-white p-4 sm:p-5 shadow-sm">
+    <div className="border-2 border-slate-800 bg-slate-900 text-white p-4 sm:p-5 shadow-sm space-y-4">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-start gap-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center border-2 border-amber-400 bg-slate-800 text-2xl font-bold text-amber-400">
@@ -23,7 +23,7 @@ function GovernmentPortalHeader({ trial }) {
               Institutional Ethics Committee (IEC) &bull; Clinical Safety &amp; Protocol Oversight
             </h1>
             <p className="text-xs text-slate-300 font-mono mt-0.5">
-              Protocol: <span className="font-bold text-amber-300">{trial?.protocol_number || 'AIIA-ASH-2026-01'}</span> &bull; {trial?.short_title || trial?.title || 'National Ayurveda Clinical Trial'}
+              Statutory Gate: NDCT Rules 2019 (Rule 22 &amp; 42) &bull; GCP-ASU &bull; CDSCO Notified Committee
             </p>
           </div>
         </div>
@@ -31,16 +31,51 @@ function GovernmentPortalHeader({ trial }) {
         <div className="flex flex-wrap items-center gap-2 border-t md:border-t-0 md:border-l border-slate-700 pt-3 md:pt-0 md:pl-4">
           <div className="text-left md:text-right">
             <span className="text-[10px] text-slate-400 uppercase block font-semibold tracking-wider">
-              Statutory Gate
+              Committee Scope
             </span>
             <span className="text-xs font-mono font-bold text-emerald-400">
-              NDCT Rules 2019 (Rule 22 &amp; 42)
+              Multi-Centric Trial Jurisdiction
             </span>
           </div>
           <span className="inline-block border border-purple-400 bg-purple-950/80 px-2.5 py-1 text-[11px] font-mono text-purple-200 uppercase font-semibold">
             Blinded Ethics Mode
           </span>
         </div>
+      </div>
+
+      {/* Protocol Selection & Gate Selector */}
+      <div className="border-t border-slate-700 pt-3 flex flex-wrap items-center justify-between gap-3 bg-slate-950/60 -mx-4 -mb-4 p-3.5">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-xs font-bold uppercase tracking-wider text-amber-300 whitespace-nowrap">
+            Select Protocol for IEC Review &amp; Clearance:
+          </label>
+          <select
+            value={selectedTrialId || ''}
+            onChange={(e) => onSelectTrial(Number(e.target.value))}
+            className="border-2 border-amber-400 bg-slate-800 text-white px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-300 max-w-md"
+          >
+            {trials.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.protocol_number}: {t.short_title || t.title} &mdash; [{t.ethics_approval_status ? t.ethics_approval_status.toUpperCase() : 'PENDING'}]
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {trial && (
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-slate-300">Current Status:</span>
+            <span
+              className={`px-2.5 py-0.5 text-xs font-bold uppercase border ${
+                trial.ethics_approval_status === 'approved'
+                  ? 'border-emerald-500 bg-emerald-950 text-emerald-300'
+                  : 'border-rose-500 bg-rose-950 text-rose-300 animate-pulse'
+              }`}
+            >
+              {trial.ethics_approval_status ? trial.ethics_approval_status.toUpperCase() : 'PENDING APPROVAL'}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -85,7 +120,7 @@ function ProtocolClearanceCard({ trial, onUpdated }) {
         ethics_approval_valid_until: status === 'approved' || status === 'expired' ? validUntil : null,
       }
       await updateEthicsApproval(trial.id, payload)
-      setSuccess(`IEC Protocol Decision successfully recorded and broadcast! Status: ${status.toUpperCase()}`)
+      setSuccess(`IEC Protocol Decision successfully recorded and broadcast! Status: ${status.toUpperCase()} for ${trial.protocol_number}`)
       onUpdated?.()
     } catch (err) {
       setError(err?.message || 'Failed to record protocol clearance')
@@ -94,26 +129,36 @@ function ProtocolClearanceCard({ trial, onUpdated }) {
     }
   }
 
+  if (!trial) {
+    return (
+      <div className="border-2 border-slate-400 bg-white p-6 text-center text-xs text-slate-500">
+        Loading trial protocol...
+      </div>
+    )
+  }
+
+  const isApproved = trial.ethics_approval_status === 'approved'
+
   return (
     <div className="border-2 border-slate-400 bg-white shadow-sm p-5 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-slate-200 pb-3">
         <div>
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900 flex items-center gap-2">
             <span>📋</span>
-            <span>Study Protocol Ethics Approval &amp; Clearance Certificate</span>
+            <span>Study Protocol Ethics Approval &amp; Clearance Certificate: {trial.protocol_number}</span>
           </h2>
           <p className="text-xs text-slate-500">
-            Rule 22 Gate: Screening and enrollment are blocked across all sites unless active IEC approval is registered.
+            Rule 22 Gate: Screening and participant intake remain blocked at all sites until this certificate is marked <strong>APPROVED</strong>.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-500 font-semibold uppercase">Current Status:</span>
           <span className={`px-2.5 py-0.5 text-xs font-bold uppercase border ${
-            trial?.ethics_approval_status === 'approved'
+            isApproved
               ? 'border-emerald-600 bg-emerald-50 text-emerald-800'
               : 'border-rose-600 bg-rose-50 text-rose-800'
           }`}>
-            {trial?.ethics_approval_status || 'PENDING'}
+            {trial.ethics_approval_status ? trial.ethics_approval_status.toUpperCase() : 'PENDING'}
           </span>
         </div>
       </div>
@@ -140,7 +185,7 @@ function ProtocolClearanceCard({ trial, onUpdated }) {
             onChange={(e) => setStatus(e.target.value)}
             className="w-full rounded-none border-2 border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 focus:border-slate-700 focus:outline-none"
           >
-            <option value="approved">APPROVED (Authorized to Recruit)</option>
+            <option value="approved">APPROVED (Authorize Site Recruitment)</option>
             <option value="pending">PENDING (Block Enrollment)</option>
             <option value="rejected">REJECTED (Halt Study)</option>
             <option value="expired">EXPIRED (Requires Annual Renewal)</option>
@@ -192,14 +237,14 @@ function ProtocolClearanceCard({ trial, onUpdated }) {
 
         <div className="sm:col-span-2 lg:col-span-4 flex items-center justify-between pt-2 border-t border-slate-200">
           <span className="text-xs font-mono text-slate-600">
-            Registered Under Central Drugs Standard Control Organization (CDSCO) &amp; National Ayush Ethics Portal
+            Protocol: <strong>{trial.protocol_number}</strong> &bull; Registered Under Central Drugs Standard Control Organization (CDSCO)
           </span>
           <button
             type="submit"
             disabled={saving}
             className="rounded-none bg-slate-900 px-5 py-2 text-xs font-bold text-white hover:bg-slate-800 transition disabled:opacity-50"
           >
-            {saving ? 'Updating Clearance...' : '⚖️ Record Official IEC Clearance'}
+            {saving ? 'Updating Clearance...' : `⚖️ Record Official IEC Clearance (${status.toUpperCase()})`}
           </button>
         </div>
       </form>
@@ -224,17 +269,17 @@ function SaeAdjudicationDocket({ docket, onAdjudicate, onQuickDecision }) {
         </div>
         <div className="flex items-center gap-3">
           <span className="border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-mono font-bold text-slate-800">
-            {docket.unreviewed_count} Pending Review
+            {docket?.unreviewed_count || 0} Pending Review
           </span>
           <span className="border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-mono font-bold text-emerald-800">
-            {docket.reviewed_count} Adjudicated
+            {docket?.reviewed_count || 0} Adjudicated
           </span>
         </div>
       </div>
 
       {saes.length === 0 ? (
         <div className="p-8 text-center text-xs font-medium text-slate-500 border border-dashed border-slate-300">
-          ✅ No Serious Adverse Events registered across trial sites.
+          ✅ No Serious Adverse Events registered for this trial protocol.
         </div>
       ) : (
         <div className="overflow-x-auto border border-slate-300">
@@ -357,19 +402,25 @@ function SaeAdjudicationDocket({ docket, onAdjudicate, onQuickDecision }) {
 }
 
 export default function Ethics(props) {
-  const [trial, setTrial] = useState(null)
+  const [trials, setTrials] = useState([])
+  const [selectedTrialId, setSelectedTrialId] = useState(null)
   const [docket, setDocket] = useState({ unreviewed_count: 0, reviewed_count: 0, total_sae_count: 0, saes: [] })
   const [loading, setLoading] = useState(true)
   const [selectedSaeForReview, setSelectedSaeForReview] = useState(null)
 
-  const loadData = async () => {
+  const loadData = async (trialIdToLoad) => {
     try {
       setLoading(true)
-      const [trialsRes, docketRes] = await Promise.all([
-        fetchTrials(),
-        fetchEthicsDocket(),
-      ])
-      if (trialsRes.items?.[0]) setTrial(trialsRes.items[0])
+      const trialsRes = await fetchTrials()
+      const items = trialsRes.items || []
+      setTrials(items)
+      
+      const currentId = trialIdToLoad || selectedTrialId || items[0]?.id
+      if (currentId && currentId !== selectedTrialId) {
+        setSelectedTrialId(currentId)
+      }
+
+      const docketRes = await fetchEthicsDocket(currentId || undefined)
       if (docketRes) setDocket(docketRes)
     } catch (err) {
       console.error('Failed to load ethics data:', err)
@@ -382,6 +433,11 @@ export default function Ethics(props) {
     loadData()
   }, [])
 
+  const handleSelectTrial = (id) => {
+    setSelectedTrialId(id)
+    loadData(id)
+  }
+
   const handleQuickDecision = async (saeId, decision) => {
     try {
       await submitSaeEthicsDecision(saeId, {
@@ -389,7 +445,7 @@ export default function Ethics(props) {
         notes: decision === 'accepted' ? 'Safety signal cleared upon initial committee review.' : 'Trial protocol halted for subject pending safety hearing.',
         decision_date: new Date().toISOString().slice(0, 10),
       })
-      await loadData()
+      await loadData(selectedTrialId)
       props.onRefresh?.()
     } catch (err) {
       alert(err?.message || 'Failed to record decision')
@@ -398,19 +454,50 @@ export default function Ethics(props) {
 
   const handleReviewSuccess = async () => {
     setSelectedSaeForReview(null)
-    await loadData()
+    await loadData(selectedTrialId)
     props.onRefresh?.()
   }
 
-  const unreviewedCount = docket.unreviewed_count || 0
+  const activeTrial = trials.find((t) => t.id === selectedTrialId) || trials[0]
+  const unreviewedCount = docket?.unreviewed_count || 0
+  const isPendingApproval = activeTrial && activeTrial.ethics_approval_status !== 'approved'
 
   return (
     <div className="space-y-6">
-      {/* 1. Official Government Portal Header */}
-      <GovernmentPortalHeader trial={trial} />
+      {/* 1. Official Government Portal Header with Protocol Selector */}
+      <GovernmentPortalHeader
+        trials={trials}
+        selectedTrialId={selectedTrialId}
+        onSelectTrial={handleSelectTrial}
+        trial={activeTrial}
+      />
 
-      {/* 2. Top Safety Alert Banner (Only surfaces unreviewed SAEs and PERSISTS permanently) */}
-      {unreviewedCount > 0 ? (
+      {/* 2. Top Banner: Priority Protocol Clearance Notification when Pending */}
+      {isPendingApproval ? (
+        <div className="border-2 border-amber-500 bg-amber-50 p-4 sm:p-5 shadow-md">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-amber-600 bg-amber-600 text-white text-xl font-bold">
+                ⏳
+              </span>
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-amber-950 uppercase tracking-wider">
+                  Protocol Clearance Required: {activeTrial?.protocol_number} &mdash; IEC Review Status: {activeTrial?.ethics_approval_status?.toUpperCase() || 'PENDING'}
+                </h2>
+                <p className="text-xs text-amber-800 font-medium mt-0.5">
+                  This clinical trial protocol is awaiting formal Ethics Committee review and approval under NDCT Rules 2019 Rule 22. Complete the certificate below to authorize multi-centric recruitment.
+                </p>
+              </div>
+            </div>
+            <a
+              href="#protocol-clearance-section"
+              className="rounded-none border-2 border-amber-800 bg-amber-700 px-4 py-2 text-xs font-bold text-white hover:bg-amber-800 transition whitespace-nowrap"
+            >
+              Review &amp; Approve Certificate &darr;
+            </a>
+          </div>
+        </div>
+      ) : unreviewedCount > 0 ? (
         <div className="border-2 border-rose-600 bg-rose-50 p-4 sm:p-5 shadow-md">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -442,10 +529,10 @@ export default function Ethics(props) {
             </span>
             <div>
               <h2 className="text-xs sm:text-sm font-bold text-emerald-950 uppercase tracking-wider">
-                All Safety Signals &amp; Serious Adverse Events Evaluated
+                Protocol Active &amp; All Safety Signals Evaluated
               </h2>
               <p className="text-[11px] text-emerald-800 mt-0.5">
-                All {docket.total_sae_count || 0} registered Serious Adverse Events have formal Ethics Committee rulings on record.
+                Protocol <strong>{activeTrial?.protocol_number}</strong> is authorized for clinical recruitment under Certificate <code>{activeTrial?.ethics_approval_number || 'IEC Cleared'}</code>.
               </p>
             </div>
           </div>
@@ -453,7 +540,9 @@ export default function Ethics(props) {
       )}
 
       {/* 3. Study Protocol Clearance Certificate Box */}
-      <ProtocolClearanceCard trial={trial} onUpdated={loadData} />
+      <div id="protocol-clearance-section">
+        <ProtocolClearanceCard trial={activeTrial} onUpdated={() => loadData(selectedTrialId)} />
+      </div>
 
       {/* 4. SAE Adjudication Docket (Individual Accept/Reject) */}
       <div id="sae-docket-section">
