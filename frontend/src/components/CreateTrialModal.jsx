@@ -74,7 +74,7 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (selectedSiteIds.length === 0) {
+    if (availableInstitutions.length > 0 && selectedSiteIds.length === 0) {
       setError('Please select at least one participating hospital institution / site for this protocol.')
       return
     }

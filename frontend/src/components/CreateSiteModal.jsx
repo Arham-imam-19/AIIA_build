@@ -77,6 +77,20 @@ export default function CreateSiteModal({ onClose, onSuccess }) {
           </button>
         </div>
 
+        {trials.length === 0 && (
+          <div className="mt-3 border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 leading-relaxed space-y-1">
+            <div className="font-bold flex items-center gap-1.5">
+              <span>⚠️</span> No Active Trial Protocols Found
+            </div>
+            <div>
+              Under Good Clinical Practice (GCP) and Indian NDCT Rules 2019, a participating hospital research site cannot exist in isolation &mdash; it must be affiliated with an approved <strong>Clinical Trial Protocol</strong>.
+            </div>
+            <div className="pt-1 text-[11px] font-semibold text-amber-800">
+              Please go to <em>System Governance &amp; Protocols</em> and click <strong>+ Register New Protocol</strong> first.
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="mt-3 border border-red-600 bg-red-50 p-3 text-xs font-medium text-red-900">
             {typeof error === 'string' ? error : JSON.stringify(error)}
@@ -92,14 +106,19 @@ export default function CreateSiteModal({ onClose, onSuccess }) {
               <select
                 value={trialId}
                 onChange={(e) => setTrialId(e.target.value)}
-                className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs font-medium text-slate-900 focus:border-slate-800 focus:outline-none"
+                disabled={trials.length === 0}
+                className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs font-medium text-slate-900 focus:border-slate-800 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400"
                 required
               >
-                {trials.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.protocol_number} ({t.phase})
-                  </option>
-                ))}
+                {trials.length === 0 ? (
+                  <option value="">-- No protocols registered --</option>
+                ) : (
+                  trials.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      [{t.protocol_number}] {t.short_title || t.title} ({t.phase?.toUpperCase()})
+                    </option>
+                  ))
+                )}
               </select>
             </div>
             <div>

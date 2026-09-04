@@ -861,42 +861,61 @@ def create_trial(
                 seen_codes.add(s.site_code)
                 institutions_to_clone.append(s)
 
-    target_per_site = (
-        body.target_enrollment // max(len(institutions_to_clone), 1)
-        if institutions_to_clone
-        else body.target_enrollment
-    )
-
-    for inst in institutions_to_clone:
-        is_user_institution = (user_site is not None and inst.site_code == user_site.site_code)
-        
-        pi_name = (
-            user.full_name
-            if is_user_institution and user.role == UserRole.PRINCIPAL_INVESTIGATOR.value
-            else (inst.pi_name or "Designated Principal Investigator")
-        )
-        pi_email = (
-            user.email
-            if is_user_institution and user.role == UserRole.PRINCIPAL_INVESTIGATOR.value
-            else inst.pi_email
-        )
-
-        new_site = Site(
+    if not institutions_to_clone:
+        # If no sites exist yet in the database, automatically provision the Primary Coordinating Site 01
+        primary_site = Site(
             trial_id=trial.id,
-            site_code=inst.site_code,
-            name=inst.name,
-            city=inst.city,
-            state=inst.state,
-            country=inst.country or "India",
-            pi_name=pi_name,
-            pi_email=pi_email,
-            contact_phone=inst.contact_phone,
+            site_code="01",
+            name="All India Institute of Ayurveda (AIIA), Central Hospital",
+            city="New Delhi",
+            state="Delhi",
+            country="India",
+            pi_name=user.full_name if user.role == UserRole.PRINCIPAL_INVESTIGATOR.value else "Prof. (Dr.) Tanuja Nesari",
+            pi_email=user.email if user.role == UserRole.PRINCIPAL_INVESTIGATOR.value else "director@aiia.gov.in",
+            contact_phone="+91 11 26950401",
             status="activated",
-            target_enrollment=target_per_site,
+            target_enrollment=body.target_enrollment,
             activation_date=now.date(),
             created_at=now,
         )
-        session.add(new_site)
+        session.add(primary_site)
+    else:
+        target_per_site = (
+            body.target_enrollment // max(len(institutions_to_clone), 1)
+            if institutions_to_clone
+            else body.target_enrollment
+        )
+
+        for inst in institutions_to_clone:
+            is_user_institution = (user_site is not None and inst.site_code == user_site.site_code)
+            
+            pi_name = (
+                user.full_name
+                if is_user_institution and user.role == UserRole.PRINCIPAL_INVESTIGATOR.value
+                else (inst.pi_name or "Designated Principal Investigator")
+            )
+            pi_email = (
+                user.email
+                if is_user_institution and user.role == UserRole.PRINCIPAL_INVESTIGATOR.value
+                else inst.pi_email
+            )
+
+            new_site = Site(
+                trial_id=trial.id,
+                site_code=inst.site_code,
+                name=inst.name,
+                city=inst.city,
+                state=inst.state,
+                country=inst.country or "India",
+                pi_name=pi_name,
+                pi_email=pi_email,
+                contact_phone=inst.contact_phone,
+                status="activated",
+                target_enrollment=target_per_site,
+                activation_date=now.date(),
+                created_at=now,
+            )
+            session.add(new_site)
 
     audit.record(
         session,
