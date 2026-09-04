@@ -72,12 +72,6 @@ export default function Shell({ view, setView, live, children }) {
       ? [
           ['infrastructure', 'Clinical Infrastructure & Actions'],
           ['create_account', '+ Create New Account'],
-          ['cdisc_ingest', 'CDISC Harmonizer (Import)'],
-        ]
-      : []),
-    ...((user.role !== 'sponsor' && (user.permissions?.includes('export') || user.role === 'regulator' || user.role === 'coordinator' || user.role === 'admin'))
-      ? [
-          ['cdisc_export', 'CDISC Harmonizer (Export)'],
         ]
       : []),
   ]
