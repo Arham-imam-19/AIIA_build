@@ -42,7 +42,7 @@ ACCESS_TOKEN_TTL_MINUTES = int(os.getenv("ACCESS_TOKEN_TTL_MINUTES", "720"))
 # The password every seeded demo persona shares, so five logins are memorable
 # during a five-minute pitch. Synthetic users only - there is no real account
 # anywhere in this system.
-DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "aiia2026")
+DEMO_PASSWORD = os.getenv("DEMO_PASSWORD", "AIIA@2026!")
 
 # Development-only conveniences: the /api/auth/demo-users endpoint that lists the
 # personas and their shared password, and the one-click persona buttons on the
