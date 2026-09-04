@@ -11,7 +11,6 @@ import ScreenParticipantPage from './pages/ScreenParticipantPage'
 import ParticipantsListPage from './pages/ParticipantsListPage'
 import PatientDetailPage from './pages/PatientDetailPage'
 import Login from './Login'
-import RbacMatrix from './RbacMatrix'
 import Shell from './Shell'
 import { DASHBOARDS, FALLBACK } from './dashboards'
 import { useLiveDashboard } from './useLiveDashboard'
@@ -144,8 +143,6 @@ function SignedIn() {
         <InfrastructurePage onNavigateDashboard={() => setView('dashboard')} />
       ) : view === 'create_account' ? (
         <CreateUserPage onNavigateDashboard={() => setView('dashboard')} />
-      ) : view === 'access' ? (
-        <RbacMatrix highlightRole={user.role} />
       ) : live.status === 'refused' ? (
         <p className="border border-red-300 bg-red-50 p-4 text-xs font-semibold text-red-800">{live.error}</p>
       ) : !live.dashboard ? (

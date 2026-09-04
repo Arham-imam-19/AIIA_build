@@ -80,7 +80,6 @@ export default function Shell({ view, setView, live, children }) {
           ['cdisc_export', 'CDISC Harmonizer (Export)'],
         ]
       : []),
-    ['access', 'Access Rules & Matrix'],
   ]
 
   return (

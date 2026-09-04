@@ -260,37 +260,42 @@ def _demo_users_for_roles(session: Session, role_order: list[str]) -> dict:
         select(User).where(User.is_active == True).order_by(User.id)  # noqa: E712
     ).all()
 
-    # One login per role: the first user found for each, matching what the seed
-    # script prints. Site-scoped roles get several users (one per hospital), and
-    # picking the lowest id makes "the demo PI" a stable choice.
-    chosen: dict[str, User] = {}
-    for user in users:
-        if user.role in role_order and user.role not in chosen:
-            if user.hashed_password:
-                chosen[user.role] = user
+    # Return all active accounts with credentials matching the portal roles,
+    # ordered systematically by role hierarchy and then account ID.
+    matching_users = [
+        u for u in users
+        if u.role in role_order and u.hashed_password
+    ]
+
+    def _role_rank(u: User) -> int:
+        try:
+            return role_order.index(u.role)
+        except ValueError:
+            return 999
+
+    matching_users.sort(key=lambda u: (_role_rank(u), u.id))
 
     return {
         "password": config.DEMO_PASSWORD,
         "note": (
-            "Synthetic demo accounts. All share one password so a five-minute "
-            "pitch does not become a typing exercise."
+            "Select any registered account below to sign in instantly with one click."
         ),
         "users": [
             {
-                "email": chosen[role].email,
-                "full_name": chosen[role].full_name,
-                "role": role,
-                "role_label": ROLE_LABELS.get(role, role),
-                "site_id": chosen[role].site_id,
-                "organization": chosen[role].organization,
+                "id": u.id,
+                "email": u.email,
+                "full_name": u.full_name,
+                "role": u.role,
+                "role_label": ROLE_LABELS.get(u.role, u.role),
+                "site_id": u.site_id,
+                "organization": u.organization,
             }
-            for role in role_order
-            if role in chosen
+            for u in matching_users
         ],
-        "seeded": bool(chosen),
+        "seeded": bool(matching_users),
         "hint": (
             "Empty? Run: docker compose exec backend python scripts/seed.py"
-            if not chosen
+            if not matching_users
             else None
         ),
     }
