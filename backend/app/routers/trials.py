@@ -801,6 +801,12 @@ class CreateTrialRequest(SQLModel):
     sponsor_name: str = "All India Institute of Ayurveda"
     target_enrollment: int = 100
     participating_site_ids: list[int] | None = None
+    primary_site_name: str | None = None
+    primary_site_code: str | None = None
+    primary_site_city: str | None = None
+    primary_site_state: str | None = None
+    primary_site_pi_name: str | None = None
+    primary_site_pi_email: str | None = None
 
 
 @router.post("/trials", response_model=Trial, status_code=201)
@@ -862,16 +868,31 @@ def create_trial(
                 institutions_to_clone.append(s)
 
     if not institutions_to_clone:
-        # If no sites exist yet in the database, automatically provision the Primary Coordinating Site 01
+        # If no sites exist yet in the database, provision the primary site from request details or defaults
+        s_code = (body.primary_site_code or "01").strip().upper()
+        s_name = (body.primary_site_name or "All India Institute of Ayurveda (AIIA), Central Hospital").strip()
+        s_city = (body.primary_site_city or "New Delhi").strip()
+        s_state = (body.primary_site_state or "Delhi").strip()
+        s_pi_name = (
+            user.full_name
+            if user.role == UserRole.PRINCIPAL_INVESTIGATOR.value
+            else (body.primary_site_pi_name or "Prof. (Dr.) Tanuja Nesari").strip()
+        )
+        s_pi_email = (
+            user.email
+            if user.role == UserRole.PRINCIPAL_INVESTIGATOR.value
+            else (body.primary_site_pi_email or "director@aiia.gov.in").strip()
+        )
+
         primary_site = Site(
             trial_id=trial.id,
-            site_code="01",
-            name="All India Institute of Ayurveda (AIIA), Central Hospital",
-            city="New Delhi",
-            state="Delhi",
+            site_code=s_code,
+            name=s_name,
+            city=s_city,
+            state=s_state,
             country="India",
-            pi_name=user.full_name if user.role == UserRole.PRINCIPAL_INVESTIGATOR.value else "Prof. (Dr.) Tanuja Nesari",
-            pi_email=user.email if user.role == UserRole.PRINCIPAL_INVESTIGATOR.value else "director@aiia.gov.in",
+            pi_name=s_pi_name,
+            pi_email=s_pi_email,
             contact_phone="+91 11 26950401",
             status="activated",
             target_enrollment=body.target_enrollment,
