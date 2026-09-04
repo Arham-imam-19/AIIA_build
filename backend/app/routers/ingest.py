@@ -207,7 +207,18 @@ _EVAL_RE = re.compile(r"Clinical Evaluation:\s*(.+)", re.IGNORECASE)
 @router.post("/parse-pdf")
 @router.post("/source-document")
 async def parse_pdf(file: UploadFile = File(...)):
-    raw = (await file.read()).decode("utf-8", errors="replace")
+    content_bytes = await file.read()
+    raw = ""
+    if file.filename and file.filename.lower().endswith(".pdf"):
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(content_bytes))
+            for page in reader.pages:
+                raw += page.extract_text() or ""
+        except Exception:
+            raw = content_bytes.decode("utf-8", errors="replace")
+    if not raw.strip():
+        raw = content_bytes.decode("utf-8", errors="replace")
 
     # Split on the dashed separator lines
     blocks = re.split(r"-{20,}", raw)
