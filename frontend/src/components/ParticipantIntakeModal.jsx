@@ -40,8 +40,12 @@ export default function ParticipantIntakeModal({ trialId, siteId, onClose, onSuc
         if (defaultTrial) {
           setSelectedTrialId(defaultTrial.id)
           // Find matching site
+          const userBaseSite = siteList.find((s) => s.id === user?.site_id)
+          const userSiteCode = userBaseSite?.site_code
           const matchingSite =
+            (userSiteCode && siteList.find((s) => s.trial_id === defaultTrial.id && s.site_code === userSiteCode)) ||
             siteList.find((s) => s.trial_id === defaultTrial.id && s.id === user?.site_id) ||
+            userBaseSite ||
             siteList.find((s) => s.trial_id === defaultTrial.id) ||
             siteList[0]
           setSelectedSiteId(matchingSite?.id || siteId || null)
@@ -69,8 +73,13 @@ export default function ParticipantIntakeModal({ trialId, siteId, onClose, onSuc
     const tId = Number(newTrialId)
     setSelectedTrialId(tId)
     const sitesForTrial = sites.filter((s) => s.trial_id === tId)
+    const userBaseSite = sites.find((s) => s.id === user?.site_id)
+    const userSiteCode = userBaseSite?.site_code
     const userSiteMatch =
-      sitesForTrial.find((s) => s.id === user?.site_id) || sitesForTrial[0]
+      (userSiteCode && sitesForTrial.find((s) => s.site_code === userSiteCode)) ||
+      sitesForTrial.find((s) => s.id === user?.site_id) ||
+      userBaseSite ||
+      sitesForTrial[0]
     setSelectedSiteId(userSiteMatch?.id || null)
     setError(null)
   }

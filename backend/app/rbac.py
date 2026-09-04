@@ -27,13 +27,13 @@ from enum import Enum
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app import security
 from app.db import get_session
 from app.enums import UserRole
 from app.events import bus
-from app.models import User
+from app.models import User, Site
 
 
 class Permission(str, Enum):
@@ -319,6 +319,7 @@ class CurrentUser(BaseModel):
     full_name: str
     role: str
     site_id: int | None = None
+    allowed_site_ids: list[int] = []
     subject_id: int | None = None
     organization: str | None = None
     # Copied off the token so a WebSocket can log out the same session.
@@ -397,12 +398,24 @@ async def user_from_token(token: str, session: Session) -> CurrentUser:
     if not user.is_active:
         raise _unauthorized("this account has been deactivated")
 
+    allowed_site_ids: list[int] = []
+    if user.site_id is not None:
+        user_site = session.get(Site, user.site_id)
+        if user_site and user_site.site_code:
+            siblings = session.exec(
+                select(Site.id).where(Site.site_code == user_site.site_code)
+            ).all()
+            allowed_site_ids = [s_id for s_id in siblings if s_id is not None]
+        if not allowed_site_ids:
+            allowed_site_ids = [user.site_id]
+
     return CurrentUser(
         id=user.id,  # type: ignore[arg-type]
         email=user.email,
         full_name=user.full_name,
         role=user.role,
         site_id=user.site_id,
+        allowed_site_ids=allowed_site_ids,
         subject_id=user.subject_id,
         organization=user.organization,
         jti=claims.get("jti"),
@@ -457,6 +470,10 @@ def scoped(statement, column, user: CurrentUser):
     `AdverseEvent.site_id`, `Site.id`. Returns the statement unchanged for the
     roles that see everything.
     """
+    if not user.is_site_scoped:
+        return statement
+    if user.allowed_site_ids:
+        return statement.where(column.in_(user.allowed_site_ids))
     site_id = user.scope_site_id
     if site_id is None:
         return statement
@@ -471,17 +488,22 @@ def assert_site_visible(user: CurrentUser, site_id: int | None) -> None:
     Refusing loudly is right - a silent 404 would tell a curious user to keep
     guessing ids.
     """
+    if not user.is_site_scoped:
+        return
     scope = user.scope_site_id
     if scope is None:
         return
-    if site_id != scope:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                f"this record belongs to another site. "
-                f"{user.role_label} access is limited to site id {user.site_id}."
-            ),
-        )
+    if site_id == scope:
+        return
+    if user.allowed_site_ids and site_id in user.allowed_site_ids:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            f"this record belongs to another site. "
+            f"{user.role_label} access is limited to site id {user.site_id}."
+        ),
+    )
 
 
 def matrix() -> dict:

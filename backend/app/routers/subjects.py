@@ -402,9 +402,31 @@ def create_subject_in_screening(
                 status_code=409,
                 detail="your account is attached to a site that no longer exists",
             )
-        if body.site_id is not None and body.site_id != scope:
+        # Resolve user's site for the selected trial
+        if user_site.trial_id == trial.id:
+            resolved_site = user_site
+        else:
+            resolved_site = session.exec(
+                select(Site).where(
+                    Site.trial_id == trial.id,
+                    (Site.site_code == user_site.site_code) | (Site.name == user_site.name)
+                )
+            ).first()
+            if not resolved_site:
+                resolved_site = user_site
+
+        if body.site_id is not None and body.site_id != resolved_site.id and body.site_id != scope:
             target_site = session.get(Site, body.site_id)
-            if not target_site or target_site.trial_id != trial.id:
+            if target_site is None:
+                raise HTTPException(status_code=404, detail=f"no site with id {body.site_id}")
+            is_valid_site = (
+                target_site.trial_id == trial.id
+                and (
+                    target_site.site_code == user_site.site_code
+                    or (user.allowed_site_ids and body.site_id in user.allowed_site_ids)
+                )
+            )
+            if not is_valid_site:
                 raise HTTPException(
                     status_code=403,
                     detail=(
@@ -414,23 +436,7 @@ def create_subject_in_screening(
                 )
             site = target_site
         else:
-            if user_site.trial_id == trial.id:
-                site = user_site
-            else:
-                matching_site = session.exec(
-                    select(Site).where(
-                        Site.trial_id == trial.id,
-                        (Site.site_code == user_site.site_code) | (Site.name == user_site.name)
-                    )
-                ).first()
-                if not matching_site:
-                    matching_site = session.exec(
-                        select(Site).where(Site.trial_id == trial.id)
-                    ).first()
-                if matching_site:
-                    site = matching_site
-                else:
-                    site = user_site
+            site = resolved_site
 
     if site.trial_id != trial.id:
         raise HTTPException(
@@ -1157,11 +1163,18 @@ def list_visits(
         else:
             statement = statement.where(Visit.subject_id == user.subject_id)
     elif user.scope_site_id is not None:
-        statement = statement.where(
-            Visit.subject_id.in_(  # type: ignore[union-attr]
-                select(Subject.id).where(Subject.site_id == user.scope_site_id)
+        if user.allowed_site_ids:
+            statement = statement.where(
+                Visit.subject_id.in_(  # type: ignore[union-attr]
+                    select(Subject.id).where(Subject.site_id.in_(user.allowed_site_ids))
+                )
             )
-        )
+        else:
+            statement = statement.where(
+                Visit.subject_id.in_(  # type: ignore[union-attr]
+                    select(Subject.id).where(Subject.site_id == user.scope_site_id)
+                )
+            )
     total, items = paginate(session, statement, limit, offset)
     return Page(total=total, limit=limit, offset=offset, items=items)
 

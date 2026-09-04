@@ -30,7 +30,9 @@ export default function ParticipantsListPage({ onSelectPatient, onNavigateScreen
         setSubjects(subRes.items || [])
         const trialList = trialRes.items || []
         setTrials(trialList)
-        const userSite = siteRes.items?.find((s) => s.id === user?.site_id) || siteRes.items?.[0]
+        const userBaseSite = siteRes.items?.find((s) => s.id === user?.site_id)
+        const userSiteCode = userBaseSite?.site_code
+        const userSite = userBaseSite || (userSiteCode ? siteRes.items?.find((s) => s.site_code === userSiteCode) : null) || siteRes.items?.[0]
         setSite(userSite)
         setTrial(trialList[0] || null)
         setLoading(false)
@@ -78,7 +80,7 @@ export default function ParticipantsListPage({ onSelectPatient, onNavigateScreen
                 Registry Module
               </span>
               <span className="font-mono text-xs font-semibold text-slate-500">
-                Scope: Site {site?.id ?? user?.site_id ?? '01'} &middot; {site?.site_name || 'All India Institute of Ayurveda'}
+                Scope: Site {site?.site_code ?? site?.id ?? user?.site_id ?? '01'} &middot; {site?.name || 'All India Institute of Ayurveda'}
               </span>
             </div>
             <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-900 uppercase">

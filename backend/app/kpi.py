@@ -140,16 +140,32 @@ def _subject_codes(session: Session, subject_ids: list[int]) -> dict[int, str]:
 
 
 def _scoped_ae(statement, user: CurrentUser):
+    if not user.is_site_scoped:
+        return statement
+    if user.allowed_site_ids:
+        return statement.where(AdverseEvent.site_id.in_(user.allowed_site_ids))
     site_id = user.scope_site_id
     return statement if site_id is None else statement.where(AdverseEvent.site_id == site_id)
 
 
 def _scoped_visits(statement, user: CurrentUser):
+    if not user.is_site_scoped:
+        return statement
+    if user.allowed_site_ids:
+        return statement.where(
+            Visit.subject_id.in_(
+                select(Subject.id).where(Subject.site_id.in_(user.allowed_site_ids))
+            )
+        )
     site_id = user.scope_site_id
     return statement if site_id is None else statement.where(visits_at_site(site_id))
 
 
 def _scoped_subjects(statement, user: CurrentUser):
+    if not user.is_site_scoped:
+        return statement
+    if user.allowed_site_ids:
+        return statement.where(Subject.site_id.in_(user.allowed_site_ids))
     site_id = user.scope_site_id
     return statement if site_id is None else statement.where(Subject.site_id == site_id)
 
