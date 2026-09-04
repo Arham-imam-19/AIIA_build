@@ -298,5 +298,9 @@ export async function downloadSafetyReport(eventId, token = savedToken()) {
 // query string instead. Same server-side check either way.
 export function liveUrl(token) {
   const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${scheme}://${window.location.host}/ws/dashboard?token=${encodeURIComponent(token)}`
+  let host = window.location.host
+  if (host.includes('onrender.com')) {
+    host = 'aiia-build-1.onrender.com'
+  }
+  return `${scheme}://${host}/ws/dashboard?token=${encodeURIComponent(token)}`
 }

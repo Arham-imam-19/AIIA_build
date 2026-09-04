@@ -12,9 +12,9 @@ sqlmodel==0.0.22
 # build the database up step by step - version control for table structure.
 alembic==1.14.0
 
-# PostgreSQL driver (psycopg 3). The [binary] extra ships precompiled wheels,
-# so no C compiler is needed in the image.
+# PostgreSQL driver (psycopg 3 and psycopg2 fallback).
 psycopg[binary]==3.2.3
+psycopg2-binary>=2.9.9
 
 # --- Phase 2: authentication -------------------------------------------------
 

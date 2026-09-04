@@ -10,7 +10,7 @@
 // already had, and one missed message leaves the numbers quietly wrong.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { liveUrl } from './api'
+import { api, liveUrl } from './api'
 
 // Reconnect backoff, in milliseconds. Grows so a backend that is down does not
 // get hammered, caps so a laptop waking from sleep reconnects promptly.
@@ -81,20 +81,37 @@ export function useLiveDashboard(token, { onExpired } = {}) {
 
   useEffect(() => {
     closedByUs.current = false
+    if (token) {
+      api('/api/dashboard', { token })
+        .then((data) => {
+          if (data && !data.detail) {
+            setDashboard(data)
+            setStatus('live')
+            setError(null)
+          }
+        })
+        .catch(() => {})
+    }
     connect()
     return () => {
       closedByUs.current = true
       clearTimeout(timerRef.current)
       socketRef.current?.close()
     }
-  }, [connect])
+  }, [connect, token])
 
   // Ask for the numbers again. Anything sent up the socket means "resend", which
   // keeps the refresh button on the same code path as a live update.
   const refresh = useCallback(() => {
     const ws = socketRef.current
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send('refresh')
-  }, [])
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send('refresh')
+    } else if (token) {
+      api('/api/dashboard', { token }).then((data) => {
+        if (data && !data.detail) setDashboard(data)
+      })
+    }
+  }, [token])
 
   return { dashboard, status, error, lastEvent, updatedAt, refresh }
 }
