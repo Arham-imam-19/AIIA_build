@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchTrials, updateTrialStatus, activateTrial } from '../api'
+import { fetchTrials, updateTrialStatus, activateTrial, fetchDsmbDecisions, acknowledgeDsmbDecision } from '../api'
 import DashboardLayout from './layout'
 import ParticipantIntakeModal from '../components/ParticipantIntakeModal'
 import ReportAdverseEventModal from '../components/ReportAdverseEventModal'
@@ -42,6 +42,124 @@ function SiteComplianceStatusBanner({ trial }) {
       <span className="hidden sm:inline font-mono text-[11px]">
         NDCT Rules 2019 Rule 22
       </span>
+    </div>
+  )
+}
+
+function DsmbDirectivesNotificationBanner({ trialId }) {
+  const [directives, setDirectives] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [ackBusyId, setAckBusyId] = useState(null)
+  const [ackNotice, setAckNotice] = useState(null)
+
+  const reload = () => {
+    if (!trialId) return
+    setLoading(true)
+    fetchDsmbDecisions(trialId)
+      .then((data) => setDirectives(data || []))
+      .catch(() => setDirectives([]))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    reload()
+  }, [trialId])
+
+  const handleAcknowledge = async (id) => {
+    setAckBusyId(id)
+    try {
+      await acknowledgeDsmbDecision(id)
+      setAckNotice('DSMB safety directive formally acknowledged and recorded in 21 CFR Part 11 audit log.')
+      setTimeout(() => setAckNotice(null), 5000)
+      reload()
+    } catch (err) {
+      alert(err.detail || err.message || 'Failed to acknowledge directive')
+    } finally {
+      setAckBusyId(null)
+    }
+  }
+
+  if (!directives || directives.length === 0) return null
+
+  const latest = directives[0]
+  const isHalt = latest.decision === 'HALT'
+  const isModify = latest.decision === 'MODIFY'
+
+  return (
+    <div className={`rounded-xl border shadow-sm overflow-hidden ${
+      isHalt
+        ? 'border-rose-300 bg-rose-50/90 text-rose-950'
+        : isModify
+        ? 'border-amber-300 bg-amber-50/90 text-amber-950'
+        : 'border-emerald-300 bg-emerald-50/90 text-emerald-950'
+    }`}>
+      {ackNotice && (
+        <div className="bg-emerald-600 text-white px-4 py-2 text-xs font-bold flex items-center justify-between shadow-xs">
+          <span>✓ {ackNotice}</span>
+          <button onClick={() => setAckNotice(null)} className="text-white hover:text-slate-200 font-bold">✕</button>
+        </div>
+      )}
+
+      <div className="p-4 space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/10 pb-2.5">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">{isHalt ? '🚨' : isModify ? '⚠️' : '🛡️'}</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded font-mono ${
+                  isHalt ? 'bg-rose-200 text-rose-900' : isModify ? 'bg-amber-200 text-amber-900' : 'bg-emerald-200 text-emerald-900'
+                }`}>
+                  DSMB Safety Directive &middot; {latest.decision}
+                </span>
+                <span className="text-[11px] font-semibold text-slate-700">
+                  Issued: {latest.created_at ? new Date(latest.created_at).toLocaleDateString() : 'Active'}
+                </span>
+              </div>
+              <h4 className="text-sm font-bold text-slate-950 mt-0.5">
+                {latest.directive_title || `Board Determination: ${latest.decision}`}
+              </h4>
+            </div>
+          </div>
+
+          <div className="text-right">
+            <span className="inline-block rounded border border-black/15 bg-white/80 px-2.5 py-1 text-[11px] font-bold text-slate-800">
+              Target Scope: {latest.site_name || 'All Participating Sites'}
+            </span>
+          </div>
+        </div>
+
+        <div className="text-xs leading-relaxed bg-white/70 rounded-lg p-3 border border-black/10 font-medium text-slate-800">
+          <strong className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">
+            Official Safety Directives &amp; Clinical Instructions for Principal Investigator:
+          </strong>
+          {latest.notes}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <div className="text-[11px] text-slate-600">
+            Author: <strong>{latest.created_by_name} (DSMB Chair)</strong> &middot; Target: <strong>{latest.pi_name}</strong>
+          </div>
+
+          <div>
+            {latest.is_acknowledged ? (
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-100 border border-emerald-300 px-3 py-1 text-xs font-bold text-emerald-900">
+                <span>✅</span>
+                <span>Acknowledged by {latest.acknowledged_by_name || 'Principal Investigator'}</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                disabled={ackBusyId === latest.id}
+                onClick={() => handleAcknowledge(latest.id)}
+                className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-1.5 text-xs font-bold shadow-sm transition disabled:opacity-50 cursor-pointer"
+              >
+                <span>✍️</span>
+                <span>{ackBusyId === latest.id ? 'Confirming Compliance…' : 'Acknowledge Directive & Confirm Compliance'}</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -147,6 +265,9 @@ export default function Investigator(props) {
       )}
 
       <SiteComplianceStatusBanner trial={activeTrial} />
+
+      {/* DSMB Safety Directives & Board Notifications for PI */}
+      <DsmbDirectivesNotificationBanner trialId={activeTrial?.id} />
 
       {/* Protocol Governance & Status Transition Controls for PI */}
       <div className="border border-slate-300 bg-white p-4 shadow-sm space-y-3">

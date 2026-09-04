@@ -13,7 +13,7 @@ from datetime import date, datetime
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel, select
 
@@ -21,13 +21,14 @@ from app import audit
 from app.db import get_session
 from app.enums import AuditAction, EthicsApprovalStatus, SiteStatus, TrialStatus, UserRole
 from app.events import bus, now_iso
-from app.models import Site, Subject, Trial, User
+from app.models import DsmbDecision, Site, Subject, Trial, User
 from app.models.base import utcnow
 from app.services import trial_compliance
 from app.rbac import (
     CurrentUser,
     Permission,
     assert_site_visible,
+    get_current_user,
     require,
     scoped,
 )
@@ -1027,7 +1028,16 @@ def create_site(
 
 
 
+class DsmbDecisionRequest(BaseModel):
+    decision: str = Field(..., description="CONTINUE, MODIFY, or HALT")
+    site_id: int | None = Field(default=None, description="Target site id or None for all sites")
+    notes: str = Field(default="Routine safety monitoring review.", description="Board rationale and specific directives")
+    directive_title: str | None = Field(default=None, description="Short title for directive")
+    recommended_action: str | None = Field(default=None, description="Recommended operational action")
+
+
 @router.post("/{trial_id}/halt")
+@router.post("/trials/{trial_id}/halt")
 def halt_trial_emergency(
     trial_id: int,
     session: Session = Depends(get_session),
@@ -1058,6 +1068,224 @@ def halt_trial_emergency(
     session.commit()
     
     return {"status": "success", "message": "Trial has been suspended immediately."}
+
+
+@router.post("/trials/{trial_id}/dsmb-decision")
+@router.patch("/trials/{trial_id}/dsmb-decision")
+async def record_dsmb_decision(
+    trial_id: int,
+    body: DsmbDecisionRequest,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Log official DSMB determination, optionally target a specific site, and notify Principal Investigator."""
+    if not (user.role in {UserRole.DSMB.value, UserRole.ADMIN.value} or user.can(Permission.HALT_TRIAL)):
+        raise HTTPException(
+            status_code=403,
+            detail="Only DSMB board members and Administrators may record official safety determinations."
+        )
+
+    trial = session.get(Trial, trial_id)
+    if not trial:
+        raise HTTPException(status_code=404, detail=f"Trial {trial_id} not found")
+
+    target_site = None
+    if body.site_id is not None:
+        target_site = session.get(Site, body.site_id)
+        if not target_site or target_site.trial_id != trial_id:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Site {body.site_id} not found for trial {trial_id}"
+            )
+
+    norm_decision = body.decision.upper().strip()
+    if norm_decision not in {"CONTINUE", "MODIFY", "HALT"}:
+        raise HTTPException(
+            status_code=422,
+            detail="Decision must be one of 'CONTINUE', 'MODIFY', or 'HALT'"
+        )
+
+    # Ensure table exists in case of unmigrated instances
+    try:
+        DsmbDecision.__table__.create(session.connection(), checkfirst=True)
+    except Exception:
+        pass
+
+    # Execute state transitions if HALT or MODIFY is invoked
+    if norm_decision == "HALT":
+        if target_site:
+            target_site.status = SiteStatus.SUSPENDED
+            session.add(target_site)
+        else:
+            trial.status = TrialStatus.SUSPENDED
+            session.add(trial)
+
+    dsmb_record = DsmbDecision(
+        trial_id=trial.id,
+        site_id=target_site.id if target_site else None,
+        decision=norm_decision,
+        directive_title=body.directive_title or f"DSMB Board Directive: {norm_decision}",
+        notes=body.notes.strip(),
+        recommended_action=body.recommended_action,
+        created_by_user_id=user.id,
+        created_by_name=user.full_name,
+        created_at=utcnow(),
+    )
+    session.add(dsmb_record)
+    session.flush()
+
+    scope_str = f"Site {target_site.site_code} ({target_site.name}) - PI: {target_site.pi_name}" if target_site else "All Sites (Trial-Wide)"
+    audit.record(
+        session,
+        user=user,
+        action=AuditAction.CREATE if norm_decision != "HALT" else AuditAction.UPDATE,
+        entity_type="dsmb_decisions",
+        entity_id=dsmb_record.id,
+        entity_label=f"{trial.protocol_number}-{norm_decision}",
+        field_name="decision",
+        old_value="N/A",
+        new_value=norm_decision,
+        reason=f"Official DSMB Determination: {norm_decision} applied to {scope_str}. Board Rationale: {body.notes.strip()}",
+        trial_id=trial.id,
+    )
+    session.commit()
+    session.refresh(dsmb_record)
+
+    # Dispatch live notification to Principal Investigator and all active subscribers
+    site_label = f"Site {target_site.site_code} ({target_site.name})" if target_site else "All Participating Sites"
+    broadcast_msg = f"🚨 DSMB SAFETY DIRECTIVE: [{norm_decision}] issued by {user.full_name} for {trial.protocol_number} — Scope: {site_label}. Notification dispatched to Principal Investigator."
+    
+    await bus.publish({
+        "type": "dsmb.decision",
+        "trial_id": trial.id,
+        "site_id": target_site.id if target_site else None,
+        "site_code": target_site.site_code if target_site else None,
+        "decision": norm_decision,
+        "directive_id": dsmb_record.id,
+        "label": f"DSMB {norm_decision}",
+        "target_label": site_label,
+        "pi_name": target_site.pi_name if target_site else "All Principal Investigators",
+        "notes": dsmb_record.notes,
+        "message": broadcast_msg,
+        "actor": {
+            "name": user.full_name,
+            "email": user.email,
+            "role": user.role,
+            "role_label": user.role_label,
+        },
+    })
+
+    return {
+        "status": "success",
+        "id": dsmb_record.id,
+        "trial_id": trial.id,
+        "protocol_number": trial.protocol_number,
+        "decision": norm_decision,
+        "scope": site_label,
+        "target_site_id": target_site.id if target_site else None,
+        "pi_notified": target_site.pi_name if target_site else "All Study Principal Investigators",
+        "notes": dsmb_record.notes,
+        "created_at": dsmb_record.created_at.isoformat(),
+        "message": f"Decision to {norm_decision} officially logged in audit trail. Notification dispatched to Principal Investigator."
+    }
+
+
+@router.get("/trials/{trial_id}/dsmb-decisions")
+def list_dsmb_decisions(
+    trial_id: int,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(get_current_user),
+) -> list[dict]:
+    """Retrieve active and historical DSMB board directives for a protocol, scoped for PI visibility."""
+    trial = session.get(Trial, trial_id)
+    if not trial:
+        raise HTTPException(status_code=404, detail=f"Trial {trial_id} not found")
+
+    try:
+        DsmbDecision.__table__.create(session.connection(), checkfirst=True)
+    except Exception:
+        pass
+
+    query = select(DsmbDecision).where(DsmbDecision.trial_id == trial_id).order_by(DsmbDecision.created_at.desc())
+    if user.is_site_scoped and user.site_id is not None:
+        query = query.where(
+            (DsmbDecision.site_id.is_(None)) | (DsmbDecision.site_id == user.site_id)
+        )
+    decisions = session.exec(query).all()
+
+    results = []
+    for d in decisions:
+        site_obj = session.get(Site, d.site_id) if d.site_id else None
+        results.append({
+            "id": d.id,
+            "trial_id": d.trial_id,
+            "site_id": d.site_id,
+            "site_code": site_obj.site_code if site_obj else None,
+            "site_name": site_obj.name if site_obj else "All Participating Sites",
+            "pi_name": site_obj.pi_name if site_obj else "All Principal Investigators",
+            "decision": d.decision,
+            "directive_title": d.directive_title,
+            "notes": d.notes,
+            "recommended_action": d.recommended_action,
+            "created_by_user_id": d.created_by_user_id,
+            "created_by_name": d.created_by_name,
+            "created_at": d.created_at.isoformat(),
+            "acknowledged_at": d.acknowledged_at.isoformat() if d.acknowledged_at else None,
+            "acknowledged_by_user_id": d.acknowledged_by_user_id,
+            "acknowledged_by_name": d.acknowledged_by_name,
+            "is_acknowledged": d.acknowledged_at is not None,
+        })
+    return results
+
+
+@router.post("/dsmb-decisions/{decision_id}/acknowledge")
+def acknowledge_dsmb_decision(
+    decision_id: int,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Principal Investigator formal acknowledgment of a DSMB safety directive under GCP compliance."""
+    try:
+        DsmbDecision.__table__.create(session.connection(), checkfirst=True)
+    except Exception:
+        pass
+
+    record = session.get(DsmbDecision, decision_id)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Directive {decision_id} not found")
+
+    if user.is_site_scoped and record.site_id is not None and user.site_id != record.site_id:
+        raise HTTPException(status_code=403, detail="You may only acknowledge directives targeted to your site.")
+
+    now = utcnow()
+    record.acknowledged_at = now
+    record.acknowledged_by_user_id = user.id
+    record.acknowledged_by_name = user.full_name
+    session.add(record)
+    session.flush()
+
+    audit.record(
+        session,
+        user=user,
+        action=AuditAction.UPDATE,
+        entity_type="dsmb_decisions",
+        entity_id=record.id,
+        entity_label=f"DSMB-{record.decision}-ACK",
+        field_name="acknowledged_at",
+        old_value="None",
+        new_value=now.isoformat(),
+        reason=f"Principal Investigator {user.full_name} formally acknowledged DSMB {record.decision} directive and confirmed protocol compliance.",
+        trial_id=record.trial_id,
+    )
+    session.commit()
+    session.refresh(record)
+
+    return {
+        "status": "success",
+        "message": "DSMB directive formally acknowledged in 21 CFR Part 11 audit trail.",
+        "acknowledged_at": record.acknowledged_at.isoformat(),
+        "acknowledged_by_name": record.acknowledged_by_name,
+    }
 
 
 class UpdateTrialStatusRequest(SQLModel):
