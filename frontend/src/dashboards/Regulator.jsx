@@ -302,8 +302,25 @@ function InteractiveAuditExplorer() {
 }
 
 export default function Regulator(props) {
+  // Reorganize blocks: remove 'Recent audit entries' and order the rest.
+  const activeDashboard = props.dashboard ? {
+    ...props.dashboard,
+    blocks: (props.dashboard.blocks || [])
+      .filter(b => b.title !== 'Recent audit entries')
+      .sort((a, b) => {
+        const getIdx = (title) => {
+          if (title.includes('NDCT Rules 2019')) return 0;
+          if (title.includes('Sites and their status')) return 1;
+          if (title.includes('Serious adverse events')) return 2;
+          return 99;
+        };
+        return getIdx(a.title) - getIdx(b.title);
+      })
+  } : null;
+
   return (
     <div className="space-y-6">
+      {/* 1. DPDP Act Banner */}
       <div className="flex items-center justify-between rounded-lg border border-indigo-100 bg-indigo-50/70 px-4 py-2.5 text-xs text-indigo-900">
         <span className="flex items-center gap-2 font-medium">
           <span className="flex h-2 w-2 rounded-full bg-indigo-600"></span>
@@ -314,12 +331,15 @@ export default function Regulator(props) {
         </span>
       </div>
 
+      {/* 2, 3, 4. KPIs, NDCT Gates, Sites, and SAEs */}
       <DashboardLayout
         {...props}
-        wide={['audit_tail', 'sae_reporting', 'ndct_gates']}
+        dashboard={activeDashboard || props.dashboard}
+        wide={['ndct_gates']}
         note="The legal sequence under India's NDCT Rules 2019: IEC ethics approval, then regulatory permission, then CTRI registration before the first participant is enrolled."
       />
 
+      {/* 5. Complete Audit Trail Explorer */}
       <InteractiveAuditExplorer />
     </div>
   )

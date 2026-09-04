@@ -90,6 +90,89 @@ const Spinner = () => (
   </svg>
 )
 
+/* ── Roster Table (Frontend Managed) ─────────────────────────────────────── */
+function RosterTable({ eligibilityQueue, screenFailures }) {
+  const [activeTab, setActiveTab] = useState('eligible')
+
+  return (
+    <div className="border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden mb-6">
+      <div className="bg-slate-50 border-b border-slate-200 p-4 flex items-center gap-4">
+        <button
+          onClick={() => setActiveTab('eligible')}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition ${activeTab === 'eligible' ? 'bg-aiia-600 text-white shadow-sm' : 'bg-transparent text-slate-600 hover:bg-slate-200'}`}
+        >
+          Eligible Awaiting PI Review ({eligibilityQueue.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('failures')}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition ${activeTab === 'failures' ? 'bg-red-600 text-white shadow-sm' : 'bg-transparent text-slate-600 hover:bg-slate-200'}`}
+        >
+          Screen Failures ({screenFailures.length})
+        </button>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm text-slate-700">
+          <thead className="bg-slate-50 text-xs uppercase font-semibold text-slate-500 border-b border-slate-200">
+            <tr>
+              <th className="px-4 py-3 border-r border-slate-200">Participant ID</th>
+              <th className="px-4 py-3 border-r border-slate-200">Screened On</th>
+              {activeTab === 'eligible' && <th className="px-4 py-3 border-r border-slate-200">Wait Time</th>}
+              <th className="px-4 py-3 border-r border-slate-200">Demographics</th>
+              <th className="px-4 py-3">Initial Symptom (MedDRA)</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {activeTab === 'eligible' && eligibilityQueue.map((r, i) => (
+              <tr key={i} className="hover:bg-slate-50">
+                <td className="px-4 py-3 border-r border-slate-100 font-mono text-xs font-bold">{r.id}</td>
+                <td className="px-4 py-3 border-r border-slate-100">{r.screenedOn}</td>
+                <td className="px-4 py-3 border-r border-slate-100">
+                  <span className={`px-2 py-1 rounded text-xs font-bold ${r.waitingDays > 3 ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                    {r.waitingDays} days
+                  </span>
+                </td>
+                <td className="px-4 py-3 border-r border-slate-100">{r.age}y / {r.sex}</td>
+                <td className="px-4 py-3">
+                  <span className="px-2 py-1 rounded text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    {r.symptom}
+                  </span>
+                </td>
+              </tr>
+            ))}
+            {activeTab === 'eligible' && eligibilityQueue.length === 0 && (
+              <tr>
+                <td colSpan="5" className="px-4 py-8 text-center text-slate-500 italic">No participants waiting for review.</td>
+              </tr>
+            )}
+
+            {activeTab === 'failures' && screenFailures.map((r, i) => (
+              <tr key={i} className="hover:bg-slate-50">
+                <td className="px-4 py-3 border-r border-slate-100 font-mono text-xs font-bold">{r.id}</td>
+                <td className="px-4 py-3 border-r border-slate-100">{r.screenedOn}</td>
+                <td className="px-4 py-3 border-r border-slate-100">{r.age}y / {r.sex}</td>
+                <td className="px-4 py-3">
+                  <span className="px-2 py-1 rounded text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    {r.symptom}
+                  </span>
+                  <span className="ml-2 px-2 py-1 rounded text-[11px] font-bold bg-red-100 text-red-700 border border-red-200">
+                    FAILED
+                  </span>
+                </td>
+              </tr>
+            ))}
+            {activeTab === 'failures' && screenFailures.length === 0 && (
+              <tr>
+                <td colSpan="4" className="px-4 py-8 text-center text-slate-500 italic">No screen failures recorded.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    MAIN COORDINATOR COMPONENT
    ══════════════════════════════════════════════════════════════════════════ */
@@ -121,10 +204,20 @@ export default function Coordinator(props) {
     props.onRefresh?.()
   }
 
-  const activeDashboard = summaryData?.tiles ? {
+  const baseTiles = summaryData?.tiles || props.dashboard?.tiles || []
+  const activeDashboard = (summaryData?.tiles || props.dashboard) ? {
     ...props.dashboard,
-    tiles: summaryData.tiles,
-  } : props.dashboard
+    tiles: baseTiles.filter(t => t.id !== 'screening' && t.title !== 'Waiting on an eligibility decision'),
+  } : null
+
+  // ── Unified Participant State ──────────────────────────────────────────
+  const [eligibilityQueue, setEligibilityQueue] = useState([
+    { id: 'SUB-098', screenedOn: '2026-08-30', waitingDays: 4, sex: 'Female', age: 41, symptom: 'Hypertension' },
+    { id: 'SUB-099', screenedOn: '2026-08-31', waitingDays: 3, sex: 'Male', age: 52, symptom: 'Type 2 Diabetes Mellitus' },
+    { id: 'SUB-100', screenedOn: '2026-09-01', waitingDays: 2, sex: 'Female', age: 39, symptom: 'Insomnia' }
+  ])
+  const [screenFailures, setScreenFailures] = useState([])
+  const [lastBatchReceipt, setLastBatchReceipt] = useState(null)
 
   // ── Ingestion pipeline state ──────────────────────────────────────────
   const [ingestResults, setIngestResults] = useState(null)
@@ -134,6 +227,8 @@ export default function Coordinator(props) {
   const [toast, setToast] = useState(null)
 
   // ── Site KPI state ────────────────────────────────────────────────────
+  const [inScreeningCount, setInScreeningCount] = useState(4)
+  const [totalScreenedCount, setTotalScreenedCount] = useState(82)
   const [kpiScreened, setKpiScreened] = useState(68)
   const [kpiEnrolled, setKpiEnrolled] = useState(68)
   const [kpiDeviations, setKpiDeviations] = useState(34)
@@ -176,10 +271,41 @@ export default function Coordinator(props) {
   const handleApprove = () => {
     if (!ingestResults) return
     const approved = ingestResults.records.filter((_, i) => approvals[i])
-    const passedCount = approved.filter(r => r.screening_outcome === 'PASSED').length
+    const passed = approved.filter(r => r.screening_outcome === 'PASSED')
+    const failed = approved.filter(r => r.screening_outcome === 'FAILED')
+
+    const mappedPassed = passed.map(rec => ({
+      id: rec.subject_id || rec.subject_code,
+      screenedOn: new Date().toISOString().split('T')[0],
+      waitingDays: 0,
+      sex: rec.sex || rec.gender || 'Female',
+      age: rec.age || 42,
+      symptom: rec.harmonized_term || rec.chief_complaint || 'N/A'
+    }))
+
+    const mappedFailed = failed.map(rec => ({
+      id: rec.subject_id || rec.subject_code,
+      screenedOn: new Date().toISOString().split('T')[0],
+      sex: rec.sex || rec.gender || 'Unknown',
+      age: rec.age || 42,
+      symptom: rec.harmonized_term || rec.chief_complaint || 'N/A'
+    }))
+
+    setEligibilityQueue(prev => [...mappedPassed, ...prev])
+    setScreenFailures(prev => [...prev, ...mappedFailed])
+    setInScreeningCount(prev => prev + passed.length)
+    setTotalScreenedCount(prev => prev + approved.length)
+
+    setLastBatchReceipt({
+      batchId: ingestResults.job_id || 'JOB-' + Math.floor(Math.random()*1000),
+      total: approved.length,
+      passed: passed.length,
+      failed: failed.length,
+      timestamp: new Date().toLocaleTimeString()
+    })
 
     setKpiScreened(prev => prev + approved.length)
-    setKpiEnrolled(prev => prev + passedCount)
+    setKpiEnrolled(prev => prev + passed.length)
     setIngestResults(null)
     setApprovals({})
     setToast('Batch Ingestion Verified: Screened records committed to CDISC registry under 21 CFR Part 11.')
@@ -441,13 +567,32 @@ export default function Coordinator(props) {
         </div>
       )}
 
+      {/* ── Batch Receipt Banner ──────────────────────────────────────── */}
+      {lastBatchReceipt && (
+        <div className="bg-aiia-50 border border-aiia-200 rounded-xl p-4 flex items-center justify-between mb-6 shadow-sm">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">📥</span>
+            <div>
+              <div className="font-bold text-aiia-900 text-sm">Batch Ingestion Successful: {lastBatchReceipt.batchId}</div>
+              <div className="text-xs text-aiia-700 mt-0.5">
+                Processed {lastBatchReceipt.total} records at {lastBatchReceipt.timestamp} &bull; 
+                <span className="font-bold text-emerald-700 ml-1">{lastBatchReceipt.passed} Passed</span> &bull; 
+                <span className="font-bold text-red-700 ml-1">{lastBatchReceipt.failed} Failed</span>
+              </div>
+            </div>
+          </div>
+          <button onClick={() => setLastBatchReceipt(null)} className="text-aiia-600 hover:bg-aiia-100 rounded-lg p-2 transition font-bold">✕</button>
+        </div>
+      )}
+
       {/* ── Open Data Queries & KPI Dashboard ───────────────────────── */}
       <div className="pt-4">
+        <RosterTable eligibilityQueue={eligibilityQueue} screenFailures={screenFailures} />
         <OpenDataQueries />
         <DashboardLayout
           {...props}
           dashboard={activeDashboard}
-          wide={['upcoming', 'screening']}
+          wide={['upcoming']}
           note="Your worklist for the next two weeks. An overdue visit becomes a protocol deviation if it slips outside its window, so these dates are the ones that matter."
         />
       </div>
