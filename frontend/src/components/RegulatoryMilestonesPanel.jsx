@@ -1,9 +1,17 @@
 import { useEffect, useState } from 'react'
 import { fetchSponsorMilestones } from '../api'
+import RegisterCtriModal from './RegisterCtriModal'
 
 export default function RegulatoryMilestonesPanel({ consentPct }) {
   const [milestones, setMilestones] = useState([])
   const [loading, setLoading] = useState(true)
+  const [showCtriModal, setShowCtriModal] = useState(false)
+
+  const reload = () => {
+    fetchSponsorMilestones()
+      .then((data) => setMilestones(data || []))
+      .catch((err) => console.error('Failed to reload milestones:', err))
+  }
 
   useEffect(() => {
     fetchSponsorMilestones()
@@ -81,6 +89,14 @@ export default function RegulatoryMilestonesPanel({ consentPct }) {
             <div className="text-[11px] text-slate-500 mt-0.5">
               Registered: {primary.ctri_date || 'Pending formal registry approval'}
             </div>
+            <button
+              type="button"
+              onClick={() => setShowCtriModal(true)}
+              className="mt-2 inline-flex items-center gap-1 border border-slate-300 bg-white hover:bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-800 shadow-sm transition"
+            >
+              <span>📝</span>
+              <span>{primary.ctri_status === 'REGISTERED' ? 'Edit CTRI Registration' : 'Register Prospective CTRI Number'}</span>
+            </button>
           </div>
           <div className="text-[11px] text-slate-500 bg-slate-50 rounded p-2 border border-slate-100">
             NDCT Rules 2019 Rule 22: Mandatory prospective registration prior to participant screening.
@@ -146,6 +162,24 @@ export default function RegulatoryMilestonesPanel({ consentPct }) {
           </div>
         </div>
       </div>
+
+      {showCtriModal && (
+        <RegisterCtriModal
+          trial={{
+            id: primary.trial_id,
+            protocol_number: primary.protocol_number,
+            title: primary.title,
+            short_title: primary.title,
+            ctri_number: primary.ctri_number === 'Not Registered' ? '' : primary.ctri_number,
+            ctri_registration_date: primary.ctri_date,
+          }}
+          onClose={() => setShowCtriModal(false)}
+          onSuccess={() => {
+            reload()
+            setShowCtriModal(false)
+          }}
+        />
+      )}
     </section>
   )
 }

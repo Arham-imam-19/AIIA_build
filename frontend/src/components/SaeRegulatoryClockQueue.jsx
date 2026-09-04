@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
-import { fetchSponsorSaeQueue } from '../api'
+import { fetchSponsorSaeQueue, submitSaeToEc, simulateOverdueSae } from '../api'
 
 export default function SaeRegulatoryClockQueue() {
   const [saes, setSaes] = useState([])
   const [loading, setLoading] = useState(true)
+  const [submittingId, setSubmittingId] = useState(null)
+  const [simulating, setSimulating] = useState(false)
+  const [actionNotice, setActionNotice] = useState(null)
 
-  useEffect(() => {
+  const reload = () => {
     fetchSponsorSaeQueue()
       .then((data) => {
         setSaes(data || [])
@@ -14,7 +17,39 @@ export default function SaeRegulatoryClockQueue() {
         console.error('Failed to load SAE queue:', err)
       })
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    reload()
   }, [])
+
+  const handleSubmit = async (eventId) => {
+    setSubmittingId(eventId)
+    try {
+      await submitSaeToEc(eventId)
+      setActionNotice('SAE report formally transmitted to Institutional Ethics Committee!')
+      setTimeout(() => setActionNotice(null), 4000)
+      reload()
+    } catch (err) {
+      alert(err.detail || err.message || 'Failed to submit SAE to Ethics Committee')
+    } finally {
+      setSubmittingId(null)
+    }
+  }
+
+  const handleSimulateOverdue = async () => {
+    setSimulating(true)
+    try {
+      await simulateOverdueSae()
+      setActionNotice('🚨 Simulated Overdue SAE generated! Elapsed clock > 24h statutory window.')
+      setTimeout(() => setActionNotice(null), 5000)
+      reload()
+    } catch (err) {
+      alert(err.detail || err.message || 'Failed to generate simulated overdue SAE')
+    } finally {
+      setSimulating(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -29,6 +64,12 @@ export default function SaeRegulatoryClockQueue() {
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      {actionNotice && (
+        <div className="bg-emerald-50 border-b border-emerald-200 px-5 py-2 text-xs font-semibold text-emerald-900 flex items-center justify-between">
+          <span>✓ {actionNotice}</span>
+          <button onClick={() => setActionNotice(null)} className="text-emerald-700 hover:text-emerald-900 font-bold">✕</button>
+        </div>
+      )}
       <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-3.5 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-base">🚨</span>
@@ -42,7 +83,17 @@ export default function SaeRegulatoryClockQueue() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={simulating}
+            onClick={handleSimulateOverdue}
+            className="inline-flex items-center gap-1 rounded border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-800 px-2.5 py-1 text-xs font-semibold shadow-xs transition disabled:opacity-50"
+            title="NDCT Rules 2019 Rule 42 compliance demonstration: inject an SAE with >24h elapsed reporting clock"
+          >
+            <span>⚡</span>
+            <span>{simulating ? 'Generating…' : 'Simulate Overdue 24h Clock (Demo)'}</span>
+          </button>
           {overdueCount > 0 && (
             <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 border border-rose-200 px-2.5 py-0.5 text-xs font-semibold text-rose-800 animate-pulse">
               <span>⚠️</span>
@@ -139,14 +190,48 @@ export default function SaeRegulatoryClockQueue() {
                       </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {ae.reported_to_ec ? (
-                        <span className="inline-flex items-center text-emerald-700 font-medium text-[11px]">
-                          ✓ Submitted to IEC
-                        </span>
+                      {ae.ec_decision ? (
+                        <div className="flex flex-col items-start">
+                          <span className={`inline-flex items-center gap-1 font-bold text-[11px] ${
+                            ae.ec_decision === 'accepted'
+                              ? 'text-emerald-700'
+                              : ae.ec_decision === 'rejected'
+                              ? 'text-rose-700'
+                              : 'text-amber-700'
+                          }`}>
+                            <span>{ae.ec_decision === 'accepted' ? '✅' : '⚖️'}</span>
+                            <span>IEC: {ae.ec_decision.toUpperCase()}</span>
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {ae.ec_decision_date || ae.reported_to_ec_date}
+                          </span>
+                        </div>
+                      ) : ae.reported_to_ec ? (
+                        <div className="flex flex-col items-start">
+                          <span className="inline-flex items-center text-emerald-700 font-semibold text-[11px]">
+                            ✓ Submitted to IEC
+                          </span>
+                          {ae.reported_to_ec_date && (
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {ae.reported_to_ec_date}
+                            </span>
+                          )}
+                        </div>
                       ) : (
-                        <span className="inline-flex items-center text-rose-700 font-medium text-[11px]">
-                          Pending Submission
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center text-rose-700 font-medium text-[11px]">
+                            Pending Submission
+                          </span>
+                          <button
+                            type="button"
+                            disabled={submittingId === ae.id}
+                            onClick={() => handleSubmit(ae.id)}
+                            className="inline-flex items-center rounded border border-rose-300 bg-white hover:bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-800 transition shadow-xs cursor-pointer"
+                            title="Formally transmit SAE notification to Institutional Ethics Committee"
+                          >
+                            {submittingId === ae.id ? 'Submitting…' : '✉️ Submit to IEC'}
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>

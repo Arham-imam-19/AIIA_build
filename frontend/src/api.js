@@ -201,6 +201,12 @@ export const fetchEthicsDocket = (trialId) =>
 export const submitSaeEthicsDecision = (eventId, body) =>
   api(`/api/ethics/sae-docket/${eventId}/adjudicate`, { method: 'POST', body })
 
+export const submitSaeToEc = (eventId) =>
+  api(`/api/adverse-events/${eventId}/submit-to-ec`, { method: 'POST' })
+
+export const simulateOverdueSae = (body = {}) =>
+  api('/api/simulate/overdue-sae', { method: 'POST', body })
+
 export const createStructuredSubject = (body) =>
   api('/api/subjects', { method: 'POST', body })
 

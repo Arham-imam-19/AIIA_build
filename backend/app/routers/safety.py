@@ -29,6 +29,7 @@ from app.rbac import (
     CurrentUser,
     Permission,
     assert_site_visible,
+    get_current_user,
     require,
     scoped,
 )
@@ -449,6 +450,9 @@ def record_adverse_event_ethics_decision(
     event.ec_decision_date = body.decision_date or now.date()
     event.ec_decision_notes = body.notes.strip() if body.notes else None
     event.ec_reviewed_by_user_id = user.id
+    event.reported_to_ec = True
+    if not event.reported_to_ec_date:
+        event.reported_to_ec_date = event.ec_decision_date
     event.updated_at = now
 
     session.add(event)
@@ -469,6 +473,48 @@ def record_adverse_event_ethics_decision(
             "ec_decision_notes": event.ec_decision_notes,
         }),
         reason=f"IEC Ruling recorded: {event.ec_decision.upper()}. Directive: {event.ec_decision_notes or 'Standard Monitoring'}",
+        trial_id=event.trial_id,
+    )
+    session.commit()
+    session.refresh(event)
+
+    return _hydrate_adverse_event(event)
+
+
+@router.post("/adverse-events/{event_id}/submit-to-ec", response_model=AdverseEventPublic)
+def submit_adverse_event_to_ec(
+    event_id: int,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(get_current_user),
+) -> AdverseEventPublic:
+    """Explicitly transmit a Serious Adverse Event (SAE) report to the Institutional Ethics Committee (IEC)."""
+    if not (user.can(Permission.AE_WRITE) or user.can(Permission.COMPLIANCE_READ) or user.role in {"sponsor", "admin"}):
+        raise HTTPException(status_code=403, detail="Not authorized to submit SAE to Ethics Committee")
+
+    event = session.get(AdverseEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail=f"Adverse event {event_id} not found")
+
+    assert_site_visible(user, event.site_id)
+    now = utcnow()
+    event.reported_to_ec = True
+    if not event.reported_to_ec_date:
+        event.reported_to_ec_date = now.date()
+    event.updated_at = now
+    session.add(event)
+    session.flush()
+
+    audit.record(
+        session,
+        user=user,
+        action=AuditAction.UPDATE,
+        entity_type="adverse_events",
+        entity_id=event.id,
+        entity_label=event.ae_number,
+        field_name="reported_to_ec",
+        old_value="false",
+        new_value=f"true (reported {event.reported_to_ec_date})",
+        reason="SAE formally transmitted to Institutional Ethics Committee within statutory regulatory window",
         trial_id=event.trial_id,
     )
     session.commit()

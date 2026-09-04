@@ -68,7 +68,12 @@ def get_ethics_sae_docket(
         elapsed_hours = (now - created_at_utc).total_seconds() / 3600.0
         hours_remaining = max(0.0, 24.0 - elapsed_hours)
 
-        if ae.reported_to_ec:
+        is_reported = bool(ae.reported_to_ec or ae.ec_decision)
+        if ae.ec_decision:
+            clock_status = "REPORTED_TO_EC"
+            clock_label = f"Adjudicated ({ae.ec_decision.upper()})"
+            tone = "good"
+        elif ae.reported_to_ec:
             clock_status = "REPORTED_TO_EC"
             clock_label = f"Reported ({ae.reported_to_ec_date})"
             tone = "good"
@@ -106,8 +111,8 @@ def get_ethics_sae_docket(
             "onset_date": str(ae.onset_date),
             "reported_date": str(ae.reported_date) if ae.reported_date else None,
             "created_at": created_at_utc.isoformat(),
-            "reported_to_ec": ae.reported_to_ec,
-            "reported_to_ec_date": str(ae.reported_to_ec_date) if ae.reported_to_ec_date else None,
+            "reported_to_ec": is_reported,
+            "reported_to_ec_date": str(ae.reported_to_ec_date or ae.ec_decision_date) if (ae.reported_to_ec_date or ae.ec_decision_date) else None,
             "clock_status": clock_status,
             "clock_label": clock_label,
             "tone": tone,
@@ -153,6 +158,9 @@ def adjudicate_sae(
     event.ec_decision_date = body.decision_date or now.date()
     event.ec_decision_notes = body.notes.strip() if body.notes else None
     event.ec_reviewed_by_user_id = user.id
+    event.reported_to_ec = True
+    if not event.reported_to_ec_date:
+        event.reported_to_ec_date = event.ec_decision_date
     event.updated_at = now
 
     session.add(event)

@@ -588,3 +588,91 @@ async def simulate_deviation(
         "event": published,
         "audited": True,
     }
+
+
+@router.post("/overdue-sae")
+async def simulate_overdue_sae(
+    request: Request,
+    body: SimulateRequest | None = None,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Generate an expedited Serious Adverse Event (SAE) with an elapsed 24h statutory clock for live demo inspection."""
+    if not (user.can(Permission.AE_WRITE) or user.can(Permission.AE_READ) or user.role in {"sponsor", "admin"}):
+        raise HTTPException(status_code=403, detail="Not authorized to simulate adverse events")
+    body = body or SimulateRequest()
+    trial = _trial(session, body.trial_id)
+    site = _site(session, trial, user, body.site_id)
+    subject = _random_enrolled_subject(session, site)
+
+    now = utcnow()
+    yesterday = (now - timedelta(hours=26)).date()
+    template = random.choice(synthetic.SAE_CATALOGUE)
+    number = _next_ae_number(session, trial)
+
+    # 26 hours ago so elapsed_hours = 26 > 24 -> OVERDUE by 2.0 hours
+    created_time = now - timedelta(hours=26, minutes=15)
+
+    event_row = AdverseEvent(
+        subject_id=subject.id,
+        trial_id=trial.id,
+        site_id=site.id,
+        ae_number=number,
+        term_verbatim=template["term_verbatim"],
+        description=f"[STATUTORY OVERDUE DEMO] {template['description']}",
+        onset_date=yesterday,
+        resolution_date=None,
+        severity="severe",
+        is_serious=True,
+        seriousness_criteria=template.get("seriousness_criteria") or "Requires Hospitalization",
+        causality="probable",
+        outcome="recovering",
+        action_taken=template.get("action_taken"),
+        reported_by_user_id=user.id,
+        reported_date=yesterday,
+        reported_to_ec=False,
+        reported_to_ec_date=None,
+        created_at=created_time,
+        updated_at=created_time,
+        meddra_pt_code="10017853",
+        meddra_pt_term="Gastritis",
+        meddra_soc="Gastrointestinal disorders",
+    )
+    session.add(event_row)
+    session.flush()
+
+    audit.record(
+        session,
+        user=user,
+        action=AuditAction.CREATE,
+        entity_type="adverse_events",
+        entity_id=event_row.id,
+        entity_label=number,
+        reason="simulated overdue serious adverse event (>24h unsubmitted statutory violation)",
+        trial_id=trial.id,
+        request=request,
+    )
+    session.commit()
+    session.refresh(event_row)
+
+    label = f"{event_row.ae_number} ({event_row.term_verbatim})"
+    published = await _publish(
+        kind="ae.created",
+        message=f"Statutory 24h reporting clock expired for SAE: {label}",
+        trial=trial,
+        site=site,
+        label=label,
+        entity_id=event_row.id,
+        user=user,
+    )
+    return {
+        "created": "overdue_sae",
+        "adverse_event": {
+            "id": event_row.id,
+            "ae_number": event_row.ae_number,
+            "subject_code": subject.subject_code if subject else None,
+            "term_verbatim": event_row.term_verbatim,
+            "clock_status": "OVERDUE",
+        },
+        "event": published,
+    }

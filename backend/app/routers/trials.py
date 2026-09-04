@@ -510,7 +510,8 @@ def update_trial_ctri_registration(
     if requested_state == stored_state:
         return _ctri_response(trial)
 
-    if trial.activated_at is not None:
+    has_existing_ctri = bool(stored_state[0] and stored_state[0].strip())
+    if trial.activated_at is not None and has_existing_ctri:
         raise HTTPException(
             status_code=409,
             detail="CTRI registration cannot be changed after trial activation",
