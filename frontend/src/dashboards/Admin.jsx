@@ -144,18 +144,17 @@ export default function Admin(props) {
     items: activeGates,
   }
 
+  const originalBlocks = props.dashboard?.blocks || []
+  const auditBlock = originalBlocks.find(b => b.key === 'audit_tail')
+  const auditLogs = auditBlock?.rows || []
+  const auditColumns = auditBlock?.columns || []
+
   const customTiles = [
     { key: 'total_protocols', label: 'Total Configured Protocols', value: trials.length, tone: 'neutral' },
     { key: 'missing_ctri', label: 'Protocols Missing CTRI', value: trials.filter(t => !t.ctri_number).length, tone: 'warn' },
     { key: 'total_sites', label: 'Total Active Sites', value: sites.length, tone: 'good' },
     { key: 'audit_entries', label: 'System Audit Entries', value: props.dashboard?.tiles?.find(t => t.key === 'audit_entries')?.value || auditLogs.length || 0, tone: 'neutral' },
   ]
-
-  const originalBlocks = props.dashboard?.blocks || []
-  
-  const auditBlock = originalBlocks.find(b => b.key === 'audit_tail')
-  const auditLogs = auditBlock?.rows || []
-  const auditColumns = auditBlock?.columns || []
 
   const genericTab1Blocks = originalBlocks.filter(b => !['audit_tail', 'sae_reporting', 'sites'].includes(b.key))
   const tab2Blocks = originalBlocks.filter(b => ['sites'].includes(b.key))
