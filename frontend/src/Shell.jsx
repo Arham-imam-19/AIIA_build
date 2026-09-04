@@ -86,10 +86,10 @@ export default function Shell({ view, setView, live, children }) {
               Government of India &middot; Ministry of Ayush
             </div>
             <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight mt-0.5">
-              All India Institute of Ayurveda &mdash; Clinical Trials Management System
+              Staff Portal &mdash; AIIA CLINICAL GATEWAY
             </h1>
             <div className="text-xs text-slate-600 mt-0.5">
-              Central CTMS Portal &middot; National Ayush Multi-Centric Clinical Research Network
+              All India Institute of Ayurveda &middot; Clinical Trials Management System &middot; National Ayush Network
             </div>
           </div>
 

@@ -25,7 +25,7 @@ const ROLE_BLURB = {
 export default function Login() {
   const { signIn, state } = useAuth()
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [password, setPassword] = useState('AIIA@2026!')
   const [demo, setDemo] = useState(null)
   const [status, setStatus] = useState(null)
   const [error, setError] = useState(null)
@@ -39,7 +39,7 @@ export default function Login() {
         if (data.users.length) {
           // Pre-fill the investigator: the first persona of the walkthrough.
           setEmail(data.users[0].email)
-          setPassword(data.password)
+          setPassword(data.password || 'AIIA@2026!')
         }
       })
       .catch(() => setDemo(null))
@@ -71,7 +71,7 @@ export default function Login() {
       <div className="w-full max-w-md">
         <div className="mb-6 text-center">
           <h1 className="text-lg font-semibold tracking-tight text-slate-900">
-            Staff Portal
+            Staff Portal &mdash; AIIA CLINICAL GATEWAY
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             Ayurveda CTMS &middot; Ministry of Ayush &middot; SIH26046
@@ -168,9 +168,10 @@ export default function Login() {
                   <li key={user.email}>
                     <button
                       onClick={(e) => {
+                        const pwd = demo?.password || 'AIIA@2026!'
                         setEmail(user.email)
-                        setPassword(demo.password)
-                        submit(e, user.email, demo.password)
+                        setPassword(pwd)
+                        submit(e, user.email, pwd)
                       }}
                       disabled={busy}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-left transition hover:border-aiia-500 hover:bg-aiia-50 disabled:opacity-50"

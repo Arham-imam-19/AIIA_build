@@ -40,6 +40,9 @@ export default function DashboardLayout({
   return (
     <div className="space-y-5">
       <div>
+        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+          Staff Portal &mdash; AIIA CLINICAL GATEWAY
+        </div>
         <h2 className="text-base font-semibold tracking-tight text-slate-900">
           {dashboard.title}
         </h2>

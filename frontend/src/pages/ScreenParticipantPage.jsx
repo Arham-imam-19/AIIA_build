@@ -68,9 +68,13 @@ export default function ScreenParticipantPage({ onNavigateDashboard, onRefresh, 
         setTrial(activeTrial)
 
         if (activeTrial) {
-          const userSiteId = user?.site_id
+          const userBaseSite = siteList.find((s) => s.id === user?.site_id)
+          const userSiteCode = userBaseSite?.site_code
+
           const userSite =
-            siteList.find((s) => s.trial_id === activeTrial.id && s.id === userSiteId) ||
+            (userSiteCode && siteList.find((s) => s.trial_id === activeTrial.id && s.site_code === userSiteCode)) ||
+            siteList.find((s) => s.trial_id === activeTrial.id && s.id === user?.site_id) ||
+            userBaseSite ||
             siteList.find((s) => s.trial_id === activeTrial.id) ||
             siteList[0] ||
             null
@@ -90,8 +94,13 @@ export default function ScreenParticipantPage({ onNavigateDashboard, onRefresh, 
     const chosen = trials.find((t) => t.id === Number(selectedId)) || trials[0]
     setTrial(chosen)
     const sitesForTrial = sites.filter((s) => s.trial_id === chosen.id)
+    const userBaseSite = sites.find((s) => s.id === user?.site_id)
+    const userSiteCode = userBaseSite?.site_code
+
     const matchedSite =
+      (userSiteCode && sitesForTrial.find((s) => s.site_code === userSiteCode)) ||
       sitesForTrial.find((s) => s.id === user?.site_id) ||
+      userBaseSite ||
       sitesForTrial[0] ||
       null
     setSite(matchedSite)
@@ -376,13 +385,13 @@ export default function ScreenParticipantPage({ onNavigateDashboard, onRefresh, 
 
               <div className="border border-slate-200 bg-slate-50 p-2.5">
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                  Site ID & Hospital
+                  Site Code &amp; Hospital
                 </label>
-                <div className="mt-1 font-semibold text-slate-800 truncate" title={site?.site_name}>
-                  Site {site?.id ?? user?.site_id ?? '—'} &middot; {site?.site_name || 'All India Institute of Ayurveda'}
+                <div className="mt-1 font-semibold text-slate-800 truncate" title={site?.name}>
+                  Site {site?.site_code || site?.id || '—'} &middot; {site?.name || 'All India Institute of Ayurveda'}
                 </div>
                 <div className="text-[10px] text-slate-500 mt-0.5">
-                  Scope: Site {site?.id ?? user?.site_id ?? '01'} Authorized
+                  Scope: Site {site?.site_code || '01'} ({site?.city || 'India'})
                 </div>
               </div>
 
