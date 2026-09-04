@@ -4,7 +4,6 @@
 import { useEffect, useState } from 'react'
 import { fetchAuditLogs } from '../api'
 import DashboardLayout from './layout'
-import DataExportCenter from '../components/DataExportCenter'
 
 function AuditDiffViewer({ entry }) {
   let parsedOld = null
@@ -308,14 +307,12 @@ export default function Regulator(props) {
       <div className="flex items-center justify-between rounded-lg border border-indigo-100 bg-indigo-50/70 px-4 py-2.5 text-xs text-indigo-900">
         <span className="flex items-center gap-2 font-medium">
           <span className="flex h-2 w-2 rounded-full bg-indigo-600"></span>
-          🔒 DPDP Act 2023 & NDCT Rules 2019: Data Minimized Oversight Mode Active
+          🔒 DPDP Act 2023 &amp; NDCT Rules 2019: Data Minimized Oversight Mode Active
         </span>
         <span className="text-indigo-700 hidden sm:inline">
           Direct patient PII is redacted under statutory purpose limitation.
         </span>
       </div>
-
-      <DataExportCenter />
 
       <DashboardLayout
         {...props}
