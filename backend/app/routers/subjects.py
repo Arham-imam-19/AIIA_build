@@ -1668,17 +1668,25 @@ def create_subject_clinical_log(
         ae_count = session.exec(
             select(func.count(AdverseEvent.id)).where(AdverseEvent.trial_id == subject.trial_id)
         ).one() or 0
+        now_dt = utcnow()
         ae = AdverseEvent(
             subject_id=subject.id,
             trial_id=subject.trial_id,
             site_id=subject.site_id,
             ae_number=f"AE-{subject.subject_code}-{ae_count + 1:03d}",
             term_verbatim=body.observation_description[:200],
+            description=body.observation_description,
             onset_date=date.today(),
             severity=body.ae_severity or "mild",
-            is_serious=body.is_serious,
+            is_serious=bool(body.is_serious),
+            seriousness_criteria="Clinical observation flagged as serious" if body.is_serious else None,
             causality="possible",
             outcome="recovering",
+            related_visit_id=body.linked_visit_id,
+            reported_by_user_id=user.id,
+            reported_date=date.today(),
+            created_at=now_dt,
+            updated_at=now_dt,
         )
         session.add(ae)
         session.flush()
