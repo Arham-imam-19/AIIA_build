@@ -1056,16 +1056,57 @@ def build_dashboard(
         "data_notice": "All data in this system is synthetic. No real patient data.",
     }
 
-    if not stats.get("seeded"):
+    trial = resolve_trial(session, trial_id)
+    if trial is None:
+        audit_stmt = (
+            select(AuditLog)
+            .order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
+            .limit(10)
+        )
+        recent_audits = list(session.exec(audit_stmt).all())
+        audit_rows = [
+            {
+                "timestamp": a.timestamp.isoformat(timespec="seconds") if hasattr(a.timestamp, "isoformat") else str(a.timestamp),
+                "actor": a.user_email or "System",
+                "role": a.user_role or "system",
+                "action": a.action,
+                "entity": f"{a.entity_type}:{a.entity_id or ''}",
+                "detail": a.reason or a.entity_label or "",
+            }
+            for a in recent_audits
+        ]
+
+        tiles = [
+            _tile("protocols", "Configured Protocols", 0, "No protocols created yet", "neutral"),
+            _tile("sites", "Active Sites", session.exec(select(func.count()).select_from(Site)).one(), tone="neutral"),
+            _tile("users", "Active User Accounts", session.exec(select(func.count()).select_from(User)).one(), tone="neutral"),
+            _tile("audit_entries", "System Audit Entries", session.exec(select(func.count()).select_from(AuditLog)).one(), tone="neutral"),
+        ]
+        blocks = [
+            _table(
+                "audit_tail",
+                "System Audit Trail (21 CFR Part 11)",
+                [
+                    ("timestamp", "Timestamp (UTC)"),
+                    ("actor", "Actor"),
+                    ("role", "Role"),
+                    ("action", "Action"),
+                    ("entity", "Entity"),
+                    ("detail", "Reason / Detail"),
+                ],
+                audit_rows,
+                empty="No audit logs recorded yet.",
+            )
+        ]
+
         return common | {
-            "seeded": False,
-            "message": stats.get("message"),
-            "tiles": [],
-            "blocks": [],
+            "seeded": True,
+            "scope": stats["scope"],
+            "trial": None,
+            "tiles": tiles,
+            "blocks": blocks,
         }
 
-    trial = resolve_trial(session, trial_id)
-    assert trial is not None  # build_stats already established this
     today = date.today()
     builder = BUILDERS.get(user.role, _sponsor)
     tiles, blocks = builder(session, user, stats, trial, today)

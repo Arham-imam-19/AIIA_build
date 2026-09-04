@@ -5,6 +5,8 @@ import { useAuth } from '../auth'
 export default function ScreenParticipantPage({ onNavigateDashboard, onRefresh, onScreenSuccess }) {
   const { user } = useAuth()
 
+  const [trials, setTrials] = useState([])
+  const [sites, setSites] = useState([])
   const [trial, setTrial] = useState(null)
   const [site, setSite] = useState(null)
   const [loadingMeta, setLoadingMeta] = useState(true)
@@ -54,15 +56,26 @@ export default function ScreenParticipantPage({ onNavigateDashboard, onRefresh, 
     Promise.all([fetchTrials(), fetchSites()])
       .then(([trialsRes, sitesRes]) => {
         if (!isMounted) return
-        const activeTrial = trialsRes.items?.[0] || null
+        const trialList = trialsRes.items || []
+        const siteList = sitesRes.items || []
+        setTrials(trialList)
+        setSites(siteList)
+
+        const activeTrial =
+          trialList.find((t) => t.status === 'recruiting') ||
+          trialList[0] ||
+          null
         setTrial(activeTrial)
 
-        const userSiteId = user?.site_id
-        const userSite =
-          sitesRes.items?.find((s) => s.id === userSiteId) ||
-          sitesRes.items?.[0] ||
-          null
-        setSite(userSite)
+        if (activeTrial) {
+          const userSiteId = user?.site_id
+          const userSite =
+            siteList.find((s) => s.trial_id === activeTrial.id && s.id === userSiteId) ||
+            siteList.find((s) => s.trial_id === activeTrial.id) ||
+            siteList[0] ||
+            null
+          setSite(userSite)
+        }
         setLoadingMeta(false)
       })
       .catch(() => {
@@ -72,6 +85,18 @@ export default function ScreenParticipantPage({ onNavigateDashboard, onRefresh, 
       isMounted = false
     }
   }, [user])
+
+  const handleTrialSelect = (selectedId) => {
+    const chosen = trials.find((t) => t.id === Number(selectedId)) || trials[0]
+    setTrial(chosen)
+    const sitesForTrial = sites.filter((s) => s.trial_id === chosen.id)
+    const matchedSite =
+      sitesForTrial.find((s) => s.id === user?.site_id) ||
+      sitesForTrial[0] ||
+      null
+    setSite(matchedSite)
+    setSubmitError(null)
+  }
 
   // System-derived calculations
   const currentYear = new Date().getFullYear()
@@ -89,10 +114,29 @@ export default function ScreenParticipantPage({ onNavigateDashboard, onRefresh, 
   const effectiveOutcome =
     outcomeOverride === 'auto' ? autoOutcome : outcomeOverride
 
+  const isRecruiting = trial?.status === 'recruiting'
+  const isEthicsApproved = trial?.ethics_approval_status === 'approved'
+
   async function handleSubmit(e) {
     e.preventDefault()
     setSubmitting(true)
     setSubmitError(null)
+
+    if (!isEthicsApproved) {
+      setSubmitError(
+        `Enrollment Blocked: Protocol ${trial?.protocol_number} ethics approval status is ${trial?.ethics_approval_status || 'Pending'}. Software blocks screening until IEC clearance is approved.`
+      )
+      setSubmitting(false)
+      return
+    }
+
+    if (!isRecruiting) {
+      setSubmitError(
+        `Enrollment Blocked: Protocol ${trial?.protocol_number} is in '${trial?.status}' status. Only recruiting protocols can register screened participants.`
+      )
+      setSubmitting(false)
+      return
+    }
 
     if (effectiveOutcome === 'screen_failed' && !screenFailureReason.trim()) {
       setSubmitError('Mandatory requirement: A documented screen failure reason must be provided for audit tracking.')
@@ -109,7 +153,7 @@ export default function ScreenParticipantPage({ onNavigateDashboard, onRefresh, 
         year_of_birth: Number(yearOfBirth),
         height_cm: Number(heightCm),
         weight_kg: Number(weightKg),
-        prakriti,
+        prakriti: prakriti ? prakriti.replace('-', '_') : undefined,
         protocol_version: protocolVersion,
         inclusion_criteria: incCriteria,
         exclusion_criteria: excCriteria,
@@ -278,6 +322,45 @@ export default function ScreenParticipantPage({ onNavigateDashboard, onRefresh, 
               Parameters below are permanently locked by the system to maintain de-identification integrity, protocol audit compliance, and strict chain of custody. No user input permitted.
             </p>
 
+            <div className="mt-4 border border-slate-300 bg-slate-50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-800">
+                  Target Clinical Protocol / Trial:
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-0.5 text-[10px] font-bold uppercase border ${
+                    isEthicsApproved ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300'
+                  }`}>
+                    {isEthicsApproved ? '✓ IEC Approved' : '⏳ Pending IEC Clearance'}
+                  </span>
+                  <span className={`px-2 py-0.5 text-[10px] font-bold uppercase border ${
+                    isRecruiting ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-red-100 text-red-800 border-red-300'
+                  }`}>
+                    Status: {trial?.status?.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+
+              <select
+                value={trial?.id || ''}
+                onChange={(e) => handleTrialSelect(e.target.value)}
+                disabled={loadingMeta}
+                className="w-full border border-slate-300 bg-white p-2.5 text-xs font-bold text-slate-900 shadow-sm focus:border-slate-800 focus:outline-none"
+              >
+                {trials.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    [{t.protocol_number}] {t.title} &middot; ({t.status.toUpperCase()}) &middot; CTRI: {t.ctri_number || 'Prospective'}
+                  </option>
+                ))}
+              </select>
+
+              {!isEthicsApproved && (
+                <div className="mt-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 p-2 font-medium">
+                  ⚠️ <strong>Regulatory Hold:</strong> Protocol {trial?.protocol_number} requires official clearance from the Institutional Ethics Committee (IEC) prior to screening subjects.
+                </div>
+              )}
+            </div>
+
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
               <div className="border border-slate-200 bg-slate-50 p-2.5">
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
@@ -287,7 +370,7 @@ export default function ScreenParticipantPage({ onNavigateDashboard, onRefresh, 
                   [Auto-Assigned on Submit]
                 </div>
                 <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                  Prefix: AIIA-ASH-{site?.site_code || '15'}-XXX
+                  Prefix: AIIA-{trial?.protocol_number ? (trial.protocol_number.split('-')[1] || trial.protocol_number.slice(0, 5)).toUpperCase() : 'ASH'}-{site?.site_code || '01'}-XXX
                 </div>
               </div>
 
@@ -299,7 +382,7 @@ export default function ScreenParticipantPage({ onNavigateDashboard, onRefresh, 
                   Site {site?.id ?? user?.site_id ?? '—'} &middot; {site?.site_name || 'All India Institute of Ayurveda'}
                 </div>
                 <div className="text-[10px] text-slate-500 mt-0.5">
-                  Scope: Site {user?.site_id ?? '15'} Authorized
+                  Scope: Site {site?.id ?? user?.site_id ?? '01'} Authorized
                 </div>
               </div>
 

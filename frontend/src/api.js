@@ -253,7 +253,23 @@ export async function downloadTrialCdiscSdtmZip(trialId, token = savedToken()) {
   return filename
 }
 
-export const fetchTrials = () => api('/api/trials')
+export const fetchTrials = (params = {}) => {
+  const query = new URLSearchParams()
+  if (params.status) query.set('status', params.status)
+  if (params.institution_only) query.set('institution_only', 'true')
+  if (params.limit) query.set('limit', params.limit)
+  const qs = query.toString()
+  return api(`/api/trials${qs ? `?${qs}` : ''}`)
+}
+
+export const updateTrialStatus = (trialId, body) =>
+  api(`/api/trials/${trialId}/status`, { method: 'PATCH', body })
+
+export const updateTrialCtriRegistration = (trialId, body) =>
+  api(`/api/trials/${trialId}/ctri-registration`, { method: 'PATCH', body })
+
+export const activateTrial = (trialId) =>
+  api(`/api/trials/${trialId}/activate`, { method: 'POST' })
 
 export async function downloadSafetyReport(eventId, token = savedToken()) {
   const res = await fetch(

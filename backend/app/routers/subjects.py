@@ -18,7 +18,8 @@ from datetime import date, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -35,7 +36,7 @@ from app.enums import (
     UserRole,
     VisitStatus,
 )
-from app.models import AdverseEvent, AuditLog, EConsent, Site, Subject, Trial, User, Visit
+from app.models import AdverseEvent, AuditLog, ClinicalLogEntry, EConsent, Site, Subject, Trial, User, Visit
 from app.models.base import utcnow
 from app.rbac import (
     CurrentUser,
@@ -58,7 +59,7 @@ router = APIRouter(prefix="/api", tags=["subjects"])
 class SubjectScreeningCreate(BaseModel):
     """Only the de-identified information available when screening begins."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     trial_id: int
     site_id: int | None = None
@@ -68,6 +69,16 @@ class SubjectScreeningCreate(BaseModel):
     height_cm: float | None = None
     weight_kg: float | None = None
     prakriti: Prakriti | None = None
+    protocol_version: str | None = None
+    inclusion_criteria: dict = Field(default_factory=dict)
+    exclusion_criteria: dict = Field(default_factory=dict)
+    eligibility_outcome: str | None = None
+    screen_failure_reason: str | None = None
+    icf_version: str | None = None
+    consent_date: datetime | date | None = None
+    consent_obtained_by: str | None = None
+    withdrawal_of_consent: bool = False
+    ethnicity: str | None = None
 
     @field_validator("height_cm", "weight_kg")
     @classmethod
@@ -102,6 +113,9 @@ class SubjectScreeningResponse(BaseModel):
     year_of_birth: int | None
     height_cm: float | None
     weight_kg: float | None
+    prakriti: str | None = None
+    eligibility_outcome: str | None = None
+    protocol_version: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -287,9 +301,17 @@ class VisitOutcomeResponse(BaseModel):
     updated_at: datetime
 
 
-def _next_subject_code(session: Session, site: Site) -> str:
-    """Continue the current Ashwagandha trial's per-site subject numbering."""
-    prefix = f"AIIA-ASH-{site.site_code}-"
+def _next_subject_code(session: Session, site: Site, trial: Trial | None = None) -> str:
+    """Continue the current trial's per-site subject numbering."""
+    code_part = "ASH"
+    if trial and trial.protocol_number:
+        clean = trial.protocol_number.strip().upper()
+        parts = [p for p in clean.split("-") if p]
+        if len(parts) >= 2 and parts[0] == "AIIA":
+            code_part = parts[1]
+        elif len(parts) >= 1:
+            code_part = parts[0][:6]
+    prefix = f"AIIA-{code_part}-{site.site_code}-"
     codes = session.exec(
         select(Subject.subject_code).where(Subject.site_id == site.id)
     ).all()
@@ -358,33 +380,57 @@ def create_subject_in_screening(
     scope = user.scope_site_id
     if scope is None:
         if body.site_id is None:
-            raise HTTPException(
-                status_code=404,
-                detail="site_id is required for a writer without an assigned site",
-            )
-        site = session.get(Site, body.site_id)
-        if site is None:
-            raise HTTPException(status_code=404, detail=f"no site with id {body.site_id}")
+            site = session.exec(select(Site).where(Site.trial_id == trial.id)).first()
+            if not site:
+                raise HTTPException(
+                    status_code=404,
+                    detail="site_id is required for a writer without an assigned site",
+                )
+        else:
+            site = session.get(Site, body.site_id)
+            if site is None:
+                raise HTTPException(status_code=404, detail=f"no site with id {body.site_id}")
     else:
         if user.site_id is None:
             raise HTTPException(
                 status_code=409,
                 detail="your account is not attached to a valid site",
             )
-        if body.site_id is not None and body.site_id != scope:
-            raise HTTPException(
-                status_code=403,
-                detail=(
-                    "cannot create a subject at another site. "
-                    f"{user.role_label} access is limited to site id {user.site_id}."
-                ),
-            )
-        site = session.get(Site, scope)
-        if site is None:
+        user_site = session.get(Site, scope)
+        if user_site is None:
             raise HTTPException(
                 status_code=409,
                 detail="your account is attached to a site that no longer exists",
             )
+        if body.site_id is not None and body.site_id != scope:
+            target_site = session.get(Site, body.site_id)
+            if not target_site or target_site.trial_id != trial.id:
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        "cannot create a subject at another site. "
+                        f"{user.role_label} access is limited to site id {user.site_id}."
+                    ),
+                )
+            site = target_site
+        else:
+            if user_site.trial_id == trial.id:
+                site = user_site
+            else:
+                matching_site = session.exec(
+                    select(Site).where(
+                        Site.trial_id == trial.id,
+                        (Site.site_code == user_site.site_code) | (Site.name == user_site.name)
+                    )
+                ).first()
+                if not matching_site:
+                    matching_site = session.exec(
+                        select(Site).where(Site.trial_id == trial.id)
+                    ).first()
+                if matching_site:
+                    site = matching_site
+                else:
+                    site = user_site
 
     if site.trial_id != trial.id:
         raise HTTPException(
@@ -392,9 +438,9 @@ def create_subject_in_screening(
             detail=f"no site with id {site.id} in this trial",
         )
     if trial.status != TrialStatus.RECRUITING.value:
-        raise HTTPException(status_code=409, detail="this trial is not recruiting")
+        raise HTTPException(status_code=409, detail=f"this trial is not recruiting (current status: {trial.status})")
     if site.status != SiteStatus.RECRUITING.value:
-        raise HTTPException(status_code=409, detail="this site is not recruiting")
+        raise HTTPException(status_code=409, detail=f"this site is not recruiting (current status: {site.status})")
 
     ethics_ok, ethics_reason = trial_compliance.check_ethics_clearance_for_enrollment(trial)
     if not ethics_ok:
@@ -404,12 +450,20 @@ def create_subject_in_screening(
         )
 
     now = utcnow()
-    code = _next_subject_code(session, site)
+    code = _next_subject_code(session, site, trial)
+    is_screen_failed = body.eligibility_outcome == "screen_failed"
+    initial_status = SubjectStatus.SCREEN_FAILED.value if is_screen_failed else SubjectStatus.SCREENING.value
+
+    # Parse consent_date if date
+    c_date = body.consent_date
+    if isinstance(c_date, date) and not isinstance(c_date, datetime):
+        c_date = datetime.combine(c_date, datetime.min.time())
+
     subject = Subject(
         trial_id=trial.id,
         site_id=site.id,
         subject_code=code,
-        status=SubjectStatus.SCREENING.value,
+        status=initial_status,
         screening_date=body.screening_date,
         enrollment_date=None,
         randomization_date=None,
@@ -420,10 +474,19 @@ def create_subject_in_screening(
         height_cm=body.height_cm,
         weight_kg=body.weight_kg,
         prakriti=body.prakriti.value if body.prakriti else None,
+        inclusion_criteria=body.inclusion_criteria or {},
+        exclusion_criteria=body.exclusion_criteria or {},
+        eligibility_outcome=body.eligibility_outcome,
+        protocol_version=body.protocol_version,
+        icf_version=body.icf_version,
+        consent_date=c_date,
+        consent_obtained_by=body.consent_obtained_by,
+        withdrawal_of_consent=body.withdrawal_of_consent,
+        ethnicity=body.ethnicity,
         completed_date=None,
         withdrawal_date=None,
         withdrawal_reason=None,
-        screen_failure_reason=None,
+        screen_failure_reason=body.screen_failure_reason if is_screen_failed else None,
         created_at=now,
         updated_at=now,
     )
@@ -437,7 +500,7 @@ def create_subject_in_screening(
             entity_type="subjects",
             entity_id=subject.id,
             entity_label=code,
-            reason="Subject entered screening.",
+            reason="Subject entered screening." if not is_screen_failed else f"Subject failed screening: {body.screen_failure_reason or 'Eligibility criteria not met'}",
             trial_id=trial.id,
             request=request,
         )
@@ -1295,25 +1358,34 @@ def create_protocol_deviation(
     }
 
 
+def _resolve_subject(session: Session, subject_id: str | int) -> Subject | None:
+    if isinstance(subject_id, int) or (isinstance(subject_id, str) and subject_id.isdigit()):
+        sub = session.get(Subject, int(subject_id))
+        if sub:
+            return sub
+    return session.exec(select(Subject).where(Subject.subject_code == str(subject_id))).first()
+
+
 @router.get("/subjects/{subject_id}/dossier")
 def get_subject_dossier(
-    subject_id: int,
+    subject_id: str,
     session: Session = Depends(get_session),
     user: CurrentUser = Depends(require(Permission.SUBJECT_READ)),
 ) -> dict:
     """Retrieve full clinical participant profile and unified chronological lifecycle audit log."""
-    subject = session.get(Subject, subject_id)
+    subject = _resolve_subject(session, subject_id)
     if not subject:
         raise HTTPException(status_code=404, detail=f"subject {subject_id} not found")
 
+    subject_id_int = subject.id
     if user.is_site_scoped:
         assert_site_visible(user, subject.site_id)
 
     trial = session.get(Trial, subject.trial_id)
     site = session.get(Site, subject.site_id)
-    consent = session.exec(select(EConsent).where(EConsent.subject_id == subject_id)).first()
-    visits = list(session.exec(select(Visit).where(Visit.subject_id == subject_id).order_by(Visit.visit_number)).all())
-    adverse_events = list(session.exec(select(AdverseEvent).where(AdverseEvent.subject_id == subject_id).order_by(AdverseEvent.onset_date, AdverseEvent.id)).all())
+    consent = session.exec(select(EConsent).where(EConsent.subject_id == subject_id_int)).first()
+    visits = list(session.exec(select(Visit).where(Visit.subject_id == subject_id_int).order_by(Visit.visit_number)).all())
+    adverse_events = list(session.exec(select(AdverseEvent).where(AdverseEvent.subject_id == subject_id_int).order_by(AdverseEvent.onset_date, AdverseEvent.id)).all())
 
     # Check DPDP Masking
     should_mask = privacy.should_mask_patient_pii(user, subject.site_id)
@@ -1523,4 +1595,153 @@ def get_subject_dossier(
             }
             for ae in adverse_events
         ],
+    }
+
+
+class ClinicalLogCreate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    entry_type: str
+    substance_name: str | None = None
+    dose: str | None = None
+    route: str | None = None
+    observation_description: str
+    linked_visit_id: int | None = None
+    correction_of_entry_id: int | None = None
+    correction_reason: str | None = None
+    is_serious: bool = False
+    ae_severity: str | None = "mild"
+
+
+@router.get("/subjects/{subject_id}/clinical-log")
+@router.get("/subjects/{subject_id}/clinical-logs")
+def get_subject_clinical_logs(
+    subject_id: int,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.SUBJECT_READ)),
+) -> list[dict]:
+    """Retrieve full chronological ALCOA+ clinical progress log for a participant."""
+    subject = session.get(Subject, subject_id)
+    if not subject:
+        raise HTTPException(status_code=404, detail=f"subject {subject_id} not found")
+    if user.is_site_scoped:
+        assert_site_visible(user, subject.site_id)
+
+    logs = session.exec(
+        select(ClinicalLogEntry)
+        .where(ClinicalLogEntry.subject_id == subject_id)
+        .order_by(ClinicalLogEntry.timestamp.desc())
+    ).all()
+
+    return [
+        {
+            "id": l.id,
+            "subject_id": l.subject_id,
+            "trial_id": l.trial_id,
+            "site_id": l.site_id,
+            "entry_type": l.entry_type,
+            "substance_name": l.substance_name,
+            "dose": l.dose,
+            "route": l.route,
+            "observation_description": l.observation_description,
+            "linked_visit_id": l.linked_visit_id,
+            "linked_ae_id": l.linked_ae_id,
+            "correction_of_entry_id": l.correction_of_entry_id,
+            "correction_reason": l.correction_reason,
+            "entered_by_user_id": l.entered_by_user_id,
+            "entered_by_name": l.entered_by_name,
+            "timestamp": l.timestamp.isoformat() if l.timestamp else None,
+        }
+        for l in logs
+    ]
+
+
+@router.post("/subjects/{subject_id}/clinical-log")
+@router.post("/subjects/{subject_id}/clinical-logs")
+def create_subject_clinical_log(
+    subject_id: int,
+    body: ClinicalLogCreate,
+    request: Request,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.SUBJECT_WRITE, Permission.AE_WRITE)),
+) -> dict:
+    """Append an immutable clinical progress note or observation to participant ledger."""
+    subject = session.get(Subject, subject_id)
+    if not subject:
+        raise HTTPException(status_code=404, detail=f"subject {subject_id} not found")
+    if user.is_site_scoped:
+        assert_site_visible(user, subject.site_id)
+
+    linked_ae_id = None
+    if body.entry_type == "adverse_event":
+        ae_count = session.exec(
+            select(func.count(AdverseEvent.id)).where(AdverseEvent.trial_id == subject.trial_id)
+        ).one() or 0
+        now_dt = utcnow()
+        ae = AdverseEvent(
+            subject_id=subject.id,
+            trial_id=subject.trial_id,
+            site_id=subject.site_id,
+            ae_number=f"AE-{subject.subject_code}-{ae_count + 1:03d}",
+            term_verbatim=body.observation_description[:200],
+            description=body.observation_description,
+            onset_date=date.today(),
+            severity=body.ae_severity or "mild",
+            is_serious=bool(body.is_serious),
+            seriousness_criteria="Clinical observation flagged as serious" if body.is_serious else None,
+            causality="possible",
+            outcome="recovering",
+            related_visit_id=body.linked_visit_id,
+            reported_by_user_id=user.id,
+            reported_date=date.today(),
+            created_at=now_dt,
+            updated_at=now_dt,
+        )
+        session.add(ae)
+        session.flush()
+        linked_ae_id = ae.id
+
+    entry = ClinicalLogEntry(
+        subject_id=subject.id,
+        trial_id=subject.trial_id,
+        site_id=subject.site_id,
+        entry_type=body.entry_type,
+        substance_name=body.substance_name,
+        dose=body.dose,
+        route=body.route,
+        observation_description=body.observation_description,
+        linked_visit_id=body.linked_visit_id,
+        linked_ae_id=linked_ae_id,
+        correction_of_entry_id=body.correction_of_entry_id,
+        correction_reason=body.correction_reason,
+        entered_by_user_id=user.id,
+        entered_by_name=user.full_name,
+        timestamp=utcnow(),
+    )
+    session.add(entry)
+    session.flush()
+
+    audit.record(
+        session,
+        user=user,
+        action=AuditAction.CREATE,
+        entity_type="clinical_log_entries",
+        entity_id=entry.id or 0,
+        entity_label=f"Clinical Log on {subject.subject_code}",
+        field_name="observation_description",
+        old_value=None,
+        new_value=json.dumps({"entry_type": body.entry_type, "desc": body.observation_description[:100]}),
+        reason=body.correction_reason or "Clinical log recorded",
+        trial_id=subject.trial_id,
+        request=request,
+    )
+    session.commit()
+    session.refresh(entry)
+
+    return {
+        "status": "success",
+        "id": entry.id,
+        "entry_type": entry.entry_type,
+        "entered_by_name": entry.entered_by_name,
+        "timestamp": entry.timestamp.isoformat() if entry.timestamp else None,
     }

@@ -213,7 +213,7 @@ class CreateUserRequest(SQLModel):
     email: str
     full_name: str
     role: str
-    password: str = "aiia2026"
+    password: str = "AIIA@2026!"
     site_id: int | None = None
     organization: str | None = None
     phone: str | None = None

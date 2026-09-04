@@ -6,7 +6,7 @@
 // anywhere in this system.
 
 import { useEffect, useState } from 'react'
-import { demoUsers, health, patientDemoUsers } from './api'
+import { demoUsers, health } from './api'
 import { useAuth } from './auth'
 
 const ROLE_BLURB = {
@@ -22,7 +22,7 @@ const ROLE_BLURB = {
   dsmb: 'reviews aggregate safety data to halt or modify trials',
 }
 
-export default function Login({ patientPortal = false }) {
+export default function Login() {
   const { signIn, state } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -30,10 +30,10 @@ export default function Login({ patientPortal = false }) {
   const [status, setStatus] = useState(null)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [personaSearch, setPersonaSearch] = useState('')
 
   useEffect(() => {
-    const loadDemoUsers = patientPortal ? patientDemoUsers : demoUsers
-    loadDemoUsers()
+    demoUsers()
       .then((data) => {
         setDemo(data)
         if (data.users.length) {
@@ -46,7 +46,7 @@ export default function Login({ patientPortal = false }) {
     health()
       .then(setStatus)
       .catch(() => setStatus(null))
-  }, [patientPortal])
+  }, [])
 
   // The persona buttons pass their credentials in explicitly. Calling
   // setPassword() and then reading `password` in the same handler would send the
@@ -56,7 +56,7 @@ export default function Login({ patientPortal = false }) {
     setBusy(true)
     setError(null)
     try {
-      await signIn(asEmail, asPassword, patientPortal)
+      await signIn(asEmail, asPassword)
     } catch (err) {
       setError(err.detail || err.message)
     } finally {
@@ -71,7 +71,7 @@ export default function Login({ patientPortal = false }) {
       <div className="w-full max-w-md">
         <div className="mb-6 text-center">
           <h1 className="text-lg font-semibold tracking-tight text-slate-900">
-            {patientPortal ? 'Patient Portal' : 'Staff Portal'}
+            Staff Portal
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             Ayurveda CTMS &middot; Ministry of Ayush &middot; SIH26046
@@ -132,38 +132,70 @@ export default function Login({ patientPortal = false }) {
 
         {demo?.users?.length > 0 && (
           <div className="mt-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Demo personas
-            </h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Demo Personas ({demo.users.length} Registered Accounts)
+              </h2>
+              <span className="text-[11px] font-mono text-slate-400">1-click login</span>
+            </div>
             <p className="mt-1 text-xs text-slate-400">{demo.note}</p>
-            <ul className="mt-3 space-y-1.5">
-              {demo.users.map((user) => (
-                <li key={user.email}>
-                  <button
-                    onClick={(e) => {
-                      setEmail(user.email)
-                      setPassword(demo.password)
-                      submit(e, user.email, demo.password)
-                    }}
-                    disabled={busy}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-left transition hover:border-aiia-500 hover:bg-aiia-50 disabled:opacity-50"
-                  >
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="text-sm font-medium text-slate-800">
-                        {user.role === 'monitor' ? 'Monitor' : user.role_label}
-                      </span>
-                      <span className="text-xs text-slate-400">
-                        {patientPortal
-                          ? 'trial participant: view schedule & message hospital admin'
-                          : ROLE_BLURB[user.role]}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 font-mono text-xs text-slate-500">
-                      {user.email}
-                    </div>
-                  </button>
-                </li>
-              ))}
+
+            {demo.users.length > 5 && (
+              <div className="mt-2">
+                <input
+                  type="text"
+                  placeholder="Filter accounts by name, email, or role..."
+                  value={personaSearch}
+                  onChange={(e) => setPersonaSearch(e.target.value)}
+                  className="w-full rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-slate-700 outline-none focus:border-aiia-500"
+                />
+              </div>
+            )}
+
+            <ul className="mt-3 max-h-80 overflow-y-auto space-y-1.5 pr-1">
+              {demo.users
+                .filter((u) => {
+                  if (!personaSearch) return true
+                  const q = personaSearch.toLowerCase()
+                  return (
+                    u.email.toLowerCase().includes(q) ||
+                    (u.full_name && u.full_name.toLowerCase().includes(q)) ||
+                    (u.role_label && u.role_label.toLowerCase().includes(q)) ||
+                    (u.organization && u.organization.toLowerCase().includes(q))
+                  )
+                })
+                .map((user) => (
+                  <li key={user.email}>
+                    <button
+                      onClick={(e) => {
+                        setEmail(user.email)
+                        setPassword(demo.password)
+                        submit(e, user.email, demo.password)
+                      }}
+                      disabled={busy}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-left transition hover:border-aiia-500 hover:bg-aiia-50 disabled:opacity-50"
+                    >
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-sm font-semibold text-slate-800">
+                          {user.full_name || (user.role === 'monitor' ? 'Monitor' : user.role_label)}
+                        </span>
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                          {user.role_label || user.role}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 mt-0.5">
+                        <div className="font-mono text-xs text-slate-500">
+                          {user.email}
+                        </div>
+                        {user.organization && (
+                          <div className="text-[11px] text-slate-400 truncate max-w-[140px]">
+                            {user.organization}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  </li>
+                ))}
             </ul>
             <p className="mt-3 border-t border-slate-100 pt-2 font-mono text-xs text-slate-400">
               password: {demo.password}
@@ -192,14 +224,6 @@ export default function Login({ patientPortal = false }) {
 
         <p className="mt-6 text-center text-xs text-slate-400">
           All data in this system is synthetic. No real patient data.
-        </p>
-        <p className="mt-3 text-center text-sm">
-          <a
-            href={patientPortal ? '/' : '/patient-login'}
-            className="text-aiia-600 hover:text-aiia-700 hover:underline"
-          >
-            {patientPortal ? 'Go to staff portal' : 'Go to patient portal'}
-          </a>
         </p>
       </div>
     </div>

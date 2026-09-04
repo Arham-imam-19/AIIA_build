@@ -1,8 +1,10 @@
-import { useState } from 'react'
-import { createTrial } from '../api'
+import { useState, useEffect } from 'react'
+import { createTrial, fetchSites } from '../api'
+import { useAuth } from '../auth'
 
 export default function CreateTrialModal({ onClose, onSuccess }) {
-  const [protocolNumber, setProtocolNumber] = useState('AIIA-NEO-2026-02')
+  const { user } = useAuth()
+  const [protocolNumber, setProtocolNumber] = useState('AIIA-NEO-2026-05')
   const [title, setTitle] = useState('')
   const [shortTitle, setShortTitle] = useState('')
   const [phase, setPhase] = useState('phase_2')
@@ -13,11 +15,77 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
   const [design, setDesign] = useState('Randomized, Double-Blind, Parallel-Group Trial')
   const [sponsorName, setSponsorName] = useState('All India Institute of Ayurveda (AIIA)')
   const [targetEnrollment, setTargetEnrollment] = useState(100)
+  
+  // Available participating institutions / hospitals
+  const [availableInstitutions, setAvailableInstitutions] = useState([])
+  const [selectedSiteIds, setSelectedSiteIds] = useState([])
+  const [loadingSites, setLoadingSites] = useState(false)
+  
+  // Custom Lead Hospital Site configuration (especially for initial / clean-slate protocol)
+  const [leadHospitalName, setLeadHospitalName] = useState('All India Institute of Ayurveda (AIIA), Central Hospital')
+  const [leadHospitalCode, setLeadHospitalCode] = useState('01')
+  const [leadHospitalCity, setLeadHospitalCity] = useState('New Delhi')
+  const [leadHospitalState, setLeadHospitalState] = useState('Delhi')
+  const [leadHospitalPiName, setLeadHospitalPiName] = useState(user?.role === 'principal_investigator' ? user.full_name : 'Prof. (Dr.) Tanuja Nesari')
+  const [leadHospitalPiEmail, setLeadHospitalPiEmail] = useState(user?.role === 'principal_investigator' ? user.email : 'director@aiia.gov.in')
+
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
+  useEffect(() => {
+    setLoadingSites(true)
+    fetchSites()
+      .then((res) => {
+        const items = res.items || []
+        // Deduplicate distinct hospital institutions by site_code / name
+        const seen = new Set()
+        const uniqueInstitutions = []
+        for (const s of items) {
+          if (!seen.has(s.site_code)) {
+            seen.add(s.site_code)
+            uniqueInstitutions.push(s)
+          }
+        }
+
+        if (user?.site_scoped && user?.site_id) {
+          // Site-scoped users can only create protocols under their own hospital site
+          const ownSite = uniqueInstitutions.find((i) => i.id === user.site_id) || uniqueInstitutions[0]
+          const list = ownSite ? [ownSite] : uniqueInstitutions
+          setAvailableInstitutions(list)
+          setSelectedSiteIds(list.map((i) => i.id))
+        } else {
+          setAvailableInstitutions(uniqueInstitutions)
+          // Default: select the first institution or primary site
+          setSelectedSiteIds(uniqueInstitutions.length > 0 ? [uniqueInstitutions[0].id] : [])
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingSites(false))
+  }, [user])
+
+  function toggleSite(siteId) {
+    if (user?.site_scoped) return // Site-scoped users cannot toggle away from their site
+    setSelectedSiteIds((prev) =>
+      prev.includes(siteId) ? prev.filter((id) => id !== siteId) : [...prev, siteId]
+    )
+  }
+
+  function selectAllSites() {
+    if (user?.site_scoped) return
+    setSelectedSiteIds(availableInstitutions.map((i) => i.id))
+  }
+
+  function clearAllSites() {
+    if (user?.site_scoped) return
+    setSelectedSiteIds([])
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
+    if (availableInstitutions.length > 0 && selectedSiteIds.length === 0) {
+      setError('Please select at least one participating hospital institution / site for this protocol.')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -33,6 +101,13 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
         design: design.trim(),
         sponsor_name: sponsorName.trim(),
         target_enrollment: Number(targetEnrollment),
+        participating_site_ids: selectedSiteIds.length > 0 ? selectedSiteIds : undefined,
+        primary_site_name: leadHospitalName.trim(),
+        primary_site_code: leadHospitalCode.trim().toUpperCase(),
+        primary_site_city: leadHospitalCity.trim(),
+        primary_site_state: leadHospitalState.trim(),
+        primary_site_pi_name: leadHospitalPiName.trim(),
+        primary_site_pi_email: leadHospitalPiEmail.trim().toLowerCase() || undefined,
       })
       onSuccess?.()
       onClose()
@@ -45,7 +120,7 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
-      <div className="w-full max-w-2xl border border-slate-400 bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div className="w-full max-w-2xl border border-slate-400 bg-white p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-slate-200 pb-3">
           <div>
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
@@ -55,7 +130,7 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
               Define &amp; Register Clinical Trial Protocol
             </h3>
             <p className="text-xs text-slate-600">
-              ICH GCP E6(R2), CDISC TS Domain &amp; Indian CTRI Compliant Setup
+              ICH GCP E6(R2), CDISC TS Domain &amp; Indian CTRI Compliant Multi-Centric Setup
             </p>
           </div>
           <button
@@ -203,6 +278,180 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
             </div>
           </div>
 
+          {/* ── Participating Hospital Institutions Selection ───────────────── */}
+          {availableInstitutions.length === 0 ? (
+            <div className="border border-slate-300 bg-slate-50 p-4 space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                <div>
+                  <label className="block font-bold text-slate-900 uppercase text-[11px] tracking-wide">
+                    🏥 Lead Participating Hospital &amp; Research Site (Site 01) <span className="text-red-600">*</span>
+                  </label>
+                  <p className="text-[11px] text-slate-500">
+                    Specify the primary clinical hospital site that will host and coordinate this trial protocol.
+                  </p>
+                </div>
+                <span className="rounded bg-blue-100 border border-blue-200 px-2 py-0.5 font-mono text-[10px] font-bold text-blue-800">
+                  Primary Coordinating Site
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="block font-semibold text-slate-800 text-[11px]">
+                    Hospital / Institute Full Official Name <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={leadHospitalName}
+                    onChange={(e) => setLeadHospitalName(e.target.value)}
+                    placeholder="e.g. All India Institute of Ayurveda (AIIA), Central Hospital"
+                    className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-800 text-[11px]">
+                    Site Code <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={leadHospitalCode}
+                    onChange={(e) => setLeadHospitalCode(e.target.value)}
+                    placeholder="01"
+                    className="mt-1 w-full border border-slate-300 bg-white p-2 font-mono font-bold text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-800 text-[11px]">
+                    City <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={leadHospitalCity}
+                    onChange={(e) => setLeadHospitalCity(e.target.value)}
+                    placeholder="New Delhi"
+                    className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-800 text-[11px]">
+                    State <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={leadHospitalState}
+                    onChange={(e) => setLeadHospitalState(e.target.value)}
+                    placeholder="Delhi"
+                    className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-800 text-[11px]">
+                    Principal Investigator (PI) Full Name <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={leadHospitalPiName}
+                    onChange={(e) => setLeadHospitalPiName(e.target.value)}
+                    placeholder="e.g. Prof. (Dr.) Tanuja Nesari"
+                    className="mt-1 w-full border border-slate-300 bg-white p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-800 text-[11px]">
+                    PI Official Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={leadHospitalPiEmail}
+                    onChange={(e) => setLeadHospitalPiEmail(e.target.value)}
+                    placeholder="director@aiia.gov.in"
+                    className="mt-1 w-full border border-slate-300 bg-white p-2 font-mono text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="border border-slate-300 bg-slate-50 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="block font-bold text-slate-900 uppercase text-[11px] tracking-wide">
+                    Participating Hospital Institutions &amp; Sites <span className="text-red-600">*</span>
+                  </label>
+                  <p className="text-[11px] text-slate-500">
+                    Select which clinical research centers and hospitals are authorized under this trial protocol.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={selectAllSites}
+                    className="font-semibold text-slate-700 underline hover:text-black"
+                  >
+                    Select All
+                  </button>
+                  <span className="text-slate-300">|</span>
+                  <button
+                    type="button"
+                    onClick={clearAllSites}
+                    className="font-semibold text-slate-700 underline hover:text-black"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              {loadingSites ? (
+                <p className="text-slate-500 italic py-2">Loading registered hospital institutions...</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 max-h-40 overflow-y-auto p-1 bg-white border border-slate-200">
+                  {availableInstitutions.map((inst) => {
+                    const isChecked = selectedSiteIds.includes(inst.id)
+                    return (
+                      <label
+                        key={inst.id}
+                        className={`flex items-start gap-2.5 p-2 border cursor-pointer transition ${
+                          isChecked
+                            ? 'border-slate-800 bg-slate-50/80 text-slate-900'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleSite(inst.id)}
+                          className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-bold truncate text-[11px]">
+                            <span className="font-mono text-slate-500 mr-1">[{inst.site_code}]</span>
+                            {inst.name}
+                          </div>
+                          <div className="text-[10px] text-slate-500 truncate">
+                            {inst.city}, {inst.state} &bull; PI: {inst.pi_name || 'Assigned Investigator'}
+                          </div>
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
+              <div className="text-[10px] text-slate-500">
+                Selected: <strong>{selectedSiteIds.length}</strong> of {availableInstitutions.length} institutions. Target recruitment will be partitioned proportionally.
+              </div>
+            </div>
+          )}
+
           <div className="border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-700">
             <strong>Regulatory Sequence Gate:</strong> Upon protocol creation, the trial will reside in <code>PLANNING</code> status. Institutional Ethics Committee (IEC) review and prospective CTRI registration are required before patient recruitment can be activated.
           </div>
@@ -220,7 +469,7 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
               disabled={busy}
               className="border border-slate-800 bg-slate-900 px-5 py-2 text-xs font-semibold text-white hover:bg-black disabled:opacity-50"
             >
-              {busy ? 'Registering Protocol...' : 'Register Protocol'}
+              {busy ? 'Registering Protocol...' : 'Register Protocol & Sites'}
             </button>
           </div>
         </form>
