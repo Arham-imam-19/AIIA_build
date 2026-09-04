@@ -69,16 +69,20 @@ def export_trial_fhir_bundle(
 
 @router.get("/subjects/{subject_id}/export/fhir")
 def export_subject_fhir_bundle(
-    subject_id: int,
+    subject_id: str,
     session: Session = Depends(get_session),
     user: CurrentUser = Depends(require(Permission.SUBJECT_READ)),
 ) -> dict:
     """Export one participant's complete clinical trial timeline as an HL7 FHIR R4 Bundle."""
-    subject = session.get(Subject, subject_id)
+    subject = None
+    if str(subject_id).isdigit():
+        subject = session.get(Subject, int(subject_id))
+    if not subject:
+        subject = session.exec(select(Subject).where(Subject.subject_code == str(subject_id))).first()
     if not subject:
         raise HTTPException(status_code=404, detail=f"subject {subject_id} not found")
 
     if user.is_site_scoped:
         assert_site_visible(user, subject.site_id)
 
-    return fhir.build_fhir_subject_bundle(session, subject_id, user)
+    return fhir.build_fhir_subject_bundle(session, subject.id, user)

@@ -1358,25 +1358,34 @@ def create_protocol_deviation(
     }
 
 
+def _resolve_subject(session: Session, subject_id: str | int) -> Subject | None:
+    if isinstance(subject_id, int) or (isinstance(subject_id, str) and subject_id.isdigit()):
+        sub = session.get(Subject, int(subject_id))
+        if sub:
+            return sub
+    return session.exec(select(Subject).where(Subject.subject_code == str(subject_id))).first()
+
+
 @router.get("/subjects/{subject_id}/dossier")
 def get_subject_dossier(
-    subject_id: int,
+    subject_id: str,
     session: Session = Depends(get_session),
     user: CurrentUser = Depends(require(Permission.SUBJECT_READ)),
 ) -> dict:
     """Retrieve full clinical participant profile and unified chronological lifecycle audit log."""
-    subject = session.get(Subject, subject_id)
+    subject = _resolve_subject(session, subject_id)
     if not subject:
         raise HTTPException(status_code=404, detail=f"subject {subject_id} not found")
 
+    subject_id_int = subject.id
     if user.is_site_scoped:
         assert_site_visible(user, subject.site_id)
 
     trial = session.get(Trial, subject.trial_id)
     site = session.get(Site, subject.site_id)
-    consent = session.exec(select(EConsent).where(EConsent.subject_id == subject_id)).first()
-    visits = list(session.exec(select(Visit).where(Visit.subject_id == subject_id).order_by(Visit.visit_number)).all())
-    adverse_events = list(session.exec(select(AdverseEvent).where(AdverseEvent.subject_id == subject_id).order_by(AdverseEvent.onset_date, AdverseEvent.id)).all())
+    consent = session.exec(select(EConsent).where(EConsent.subject_id == subject_id_int)).first()
+    visits = list(session.exec(select(Visit).where(Visit.subject_id == subject_id_int).order_by(Visit.visit_number)).all())
+    adverse_events = list(session.exec(select(AdverseEvent).where(AdverseEvent.subject_id == subject_id_int).order_by(AdverseEvent.onset_date, AdverseEvent.id)).all())
 
     # Check DPDP Masking
     should_mask = privacy.should_mask_patient_pii(user, subject.site_id)
