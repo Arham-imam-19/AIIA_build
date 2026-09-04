@@ -382,14 +382,24 @@ export default function Coordinator(props) {
                     <td className="px-3 py-3 border-r border-slate-100 font-medium">
                       {rec.prakriti || '—'}
                     </td>
-                    <td className="px-3 py-3 border-r border-slate-100 max-w-xs truncate" title={rec.chief_complaint}>
-                      {rec.chief_complaint || '—'}
+                    <td className="px-3 py-3 border-r border-slate-100 max-w-xs" title={rec.chief_complaint}>
+                      <div className="text-slate-800 italic truncate">{rec.chief_complaint || '—'}</div>
+                      {rec.harmonized_term && (
+                        <div className="font-bold text-emerald-700 text-[11px] mt-0.5 flex items-center gap-1">
+                          <span>✓</span> CDISC: {rec.harmonized_term}
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-3 font-mono text-[11px] border-r border-slate-100">
                       {rec.vitals ? `BP: ${rec.vitals.blood_pressure || '—'} | HR: ${rec.vitals.heart_rate || '—'}` : '—'}
                     </td>
                     <td className="px-3 py-3 border-r border-slate-100">
-                      <ConfBadge value={rec.confidence_pct || 90} />
+                      <ConfBadge value={rec.confidence_pct || rec.confidence || 90} />
+                      {rec.method && (
+                        <div className="text-[10px] text-slate-500 mt-0.5 uppercase font-medium">
+                          {rec.method}
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-3 border-r border-slate-100">
                       <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
