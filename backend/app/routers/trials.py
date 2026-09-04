@@ -1207,15 +1207,14 @@ def list_dsmb_decisions(
         pass
 
     query = select(DsmbDecision).where(DsmbDecision.trial_id == trial_id).order_by(DsmbDecision.created_at.desc())
-    if user.is_site_scoped and user.site_id is not None:
-        query = query.where(
-            (DsmbDecision.site_id.is_(None)) | (DsmbDecision.site_id == user.site_id)
-        )
     decisions = session.exec(query).all()
+
+    my_site_ids = set(user.allowed_site_ids or ([user.site_id] if user.site_id else []))
 
     results = []
     for d in decisions:
         site_obj = session.get(Site, d.site_id) if d.site_id else None
+        is_my_site = (d.site_id is None) or (d.site_id in my_site_ids) or (not user.is_site_scoped)
         results.append({
             "id": d.id,
             "trial_id": d.trial_id,
@@ -1234,6 +1233,7 @@ def list_dsmb_decisions(
             "acknowledged_by_user_id": d.acknowledged_by_user_id,
             "acknowledged_by_name": d.acknowledged_by_name,
             "is_acknowledged": d.acknowledged_at is not None,
+            "is_targeted_to_user": is_my_site,
         })
     return results
 
@@ -1254,8 +1254,11 @@ def acknowledge_dsmb_decision(
     if not record:
         raise HTTPException(status_code=404, detail=f"Directive {decision_id} not found")
 
-    if user.is_site_scoped and record.site_id is not None and user.site_id != record.site_id:
-        raise HTTPException(status_code=403, detail="You may only acknowledge directives targeted to your site.")
+    my_site_ids = set(user.allowed_site_ids or ([user.site_id] if user.site_id else []))
+    if user.is_site_scoped and record.site_id is not None and record.site_id not in my_site_ids and user.role != "admin":
+        trial_site_ids = set(session.exec(select(Site.id).where(Site.trial_id == record.trial_id)).all())
+        if not (my_site_ids & trial_site_ids):
+            raise HTTPException(status_code=403, detail="You may only acknowledge directives targeted to your participating trial centers.")
 
     now = utcnow()
     record.acknowledged_at = now
