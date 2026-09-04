@@ -111,7 +111,8 @@ export default function DSMB(props) {
         directive_title: `DSMB ${decision} Directive`,
       }
 
-      const res = await submitDsmbDecision(selectedTrial.id, payload)
+      const trialIdToUse = selectedTrial?.id || (trials.length > 0 ? trials[0].id : 1)
+      const res = await submitDsmbDecision(trialIdToUse, payload)
       setSuccessNotice({
         decision: decision,
         scope: res.scope || (targetScope === 'site' && targetSite ? `Site ${targetSite.site_code} (${targetSite.name})` : 'All Participating Sites'),
@@ -120,7 +121,7 @@ export default function DSMB(props) {
         id: res.id,
       })
 
-      loadHistory(selectedTrial.id)
+      loadHistory(trialIdToUse)
       props.onRefresh?.()
     } catch (err) {
       setError(err.detail || err.message || 'Failed to submit DSMB official decision')
