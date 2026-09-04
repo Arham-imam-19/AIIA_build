@@ -88,14 +88,51 @@ def build_stats(session: Session, user: CurrentUser, trial_id: int | None = None
     trial = resolve_trial(session, trial_id)
 
     if trial is None:
-        # An empty database is a normal state, not an error - it is what you see
-        # before running the seed script. Say so plainly instead of 500-ing.
         return {
-            "seeded": False,
-            "message": (
-                "No trial found. Load the synthetic dataset with: "
-                "docker compose exec backend python scripts/seed.py"
-            ),
+            "seeded": True,
+            "trials_count": 0,
+            "scope": {
+                "all_sites": user.scope_site_id is None,
+                "site_id": user.scope_site_id,
+                "site_code": None,
+                "site_name": None,
+                "sites_visible": 0,
+                "role": user.role,
+                "role_label": user.role_label,
+            },
+            "trial": None,
+            "enrollment": {
+                "target": 0,
+                "trial_target": 0,
+                "screened": 0,
+                "enrolled": 0,
+                "screen_failed": 0,
+                "percent_of_target": 0.0,
+                "screening_success_rate": 0.0,
+                "by_status": {},
+            },
+            "by_arm": {},
+            "by_prakriti": {},
+            "sites": {"total": 0, "detail": []},
+            "visits": {
+                "total": 0,
+                "completed": 0,
+                "missed": 0,
+                "scheduled": 0,
+                "deviations": 0,
+                "deviation_rate": 0.0,
+                "by_status": {},
+            },
+            "safety": {
+                "total_aes": 0,
+                "serious_aes": 0,
+                "subjects_with_ae": 0,
+                "uncoded": 0,
+                "sae_rate": 0.0,
+                "coding_completion_rate": 100.0,
+            },
+            "recent_audit": [],
+            "message": "No protocols currently active in the system.",
             "data_notice": "All data in this system is synthetic. No real patient data.",
         }
 

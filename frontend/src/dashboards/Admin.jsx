@@ -145,10 +145,10 @@ export default function Admin(props) {
   }
 
   const customTiles = [
-    { key: 'total_protocols', label: 'Total Configured Protocols', value: trials.length || 2, tone: 'neutral' },
+    { key: 'total_protocols', label: 'Total Configured Protocols', value: trials.length, tone: 'neutral' },
     { key: 'missing_ctri', label: 'Protocols Missing CTRI', value: trials.filter(t => !t.ctri_number).length, tone: 'warn' },
-    { key: 'total_sites', label: 'Total Active Sites', value: sites.length || 5, tone: 'good' },
-    { key: 'audit_entries', label: 'System Audit Entries', value: '1,402', tone: 'neutral' },
+    { key: 'total_sites', label: 'Total Active Sites', value: sites.length, tone: 'good' },
+    { key: 'audit_entries', label: 'System Audit Entries', value: props.dashboard?.tiles?.find(t => t.key === 'audit_entries')?.value || auditLogs.length || 0, tone: 'neutral' },
   ]
 
   const originalBlocks = props.dashboard?.blocks || []
@@ -342,13 +342,18 @@ export default function Admin(props) {
                   <select
                     value={selectedProtocolId || ''}
                     onChange={e => setSelectedProtocolId(Number(e.target.value))}
+                    disabled={trials.length === 0}
                     className="w-full border border-slate-300 p-2 text-xs font-semibold text-slate-900 focus:border-slate-800 focus:outline-none"
                   >
-                    {trials.map(p => (
-                      <option key={p.id} value={p.id}>
-                        [{p.protocol_number}] {p.short_title || p.title} &middot; Status: {p.status?.toUpperCase()}
-                      </option>
-                    ))}
+                    {trials.length === 0 ? (
+                      <option value="">No Protocols Configured (Click + Register New Protocol)</option>
+                    ) : (
+                      trials.map(p => (
+                        <option key={p.id} value={p.id}>
+                          [{p.protocol_number}] {p.short_title || p.title} &middot; Status: {p.status?.toUpperCase()}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
 
@@ -361,6 +366,14 @@ export default function Admin(props) {
                   </button>
                 </div>
               </div>
+
+              {trials.length === 0 && (
+                <div className="border border-blue-200 bg-blue-50 p-4 text-xs text-blue-900 flex items-center justify-between">
+                  <div>
+                    <strong className="font-bold">No Active Protocols:</strong> The CTMS is currently in a clean slate state. Click <strong>+ Register New Protocol</strong> above to configure your first clinical trial protocol and assign participating hospital institutions.
+                  </div>
+                </div>
+              )}
 
               {/* Protocol Lifecycle Status Transition Controls */}
               {activeTrial && (

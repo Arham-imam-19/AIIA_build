@@ -150,13 +150,6 @@ function SignedIn() {
         <p className="border border-red-300 bg-red-50 p-4 text-xs font-semibold text-red-800">{live.error}</p>
       ) : !live.dashboard ? (
         <p className="text-xs text-slate-500">Loading dashboard...</p>
-      ) : !live.dashboard.seeded ? (
-        <div className="border border-amber-300 bg-amber-50 p-4 text-xs leading-relaxed text-amber-900">
-          {live.dashboard.message}
-          <code className="mt-1.5 block font-mono text-[11px]">
-            docker compose exec backend python scripts/seed.py
-          </code>
-        </div>
       ) : (
         <Dashboard
           dashboard={live.dashboard}
