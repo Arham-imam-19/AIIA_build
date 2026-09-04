@@ -19,7 +19,7 @@ from sqlmodel import Session, SQLModel, select
 
 from app import audit
 from app.db import get_session
-from app.enums import AuditAction, EthicsApprovalStatus, TrialStatus
+from app.enums import AuditAction, EthicsApprovalStatus, SiteStatus, TrialStatus, UserRole
 from app.events import bus, now_iso
 from app.models import Site, Subject, Trial, User
 from app.models.base import utcnow
@@ -305,19 +305,62 @@ def _activation_response(trial: Trial) -> TrialActivationResponse:
     )
 
 
+def assert_trial_accessible_to_site_user(user: CurrentUser, trial: Trial, session: Session) -> None:
+    """Ensure site-scoped users (PI, Institution Admin, Coordinator) can only modify/manage trials under their own institution."""
+    if not user.is_site_scoped or user.site_id is None:
+        return
+    user_site = session.get(Site, user.site_id)
+    if not user_site:
+        raise HTTPException(
+            status_code=403,
+            detail="Your user account is not associated with an authorized hospital site."
+        )
+    # Match site by trial_id and (id, site_code, name, pi_email)
+    site_match = session.exec(
+        select(Site).where(
+            (Site.trial_id == trial.id)
+            & (
+                (Site.id == user.site_id)
+                | (Site.site_code == user_site.site_code)
+                | (Site.name == user_site.name)
+                | (Site.pi_email == user.email)
+            )
+        )
+    ).first()
+    if not site_match:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Access Restricted: Protocol [{trial.protocol_number}] is not conducted under your institution ({user_site.name}). You are only authorized to manage trials conducted at your own hospital."
+        )
+
+
 @router.get("/trials", response_model=Page[Trial])
 def list_trials(
     session: Session = Depends(get_session),
     user: CurrentUser = Depends(require(Permission.TRIAL_READ)),
     status: str | None = Query(None, description="filter by trial status"),
+    institution_only: bool = Query(False, description="filter to caller's institution only"),
     limit: int = limit_param(),
     offset: int = offset_param(),
 ) -> Page[Trial]:
-    """The trial itself is visible to every role - a site investigator still needs
-    to read the protocol they are running."""
+    """The trial list. Site-scoped roles (PI, Institution Admin, CRC) automatically see only protocols under their hospital."""
     statement = select(Trial).order_by(Trial.protocol_number)
     if status:
         statement = statement.where(Trial.status == status)
+
+    if (institution_only or user.is_site_scoped) and user.site_id is not None:
+        user_site = session.get(Site, user.site_id)
+        if user_site:
+            site_trial_ids = session.exec(
+                select(Site.trial_id).where(
+                    (Site.id == user.site_id)
+                    | (Site.site_code == user_site.site_code)
+                    | (Site.name == user_site.name)
+                    | (Site.pi_email == user.email)
+                )
+            ).all()
+            statement = statement.where(Trial.id.in_(site_trial_ids))
+
     total, items = paginate(session, statement, limit, offset)
     return Page(total=total, limit=limit, offset=offset, items=items)
 
@@ -331,6 +374,8 @@ def get_trial(
     trial = session.get(Trial, trial_id)
     if trial is None:
         raise HTTPException(status_code=404, detail=f"no trial with id {trial_id}")
+    if user.is_site_scoped:
+        assert_trial_accessible_to_site_user(user, trial, session)
     return trial
 
 
@@ -455,6 +500,8 @@ def update_trial_ctri_registration(
     trial = session.get(Trial, trial_id)
     if trial is None:
         raise HTTPException(status_code=404, detail=f"no trial with id {trial_id}")
+
+    assert_trial_accessible_to_site_user(user, trial, session)
 
     now = utcnow()
     trimmed_number = _validate_ctri_registration(body, trial=trial, today=now.date())
@@ -597,6 +644,8 @@ def activate_trial(
     ).one_or_none()
     if trial is None:
         raise HTTPException(status_code=404, detail=f"no trial with id {trial_id}")
+
+    assert_trial_accessible_to_site_user(user, trial, session)
 
     is_recruiting = trial.status == TrialStatus.RECRUITING.value
     has_activation_time = trial.activated_at is not None
@@ -758,9 +807,9 @@ class CreateTrialRequest(SQLModel):
 def create_trial(
     body: CreateTrialRequest,
     session: Session = Depends(get_session),
-    user: CurrentUser = Depends(require(Permission.USER_MANAGE)),
+    user: CurrentUser = Depends(require(Permission.TRIAL_WRITE)),
 ) -> Trial:
-    """Primary Admin creates a new Clinical Trial protocol and associates participating institutions."""
+    """Primary Admin, Institution Admin, or Principal Investigator creates a new Clinical Trial protocol."""
     proto = body.protocol_number.strip().upper()
     existing = session.exec(select(Trial).where(Trial.protocol_number == proto)).first()
     if existing:
@@ -790,13 +839,21 @@ def create_trial(
 
     # Associate selected participating institutions / sites with the new trial
     institutions_to_clone: list[Site] = []
+    user_site = session.get(Site, user.site_id) if (user.is_site_scoped and user.site_id) else None
+
     if body.participating_site_ids:
         for sid in body.participating_site_ids:
             site_obj = session.get(Site, sid)
             if site_obj:
                 institutions_to_clone.append(site_obj)
+        # If user is site-scoped, make sure their own institution is always included
+        if user_site and not any(s.site_code == user_site.site_code for s in institutions_to_clone):
+            institutions_to_clone.append(user_site)
+    elif user_site:
+        # Site-scoped user creating a protocol for their institution
+        institutions_to_clone.append(user_site)
     else:
-        # If no site IDs passed, fetch all distinct existing institutions to make available
+        # Admin creating a protocol without site filter: clone all existing distinct institutions
         existing_sites = session.exec(select(Site)).all()
         seen_codes: set[str] = set()
         for s in existing_sites:
@@ -811,6 +868,19 @@ def create_trial(
     )
 
     for inst in institutions_to_clone:
+        is_user_institution = (user_site is not None and inst.site_code == user_site.site_code)
+        
+        pi_name = (
+            user.full_name
+            if is_user_institution and user.role == UserRole.PRINCIPAL_INVESTIGATOR.value
+            else (inst.pi_name or "Designated Principal Investigator")
+        )
+        pi_email = (
+            user.email
+            if is_user_institution and user.role == UserRole.PRINCIPAL_INVESTIGATOR.value
+            else inst.pi_email
+        )
+
         new_site = Site(
             trial_id=trial.id,
             site_code=inst.site_code,
@@ -818,8 +888,8 @@ def create_trial(
             city=inst.city,
             state=inst.state,
             country=inst.country or "India",
-            pi_name=inst.pi_name or "Designated Principal Investigator",
-            pi_email=inst.pi_email,
+            pi_name=pi_name,
+            pi_email=pi_email,
             contact_phone=inst.contact_phone,
             status="activated",
             target_enrollment=target_per_site,
@@ -835,7 +905,7 @@ def create_trial(
         entity_type="trials",
         entity_id=trial.id,
         entity_label=trial.protocol_number,
-        reason=f"Clinical Trial Protocol {trial.protocol_number} created with {len(institutions_to_clone)} participating sites by Primary Admin",
+        reason=f"Clinical Trial Protocol {trial.protocol_number} created with {len(institutions_to_clone)} participating sites by {user.full_name} ({user.role_label})",
         trial_id=trial.id,
     )
     session.commit()
@@ -947,4 +1017,73 @@ def halt_trial_emergency(
     session.commit()
     
     return {"status": "success", "message": "Trial has been suspended immediately."}
+
+
+class UpdateTrialStatusRequest(SQLModel):
+    status: str
+    reason: str | None = None
+
+
+@router.patch("/trials/{trial_id}/status", response_model=Trial)
+def update_trial_status(
+    trial_id: int,
+    body: UpdateTrialStatusRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+    user: CurrentUser = Depends(require(Permission.ACTIVATION_WRITE)),
+) -> Trial:
+    """Transition a clinical trial protocol status (e.g. planning -> recruiting, active, suspended, completed)."""
+    trial = session.get(Trial, trial_id)
+    if trial is None:
+        raise HTTPException(status_code=404, detail=f"no trial with id {trial_id}")
+
+    assert_trial_accessible_to_site_user(user, trial, session)
+
+    valid_statuses = [s.value for s in TrialStatus]
+    new_status = body.status.strip().lower()
+    if new_status not in valid_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status '{body.status}'. Valid statuses: {', '.join(valid_statuses)}",
+        )
+
+    old_status = trial.status
+    now = utcnow()
+    trial.status = new_status
+    if new_status == TrialStatus.RECRUITING.value and not trial.activated_at:
+        trial.activated_at = now
+        trial.activated_by_user_id = user.id
+    trial.updated_at = now
+    session.add(trial)
+
+    # Also update site statuses if moving to recruiting or suspended
+    sites = session.exec(select(Site).where(Site.trial_id == trial.id)).all()
+    if new_status == TrialStatus.RECRUITING.value:
+        for s in sites:
+            if s.status != SiteStatus.RECRUITING.value:
+                s.status = SiteStatus.RECRUITING.value
+                session.add(s)
+    elif new_status in (TrialStatus.SUSPENDED.value, TrialStatus.TERMINATED.value):
+        for s in sites:
+            s.status = SiteStatus.SUSPENDED.value
+            session.add(s)
+
+    audit.record(
+        session,
+        user=user,
+        action=AuditAction.UPDATE,
+        entity_type="trials",
+        entity_id=trial.id,
+        entity_label=trial.protocol_number,
+        field_name="status",
+        old_value=json.dumps({"status": old_status}),
+        new_value=json.dumps({"status": new_status}),
+        reason=body.reason or f"Protocol status transitioned from {old_status} to {new_status}.",
+        trial_id=trial.id,
+        request=request,
+    )
+    session.commit()
+    session.refresh(trial)
+    return trial
+
 

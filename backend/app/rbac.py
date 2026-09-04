@@ -40,6 +40,7 @@ class Permission(str, Enum):
     """One capability. Named `area:verb` so a permission reads as a sentence."""
 
     TRIAL_READ = "trial:read"  # the protocol, its dates, its registrations
+    TRIAL_WRITE = "trial:write"  # create or edit clinical protocols
     SITE_READ = "site:read"  # the participating hospitals / institutions
     INSTITUTION_MANAGE = "institution:manage"  # create or manage institutions
     SUBJECT_READ = "subject:read"  # participant records (de-identified)
@@ -98,15 +99,29 @@ _P = Permission
 ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
     UserRole.ADMIN.value: frozenset({
         _P.TRIAL_READ,
+        _P.TRIAL_WRITE,
         _P.SITE_READ,
         _P.USER_READ,
         _P.USER_MANAGE,
         _P.INSTITUTION_MANAGE,
-            _P.AUDIT_READ,
+        _P.AUDIT_READ,
+        _P.ACTIVATION_WRITE,
+        _P.ETHICS_WRITE,
+        _P.CTRI_WRITE,
+        _P.REGULATORY_WRITE,
+        _P.COMPLIANCE_READ,
+        _P.EXPORT,
+        _P.PATIENT_REQUEST_READ,
+        _P.PATIENT_REQUEST_RESPOND,
+        _P.ECONSENT_READ,
+        _P.ECONSENT_SIGN,
+        _P.HALT_TRIAL,
+        _P.CODE_MEDDRA,
     }),
     UserRole.INSTITUTION_ADMIN.value: frozenset(
         {
             _P.TRIAL_READ,
+            _P.TRIAL_WRITE,
             _P.SITE_READ,
             _P.SUBJECT_READ,
             _P.VISIT_READ,
@@ -114,6 +129,9 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.COMPLIANCE_READ,
             _P.USER_READ,
             _P.USER_MANAGE,
+            _P.ACTIVATION_WRITE,
+            _P.CTRI_WRITE,
+            _P.ETHICS_WRITE,
             _P.PATIENT_REQUEST_READ,
             _P.PATIENT_REQUEST_RESPOND,
             _P.ECONSENT_READ,
@@ -122,6 +140,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
     UserRole.PRINCIPAL_INVESTIGATOR.value: frozenset(
         {
             _P.TRIAL_READ,
+            _P.TRIAL_WRITE,
             _P.SITE_READ,
             _P.SUBJECT_READ,
             _P.SUBJECT_WRITE,
@@ -131,6 +150,9 @@ ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
             _P.AE_WRITE,
             _P.COMPLIANCE_READ,
             _P.USER_READ,
+            _P.ACTIVATION_WRITE,
+            _P.CTRI_WRITE,
+            _P.ETHICS_WRITE,
             _P.PATIENT_REQUEST_READ,
             _P.ECONSENT_READ,
         }

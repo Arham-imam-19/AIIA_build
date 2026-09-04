@@ -122,11 +122,24 @@ function SignedIn() {
           onNavigateScreenParticipant={() => setView('screen_participant')}
         />
       ) : view === 'patient_detail' ? (
-        <PatientDetailPage
-          subjectId={selectedSubjectId || 1}
-          onBack={() => setView('view_participants')}
-          onRefresh={live.refresh}
-        />
+        selectedSubjectId ? (
+          <PatientDetailPage
+            subjectId={selectedSubjectId}
+            onBack={() => {
+              setSelectedSubjectId(null)
+              setView('view_participants')
+            }}
+            onRefresh={live.refresh}
+          />
+        ) : (
+          <ParticipantsListPage
+            onSelectPatient={(id) => {
+              setSelectedSubjectId(id)
+              setView('patient_detail')
+            }}
+            onNavigateScreenParticipant={() => setView('screen_participant')}
+          />
+        )
       ) : view === 'infrastructure' ? (
         <InfrastructurePage onNavigateDashboard={() => setView('dashboard')} />
       ) : view === 'create_account' ? (

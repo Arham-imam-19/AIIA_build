@@ -34,21 +34,26 @@ export default function PatientDetailPage({ subjectId, onBack, onRefresh }) {
   const [submitSuccess, setSubmitSuccess] = useState(null)
   const [submitError, setSubmitError] = useState(null)
 
-  function loadData() {
+  async function loadData() {
+    if (!subjectId) {
+      setError('No participant selected.')
+      setLoading(false)
+      return
+    }
     setLoading(true)
-    Promise.all([
-      fetchSubjectDossier(subjectId),
-      fetchSubjectClinicalLogs(subjectId),
-    ])
-      .then(([dosData, logsData]) => {
-        setDossier(dosData)
-        setClinicalLogs(logsData || [])
-        setLoading(false)
-      })
-      .catch((err) => {
-        setError(err.detail || err.message || 'Failed to load participant data.')
-        setLoading(false)
-      })
+    setError(null)
+    try {
+      const [dosData, logsData] = await Promise.all([
+        fetchSubjectDossier(subjectId),
+        fetchSubjectClinicalLogs(subjectId).catch(() => []),
+      ])
+      setDossier(dosData)
+      setClinicalLogs(Array.isArray(logsData) ? logsData : [])
+    } catch (err) {
+      setError(err.detail || err.message || 'Failed to load participant data.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {

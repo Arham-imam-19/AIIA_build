@@ -6,6 +6,7 @@ export default function ParticipantsListPage({ onSelectPatient, onNavigateScreen
   const { user } = useAuth()
 
   const [subjects, setSubjects] = useState([])
+  const [trials, setTrials] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [site, setSite] = useState(null)
@@ -13,6 +14,7 @@ export default function ParticipantsListPage({ onSelectPatient, onNavigateScreen
 
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [protocolFilter, setProtocolFilter] = useState('all')
 
   useEffect(() => {
     let isMounted = true
@@ -26,9 +28,11 @@ export default function ParticipantsListPage({ onSelectPatient, onNavigateScreen
       .then(([subRes, siteRes, trialRes]) => {
         if (!isMounted) return
         setSubjects(subRes.items || [])
+        const trialList = trialRes.items || []
+        setTrials(trialList)
         const userSite = siteRes.items?.find((s) => s.id === user?.site_id) || siteRes.items?.[0]
         setSite(userSite)
-        setTrial(trialRes.items?.[0] || null)
+        setTrial(trialList[0] || null)
         setLoading(false)
       })
       .catch((err) => {
@@ -42,6 +46,8 @@ export default function ParticipantsListPage({ onSelectPatient, onNavigateScreen
     }
   }, [user])
 
+  const trialMap = Object.fromEntries(trials.map((t) => [t.id, t]))
+
   const filteredSubjects = subjects.filter((s) => {
     const matchesSearch =
       !searchTerm ||
@@ -49,7 +55,9 @@ export default function ParticipantsListPage({ onSelectPatient, onNavigateScreen
       (s.prakriti && s.prakriti.toLowerCase().includes(searchTerm.toLowerCase()))
     const matchesStatus =
       statusFilter === 'all' || s.status === statusFilter
-    return matchesSearch && matchesStatus
+    const matchesProtocol =
+      protocolFilter === 'all' || String(s.trial_id) === String(protocolFilter)
+    return matchesSearch && matchesStatus && matchesProtocol
   })
 
   // Summary tallies
@@ -70,7 +78,7 @@ export default function ParticipantsListPage({ onSelectPatient, onNavigateScreen
                 Registry Module
               </span>
               <span className="font-mono text-xs font-semibold text-slate-500">
-                Scope: Site {site?.id ?? user?.site_id ?? '15'} &middot; {site?.site_name || 'All India Institute of Ayurveda'}
+                Scope: Site {site?.id ?? user?.site_id ?? '01'} &middot; {site?.site_name || 'All India Institute of Ayurveda'}
               </span>
             </div>
             <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-900 uppercase">
@@ -81,7 +89,7 @@ export default function ParticipantsListPage({ onSelectPatient, onNavigateScreen
           <div className="flex items-center gap-3">
             <button
               onClick={onNavigateScreenParticipant}
-              className="border border-blue-900 bg-blue-900 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white hover:bg-blue-800 transition"
+              className="border border-blue-900 bg-blue-900 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white hover:bg-blue-800 transition shadow-sm"
             >
               + Screen New Participant
             </button>
@@ -91,10 +99,10 @@ export default function ParticipantsListPage({ onSelectPatient, onNavigateScreen
         {/* Server-Side Access Control Notice */}
         <div className="mt-3 flex items-start gap-2.5 border-l-4 border-slate-700 bg-slate-50 p-3 text-xs text-slate-700">
           <div className="font-bold text-slate-900 uppercase tracking-wider text-[11px] whitespace-nowrap">
-            Server-Side Scoping:
+            Multi-Protocol Registry:
           </div>
           <div className="leading-relaxed text-[11px]">
-            As <strong>{user?.full_name}</strong> ({user?.role_label}), records are server-enforced strictly to trial <strong>{trial?.protocol_number || 'AIIA-ASH-2024'}</strong> under participating institution <strong>Site {user?.site_id}</strong>. Cross-site patient inspection is blocked at database query layer.
+            As <strong>{user?.full_name}</strong> ({user?.role_label}), records are scoped across participating protocols under <strong>Site {site?.id ?? user?.site_id ?? '01'}</strong> ({site?.site_name || 'Institute'}). Cross-site patient inspection remains restricted by NDCT Rules 2019.
           </div>
         </div>
       </div>
@@ -127,14 +135,29 @@ export default function ParticipantsListPage({ onSelectPatient, onNavigateScreen
       <div className="border border-slate-300 bg-white p-4 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex flex-wrap items-center gap-3">
           <div>
-            <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Search Subject Code / Prakriti</label>
+            <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Search Subject / Prakriti</label>
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="e.g. AIIA-ASH-15-001 or vata"
-              className="border border-slate-300 p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none w-56"
+              placeholder="e.g. AIIA-ASH-01-081"
+              className="border border-slate-300 p-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none w-48"
             />
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Target Protocol</label>
+            <select
+              value={protocolFilter}
+              onChange={(e) => setProtocolFilter(e.target.value)}
+              className="border border-slate-300 p-2 text-xs font-semibold text-slate-900 focus:border-slate-800 focus:outline-none"
+            >
+              <option value="all">All Protocols ({trials.length})</option>
+              {trials.map((t) => (
+                <option key={t.id} value={t.id}>
+                  [{t.protocol_number}] {t.title?.slice(0, 26)}...
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Status Filter</label>
@@ -179,6 +202,7 @@ export default function ParticipantsListPage({ onSelectPatient, onNavigateScreen
               <thead>
                 <tr className="border-b-2 border-slate-800 bg-slate-100 font-bold uppercase text-[10px] tracking-wider text-slate-700">
                   <th className="p-3 border-r border-slate-200">Subject Code</th>
+                  <th className="p-3 border-r border-slate-200">Protocol / Trial</th>
                   <th className="p-3 border-r border-slate-200">Status</th>
                   <th className="p-3 border-r border-slate-200">Study Arm</th>
                   <th className="p-3 border-r border-slate-200">Demographics</th>
@@ -199,6 +223,7 @@ export default function ParticipantsListPage({ onSelectPatient, onNavigateScreen
                   }
 
                   const badgeClass = statusColors[s.status] || 'bg-slate-50 text-slate-700 border-slate-300'
+                  const protocolInfo = trialMap[s.trial_id]
 
                   return (
                     <tr
@@ -208,6 +233,15 @@ export default function ParticipantsListPage({ onSelectPatient, onNavigateScreen
                     >
                       <td className="p-3 font-mono font-bold text-slate-900 border-r border-slate-200">
                         {s.subject_code}
+                      </td>
+                      <td className="p-3 border-r border-slate-200">
+                        <div className="font-mono text-[11px] font-bold text-slate-900 flex items-center gap-1.5">
+                          <span className="inline-block h-2 w-2 rounded-full bg-aiia-600"></span>
+                          {protocolInfo?.protocol_number || s.protocol_version || `Trial #${s.trial_id}`}
+                        </div>
+                        <div className="text-[10px] text-slate-500 truncate max-w-[160px]" title={protocolInfo?.title}>
+                          {protocolInfo?.title || 'Clinical Protocol'}
+                        </div>
                       </td>
                       <td className="p-3 border-r border-slate-200">
                         <span className={`inline-block border px-2 py-0.5 font-mono text-[10px] font-bold uppercase ${badgeClass}`}>

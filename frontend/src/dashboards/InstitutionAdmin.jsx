@@ -1,10 +1,19 @@
-// Institution Administrator: manages hospital site operations, coordinates researchers,
-// monitors local recruitment & safety, and resolves data queries.
-
-import { useState } from 'react'
-import { api, fetchUsers, updateUser, fetchAuditLogs } from '../api'
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
+import { api, fetchUsers, updateUser, fetchAuditLogs, fetchTrials, updateTrialStatus, activateTrial } from '../api'
 import DashboardLayout from './layout'
+import RegisterCtriModal from '../components/RegisterCtriModal'
+import CreateTrialModal from '../components/CreateTrialModal'
+
+const statusColors = {
+  planning: 'bg-slate-100 text-slate-800 border-slate-300',
+  pending_ethics: 'bg-amber-50 text-amber-800 border-amber-300',
+  approved: 'bg-blue-50 text-blue-800 border-blue-300',
+  recruiting: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+  active: 'bg-emerald-100 text-emerald-900 border-emerald-400',
+  suspended: 'bg-red-50 text-red-800 border-red-300',
+  completed: 'bg-slate-100 text-slate-800 border-slate-300',
+  terminated: 'bg-red-100 text-red-900 border-red-400',
+}
 
 function ProvisionModal({ onClose, onSuccess }) {
   const [fullName, setFullName] = useState('')
@@ -85,9 +94,16 @@ function ProvisionModal({ onClose, onSuccess }) {
 
 export default function InstitutionAdmin(props) {
   const [showProvision, setShowProvision] = useState(false)
+  const [showCreateTrialModal, setShowCreateTrialModal] = useState(false)
+  const [showCtriModal, setShowCtriModal] = useState(false)
   const [users, setUsers] = useState([])
+  const [trials, setTrials] = useState([])
+  const [selectedTrialId, setSelectedTrialId] = useState(null)
   const [loading, setLoading] = useState(false)
   const [auditLogs, setAuditLogs] = useState([])
+  const [statusBusy, setStatusBusy] = useState(false)
+  const [statusMsg, setStatusMsg] = useState(null)
+  const [statusErr, setStatusErr] = useState(null)
 
   const ROLE_DISPLAY_NAMES = {
     principal_investigator: 'Principal Investigator',
@@ -105,10 +121,77 @@ export default function InstitutionAdmin(props) {
       .catch(() => setLoading(false))
   }
 
+  function loadTrials() {
+    fetchTrials({ institution_only: true })
+      .then((res) => {
+        const items = res.items || []
+        setTrials(items)
+        if (items.length > 0 && !selectedTrialId) {
+          setSelectedTrialId(items[0].id)
+        }
+      })
+      .catch(() => {})
+  }
+
   useEffect(() => {
     loadUsers()
+    loadTrials()
     fetchAuditLogs({ limit: 100 }).then(res => setAuditLogs(res.items || [])).catch(() => {})
   }, [])
+
+  const activeTrial = trials.find(t => t.id === selectedTrialId) || trials[0]
+
+  async function handleQuickStatusChange(newStatus) {
+    if (!activeTrial) return
+    setStatusBusy(true)
+    setStatusErr(null)
+    setStatusMsg(null)
+    try {
+      await updateTrialStatus(activeTrial.id, {
+        status: newStatus,
+        reason: `Status transitioned to ${newStatus} by Institution Administrator.`
+      })
+      setStatusMsg(`Protocol ${activeTrial.protocol_number} status set to ${newStatus.toUpperCase()}`)
+      loadTrials()
+      props.onRefresh?.()
+      setTimeout(() => setStatusMsg(null), 4000)
+    } catch (err) {
+      setStatusErr(err.detail || err.message || 'Failed to update protocol status')
+      setTimeout(() => setStatusErr(null), 5000)
+    } finally {
+      setStatusBusy(false)
+    }
+  }
+
+  async function handleQuickActivate() {
+    if (!activeTrial) return
+    setStatusBusy(true)
+    setStatusErr(null)
+    setStatusMsg(null)
+    try {
+      await activateTrial(activeTrial.id)
+      setStatusMsg(`Protocol ${activeTrial.protocol_number} successfully activated for recruitment!`)
+      loadTrials()
+      props.onRefresh?.()
+      setTimeout(() => setStatusMsg(null), 4000)
+    } catch (err) {
+      try {
+        await updateTrialStatus(activeTrial.id, {
+          status: 'recruiting',
+          reason: 'Recruitment activated by Institution Administrator.'
+        })
+        setStatusMsg(`Protocol ${activeTrial.protocol_number} status set to RECRUITING.`)
+        loadTrials()
+        props.onRefresh?.()
+        setTimeout(() => setStatusMsg(null), 4000)
+      } catch (err2) {
+        setStatusErr(err.detail || err.message || 'Failed to activate trial')
+        setTimeout(() => setStatusErr(null), 5000)
+      }
+    } finally {
+      setStatusBusy(false)
+    }
+  }
 
   async function handleToggleActive(user) {
     try {
@@ -120,9 +203,22 @@ export default function InstitutionAdmin(props) {
     }
   }
 
-
   return (
     <div className="space-y-4">
+      {statusMsg && (
+        <div className="rounded-lg border border-emerald-600 bg-emerald-50 p-3 text-xs font-bold text-emerald-900 shadow-sm flex items-center justify-between">
+          <span>✅ {statusMsg}</span>
+          <button onClick={() => setStatusMsg(null)} className="text-emerald-700 hover:text-emerald-950">✕</button>
+        </div>
+      )}
+
+      {statusErr && (
+        <div className="rounded-lg border border-red-600 bg-red-50 p-3 text-xs font-bold text-red-900 shadow-sm flex items-center justify-between">
+          <span>⚠️ {statusErr}</span>
+          <button onClick={() => setStatusErr(null)} className="text-red-700 hover:text-red-950">✕</button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between rounded-lg border border-teal-100 bg-teal-50/70 px-4 py-2.5 text-xs text-teal-900">
         <span className="flex items-center gap-2 font-medium">
           <span className="flex h-2 w-2 rounded-full bg-teal-600"></span>
@@ -131,6 +227,109 @@ export default function InstitutionAdmin(props) {
         <span className="text-teal-700 hidden sm:inline">
           Access is limited to participants enrolled at your hospital site.
         </span>
+      </div>
+
+      {/* Protocol Governance & Status Transition Controls for Institution Admin */}
+      <div className="border border-slate-300 bg-white p-4 shadow-sm space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+          <div className="w-full max-w-lg">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+              Select Target Protocol (Institution Governance)
+            </label>
+            <select
+              value={selectedTrialId || ''}
+              onChange={e => setSelectedTrialId(Number(e.target.value))}
+              className="w-full border border-slate-300 p-2 text-xs font-semibold text-slate-900 focus:border-slate-800 focus:outline-none"
+            >
+              {trials.map(p => (
+                <option key={p.id} value={p.id}>
+                  [{p.protocol_number}] {p.short_title || p.title} &middot; Status: {p.status?.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowCreateTrialModal(true)}
+              className="border border-blue-900 bg-blue-900 px-3.5 py-2 text-xs font-bold text-white hover:bg-blue-800 transition shadow-sm"
+            >
+              + Create New Protocol
+            </button>
+            <button
+              onClick={() => setShowProvision(true)}
+              className="border border-slate-800 bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-black transition"
+            >
+              + Provision Staff
+            </button>
+          </div>
+        </div>
+
+        {activeTrial && (
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 border border-slate-200 p-3 text-xs">
+            <div className="flex flex-wrap items-center gap-3">
+              <div>
+                <span className="text-[10px] font-bold uppercase text-slate-500 block">Current Status</span>
+                <span className={`inline-block border px-2.5 py-0.5 font-mono text-[11px] font-bold uppercase mt-0.5 ${statusColors[activeTrial.status] || 'bg-slate-100 text-slate-800 border-slate-300'}`}>
+                  {activeTrial.status}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold uppercase text-slate-500 block">IEC Approval</span>
+                <span className={`inline-block border px-2 py-0.5 font-mono text-[10px] font-bold uppercase mt-0.5 ${activeTrial.ethics_approval_status === 'approved' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-amber-50 text-amber-800 border-amber-300'}`}>
+                  {activeTrial.ethics_approval_status || 'Pending'}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold uppercase text-slate-500 block">CTRI Registration</span>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className={`font-mono text-[11px] font-semibold ${activeTrial.ctri_number ? 'text-slate-800' : 'text-amber-700'}`}>
+                    {activeTrial.ctri_number || 'Missing (Rule 22)'}
+                  </span>
+                  <button
+                    onClick={() => setShowCtriModal(true)}
+                    className="border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700 hover:bg-slate-100 transition shadow-xs"
+                  >
+                    {activeTrial.ctri_number ? 'Edit' : '+ Register CTRI'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-[11px] font-bold uppercase text-slate-700">
+                Change Protocol Status:
+              </label>
+              <select
+                value={activeTrial.status}
+                disabled={statusBusy}
+                onChange={(e) => handleQuickStatusChange(e.target.value)}
+                className="border border-slate-400 bg-white p-1.5 text-xs font-bold text-slate-900 focus:border-slate-800 focus:outline-none"
+              >
+                <option value="planning">PLANNING (Drafting)</option>
+                <option value="pending_ethics">PENDING_ETHICS (Under Review)</option>
+                <option value="approved">APPROVED (IEC Cleared)</option>
+                <option value="recruiting">RECRUITING (Open for Screening)</option>
+                <option value="active">ACTIVE (Treatment Stage)</option>
+                <option value="suspended">SUSPENDED (Safety Hold)</option>
+                <option value="completed">COMPLETED (Closed)</option>
+                <option value="terminated">TERMINATED (Early Exit)</option>
+              </select>
+
+              {activeTrial.status !== 'recruiting' && (
+                <button
+                  onClick={handleQuickActivate}
+                  disabled={statusBusy}
+                  className="border border-emerald-700 bg-emerald-700 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-800 transition shadow-sm disabled:opacity-50"
+                >
+                  🚀 Activate Recruitment
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <DashboardLayout
@@ -260,6 +459,27 @@ export default function InstitutionAdmin(props) {
           </table>
         </div>
       </div>
+
+      {showCreateTrialModal && (
+        <CreateTrialModal
+          onClose={() => setShowCreateTrialModal(false)}
+          onSuccess={() => {
+            loadTrials()
+            props.onRefresh?.()
+          }}
+        />
+      )}
+
+      {showCtriModal && activeTrial && (
+        <RegisterCtriModal
+          trial={activeTrial}
+          onClose={() => setShowCtriModal(false)}
+          onSuccess={() => {
+            loadTrials()
+            props.onRefresh?.()
+          }}
+        />
+      )}
     </div>
   )
 }

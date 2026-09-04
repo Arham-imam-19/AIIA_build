@@ -58,12 +58,12 @@ export default function Shell({ view, setView, live, children }) {
 
   const navItems = [
     ['dashboard', 'Dashboard'],
-    ...((user.role === 'coordinator' || user.permissions?.includes('subject:write'))
+    ...((user.role !== 'admin' && (user.role === 'coordinator' || user.permissions?.includes('subject:write')))
       ? [
           ['screen_participant', 'Screen New Participant'],
         ]
       : []),
-    ...((user.role === 'coordinator' || user.role === 'principal_investigator' || user.role === 'institution_admin' || user.permissions?.includes('subject:read'))
+    ...((user.role !== 'admin' && (user.role === 'coordinator' || user.role === 'principal_investigator' || user.role === 'institution_admin' || user.permissions?.includes('subject:read')))
       ? [
           ['view_participants', 'View Participants'],
         ]

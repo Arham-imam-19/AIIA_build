@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { createTrial, fetchSites } from '../api'
+import { useAuth } from '../auth'
 
 export default function CreateTrialModal({ onClose, onSuccess }) {
-  const [protocolNumber, setProtocolNumber] = useState('AIIA-NEO-2026-03')
+  const { user } = useAuth()
+  const [protocolNumber, setProtocolNumber] = useState('AIIA-NEO-2026-05')
   const [title, setTitle] = useState('')
   const [shortTitle, setShortTitle] = useState('')
   const [phase, setPhase] = useState('phase_2')
@@ -36,25 +38,37 @@ export default function CreateTrialModal({ onClose, onSuccess }) {
             uniqueInstitutions.push(s)
           }
         }
-        setAvailableInstitutions(uniqueInstitutions)
-        // Default: select all registered institutions
-        setSelectedSiteIds(uniqueInstitutions.map((i) => i.id))
+
+        if (user?.site_scoped && user?.site_id) {
+          // Site-scoped users can only create protocols under their own hospital site
+          const ownSite = uniqueInstitutions.find((i) => i.id === user.site_id) || uniqueInstitutions[0]
+          const list = ownSite ? [ownSite] : uniqueInstitutions
+          setAvailableInstitutions(list)
+          setSelectedSiteIds(list.map((i) => i.id))
+        } else {
+          setAvailableInstitutions(uniqueInstitutions)
+          // Default: select the first institution or primary site
+          setSelectedSiteIds(uniqueInstitutions.length > 0 ? [uniqueInstitutions[0].id] : [])
+        }
       })
       .catch(() => {})
       .finally(() => setLoadingSites(false))
-  }, [])
+  }, [user])
 
   function toggleSite(siteId) {
+    if (user?.site_scoped) return // Site-scoped users cannot toggle away from their site
     setSelectedSiteIds((prev) =>
       prev.includes(siteId) ? prev.filter((id) => id !== siteId) : [...prev, siteId]
     )
   }
 
   function selectAllSites() {
+    if (user?.site_scoped) return
     setSelectedSiteIds(availableInstitutions.map((i) => i.id))
   }
 
   function clearAllSites() {
+    if (user?.site_scoped) return
     setSelectedSiteIds([])
   }
 

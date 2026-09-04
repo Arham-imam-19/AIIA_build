@@ -236,8 +236,8 @@ export default function Coordinator(props) {
             <button onClick={() => setShowDeviationModal(true)} className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-amber-700 transition">
               ⚠️ Log Protocol Deviation
             </button>
-            <button onClick={() => setSelectedSubjectId(1)} className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
-              🔍 Inspect Participant Dossier
+            <button onClick={() => props.onNavigateParticipants?.()} className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
+              🔍 View Participants &amp; Dossiers
             </button>
           </div>
         </div>
