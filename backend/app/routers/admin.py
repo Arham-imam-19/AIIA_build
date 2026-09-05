@@ -18,6 +18,7 @@ from app.enums import AuditAction, UserRole
 from app.models import (
     AdverseEvent,
     ClinicalLogEntry,
+    DsmbDecision,
     EConsent,
     PatientRequest,
     Site,
@@ -45,6 +46,7 @@ PRESERVED_ROLES: frozenset[str] = frozenset({
 
 @router.post("/reset-trial-data")
 @router.post("/reset-test-data")
+@router.post("/clean-slate-reset")
 def reset_all_test_data(
     session: Session = Depends(get_session),
     user: CurrentUser = Depends(require(Permission.USER_MANAGE)),
@@ -63,6 +65,7 @@ def reset_all_test_data(
       - Participating Institutions & Sites (sites)
       - Protocol & Trial Definitions (trials)
       - Site-level Accounts (Institution Admin, PI, Coordinator, Patient)
+      - Safety Monitoring Determinations (dsmb_decisions)
 
     Preserves:
       - Core Global Oversight Accounts: IT Administrator, Monitor, Sponsor, Ethics Committee, Pharmacovigilance, Regulator, DSMB
@@ -75,6 +78,11 @@ def reset_all_test_data(
         )
 
     # 1. Count records to be purged
+    try:
+        count_dsmb = int(session.exec(select(func.count(DsmbDecision.id))).one() or 0)
+    except Exception:
+        count_dsmb = 0
+
     try:
         count_logs = int(session.exec(select(func.count(ClinicalLogEntry.id))).one() or 0)
     except Exception:
@@ -107,7 +115,14 @@ def reset_all_test_data(
 
     # 3. Purge data in dependency order
     try:
-        session.exec(delete(ClinicalLogEntry))
+        with session.begin_nested():
+            session.exec(delete(DsmbDecision))
+    except Exception:
+        pass
+
+    try:
+        with session.begin_nested():
+            session.exec(delete(ClinicalLogEntry))
     except Exception:
         pass
 
@@ -139,10 +154,11 @@ def reset_all_test_data(
             "visits": count_visits,
             "adverse_events": count_aes,
             "clinical_logs": count_logs,
+            "dsmb_decisions": count_dsmb,
             "econsents": count_econsents,
             "patient_requests": count_requests,
         }),
-        new_value=json.dumps({"trials": 0, "sites": 0, "subjects": 0, "visits": 0, "adverse_events": 0, "clinical_logs": 0}),
+        new_value=json.dumps({"trials": 0, "sites": 0, "subjects": 0, "visits": 0, "adverse_events": 0, "clinical_logs": 0, "dsmb_decisions": 0}),
         reason="Global Clean Slate Reset executed by IT Administrator. All protocols, institutions, local staff, and participant accounts purged; core oversight accounts preserved.",
         trial_id=None,
     )
@@ -158,6 +174,7 @@ def reset_all_test_data(
         "cleared_subjects": count_subjects,
         "cleared_visits": count_visits,
         "cleared_clinical_logs": count_logs,
+        "cleared_dsmb_decisions": count_dsmb,
         "cleared_adverse_events": count_aes,
         "cleared_econsents": count_econsents,
         "cleared_patient_requests": count_requests,
@@ -171,6 +188,11 @@ def get_database_stats(
     user: CurrentUser = Depends(require(Permission.USER_MANAGE)),
 ) -> dict:
     """Retrieve live entity counts across all system tables for IT Admin dashboard."""
+    try:
+        count_dsmb = int(session.exec(select(func.count(DsmbDecision.id))).one() or 0)
+    except Exception:
+        count_dsmb = 0
+
     try:
         count_logs = int(session.exec(select(func.count(ClinicalLogEntry.id))).one() or 0)
     except Exception:
@@ -193,6 +215,7 @@ def get_database_stats(
         "visits": count_visits,
         "adverse_events": count_aes,
         "clinical_logs": count_logs,
+        "dsmb_decisions": count_dsmb,
         "econsents": count_econsents,
         "patient_requests": count_requests,
     }
